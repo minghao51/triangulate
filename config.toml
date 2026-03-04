@@ -1,0 +1,29 @@
+[sources.rss]
+bbc = "https://feeds.bbci.co.uk/news/rss.xml"
+reuters = "https://www.reutersagency.feed.com/rss/"
+al_jazeera = "https://www.aljazeera.com/xml/rss/all.xml"
+
+[sources.api]
+newsapi_enabled = false
+newsapi_base_url = "https://newsapi.org/v2"
+
+[ai]
+model = "qwen-plus"
+base_url = "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
+temperature = 0.3
+max_tokens = 2000
+retry_attempts = 3
+timeout = 30
+
+[database]
+path = "./triangulate.db"
+
+[logging]
+level = "INFO"
+file = "logs/triangulate.log"
+format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+
+[ingester]
+fetch_timeout = 10
+max_articles_per_run = 50
+user_agent = "Triangulate/0.1.0 (https://github.com/triangulate)"

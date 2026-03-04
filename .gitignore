@@ -1,0 +1,65 @@
+# Environment and local config
+.env
+.env.*
+!.env.example
+.python-version
+
+# Local project data
+data/
+logs/
+*.log
+*.pid
+*.out
+
+# Databases
+*.db
+*.db-shm
+*.db-wal
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# Python caches and build artifacts
+__pycache__/
+*.py[cod]
+*.py,cover
+.cache/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.hypothesis/
+.nox/
+.tox/
+.coverage
+.coverage.*
+htmlcov/
+build/
+dist/
+site/
+wheels/
+.eggs/
+*.egg-info/
+pip-wheel-metadata/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Notebooks
+.ipynb_checkpoints/
+
+# Local assistant / planning metadata
+.claude/
+.planning/
+
+# IDEs and editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
