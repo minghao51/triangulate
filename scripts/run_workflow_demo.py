@@ -192,6 +192,20 @@ def pretty_print_results(event_data: dict):
         print("No narratives generated.")
     print()
 
+    # Parties
+    parties = event_data.get("parties", [])
+    print(f"🎭 IDENTIFIED PARTIES ({len(parties)} total)")
+    print("-" * 80)
+    if parties:
+        for i, party in enumerate(parties, 1):
+            print(f"\n[Party {i}] {party.get('canonical_name', 'N/A')}")
+            print(f"    Aliases: {', '.join(party.get('aliases', []))}")
+            if party.get('reasoning'):
+                print(f"    Reasoning: {party.get('reasoning')}")
+    else:
+        print("No parties identified.")
+    print()
+
     # Summary
     print("📊 SUMMARY")
     print("-" * 80)
