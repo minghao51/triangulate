@@ -1,4 +1,4 @@
-"""Tests for Claim and Narrative party foreign keys."""
+"""Tests for Claim party foreign key."""
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
