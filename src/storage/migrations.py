@@ -157,3 +157,36 @@ def run_migrations(db_path: str = None) -> None:
             manager.apply_migration(migration)
 
     print("All migrations applied")
+
+
+def migrate_add_party_table(session):
+    """Add Party table and foreign keys.
+
+    Run this to add party classification support to existing database.
+
+    Args:
+        session: SQLAlchemy session
+    """
+    from src.storage.models import Party, Base
+
+    # Create Party table
+    try:
+        Party.__table__.create(session.bind)
+        print("✓ Created parties table")
+    except Exception as e:
+        # Table might already exist
+        if "already exists" in str(e):
+            print("ℹ Parties table already exists")
+        else:
+            print(f"✗ Error creating parties table: {e}")
+
+    # Add party_id column to claims (may need manual SQL for existing DBs)
+    # For SQLite, this typically requires recreating the table
+    engine = session.bind
+    if engine.dialect.name == "sqlite":
+        # SQLite requires special handling for ALTER TABLE
+        print("⚠ SQLite detected: Manual migration may be required")
+        print("  For existing databases with data, consider:")
+        print("  1. Back up your data")
+        print("  2. Recreate the database with new schema")
+        print("  3. Or manually add party_id column to claims table")
