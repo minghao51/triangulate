@@ -1,6 +1,7 @@
 """Tests for Party model."""
 import pytest
 from sqlalchemy import create_engine
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import sessionmaker
 from src.storage.models import Base, Party
 
@@ -49,5 +50,5 @@ def test_party_canonical_name_unique(db_session):
     )
     db_session.add(party2)
 
-    with pytest.raises(Exception):  # Integrity error
+    with pytest.raises(IntegrityError):
         db_session.commit()

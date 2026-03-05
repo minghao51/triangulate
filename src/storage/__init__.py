@@ -11,6 +11,7 @@ from src.storage.models import (
     VerificationStatus,
     ReviewStatus,
     SourceType,
+    Party,
 )
 from src.storage.migrations import Migration, MigrationManager, run_migrations
 
@@ -27,6 +28,7 @@ __all__ = [
     "VerificationStatus",
     "ReviewStatus",
     "SourceType",
+    "Party",
     "Migration",
     "MigrationManager",
     "run_migrations",
