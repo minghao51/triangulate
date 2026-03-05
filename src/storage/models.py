@@ -11,6 +11,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Enum as SQLEnum,
+    JSON,
 )
 from sqlalchemy.orm import declarative_base
 
@@ -112,4 +113,17 @@ class Review(Base):
     status = Column(SQLEnum(ReviewStatus), nullable=False, default=ReviewStatus.PENDING)
     reviewed_at = Column(DateTime(timezone=True))
     notes = Column(Text)
+    created_at = Column(DateTime(timezone=True), default=utc_now)
+
+
+class Party(Base):
+    """Normalized political/geographical entities."""
+
+    __tablename__ = "parties"
+
+    id = Column(String, primary_key=True)
+    canonical_name = Column(String, nullable=False, unique=True)
+    aliases = Column(JSON, nullable=False)
+    description = Column(Text)
+    event_id = Column(String, ForeignKey("events.id"))
     created_at = Column(DateTime(timezone=True), default=utc_now)
