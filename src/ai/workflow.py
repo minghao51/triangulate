@@ -24,7 +24,7 @@ class AIWorkflow:
         """
         self.config = config
 
-    async def process_article(self, article: dict[str, Any]) -> dict[str, Any]:
+    async def process_article(self, article: dict[str, Any]) -> dict[str, Any] | None:
         """Process an article through the full AI pipeline.
 
         Args:
