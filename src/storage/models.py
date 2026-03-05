@@ -88,6 +88,7 @@ class Claim(Base):
     claim_text = Column(Text, nullable=False)
     narrative_cluster_id = Column(String)
     verification_status = Column(SQLEnum(VerificationStatus), nullable=False)
+    party_id = Column(String, ForeignKey("parties.id"))
     created_at = Column(DateTime(timezone=True), default=utc_now)
 
 
