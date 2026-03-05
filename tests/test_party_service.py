@@ -78,3 +78,32 @@ def test_normalize_entity_returns_none_for_unknown(db_session):
 
     result = service.normalize_entity("UnknownCountry", "event-1")
     assert result is None
+
+def test_get_party_mapping(db_session):
+    """Service returns entity to party ID mapping."""
+    service = PartyService(db_session)
+
+    party1 = Party(
+        id="party-1",
+        canonical_name="United States",
+        aliases=["US", "America"],
+        event_id="event-1"
+    )
+    party2 = Party(
+        id="party-2",
+        canonical_name="Iran",
+        aliases=["Tehran"],
+        event_id="event-1"
+    )
+    db_session.add_all([party1, party2])
+    db_session.commit()
+
+    mapping = service.get_party_mapping("event-1")
+
+    # Check canonical names are mapped
+    assert mapping["United States"] == "party-1"
+    assert mapping["Iran"] == "party-2"
+    # Check aliases are mapped
+    assert mapping["US"] == "party-1"
+    assert mapping["America"] == "party-1"
+    assert mapping["Tehran"] == "party-2"
