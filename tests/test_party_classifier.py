@@ -1,6 +1,6 @@
 """Tests for Party classifier agent."""
 import pytest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 from src.ai.agents.party_classifier import classify_parties, _fallback_classification
 
 
