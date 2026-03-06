@@ -200,7 +200,7 @@ def pretty_print_results(event_data: dict):
         for i, party in enumerate(parties, 1):
             print(f"\n[Party {i}] {party.get('canonical_name', 'N/A')}")
             print(f"    Aliases: {', '.join(party.get('aliases', []))}")
-            if party.get('reasoning'):
+            if party.get("reasoning"):
                 print(f"    Reasoning: {party.get('reasoning')}")
     else:
         print("No parties identified.")

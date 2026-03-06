@@ -8,6 +8,7 @@ from src.storage.models import Party
 
 logger = logging.getLogger(__name__)
 
+
 class PartyService:
     """Business logic for party operations."""
 
@@ -36,7 +37,7 @@ class PartyService:
                 canonical_name=party_info["canonical_name"],
                 aliases=party_info["aliases"],
                 description=party_info.get("reasoning", ""),
-                event_id=event_id
+                event_id=event_id,
             )
             self.session.add(party)
             parties.append(party)

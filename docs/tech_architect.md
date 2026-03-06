@@ -67,6 +67,62 @@ This is the core logic update. Instead of hardcoded parties, we use **Narrative 
     *   *Result:* Sometimes it finds 2 groups. Sometimes 4. Sometimes it finds that **all sources agree** (high confidence). Sometimes it finds **no consensus** (high conflict).
     *   *Benefit:* The structure emerges from the data, not your preconceptions.
 
+### **Party-Based Adversarial Investigation (New - March 2025)**
+
+An advanced multi-agent workflow that goes beyond simple clustering by having parties investigate claims from their own perspectives.
+
+**Workflow:**
+```
+Article → Collector → Party Classifier → [Parallel Party Investigators] → Arbiter → Final Determinations
+                                       ↓
+                                   Party A │ Party B │ Party C
+                                       ↓
+                                  [Party Findings]
+                                       ↓
+                            Arbiter (Fact vs Allegation + Classification)
+```
+
+**Agents:**
+
+| Agent | Role | Output |
+| :--- | :--- | :--- |
+| **Collector** | Extract claims from article | List of factual claims with metadata |
+| **Party Classifier** | Identify parties mentioned | Canonical party names with aliases |
+| **Party Investigators** (Parallel) | Each party investigates from their perspective | Claims supported/contested, unique claims, party stance |
+| **Arbiter** | Make objective determinations | FACT vs ALLEGATION, verification status (CONFIRMED/PROBABLE/ALLEGED/CONTESTED/DEBUNKED), reasoning |
+
+**Key Innovations:**
+
+1. **Parallel Party Perspective Taking:** Each party investigates claims independently, providing their position on each claim (SUPPORTS, CONTESTS, or NEUTRAL)
+
+2. **Fact vs Allegation Classification:** The Arbiter distinguishes between:
+   - **FACTS:** Observable events that occurred (past tense, verifiable)
+   - **ALLEGATIONS:** Interpretations, predictions, statements of intent (future tense, subjective)
+
+3. **Five-Tier Verification System:**
+   - **CONFIRMED:** Verifiable fact, multiple sources, no disputes
+   - **PROBABLE:** Likely true, credible sources, minor disputes
+   - **ALLEGED:** Claim made but not verified, or is opinion
+   - **CONTESTED:** Factual dispute between credible sources
+   - **DEBUNKED:** Proven false
+
+4. **Controversy Scoring:**
+   - Calculates party agreement level (HIGH/MEDIUM/LOW/NONE)
+   - Controversy score from 0.0 (unanimous) to 1.0 (completely contested)
+   - Identifies which parties support or oppose each claim
+
+**Database Schema Updates:**
+
+- **Claim Model:** Added `fact_allegation_type`, `arbiter_reasoning`, `party_positions`, `controversy_score`
+- **New Table:** `PartyInvestigation` - stores full investigation results for each party
+- **New Enum:** `FactAllegationType` (FACT, ALLEGATION)
+
+**Implementation:**
+- `src/ai/agents/fact_allegation_classifier.py` - Fact vs allegation classification
+- `src/ai/agents/party_investigator.py` - Party perspective analysis
+- `src/ai/agents/arbiter.py` - Final arbitration with reasoning
+- `src/ai/workflows/party_investigation_workflow.py` - LangGraph orchestration
+
 ---
 
 ## 💻 3. Revised Tech Stack (Hybrid)

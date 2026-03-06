@@ -124,9 +124,7 @@ async def store_event_in_db(event_data: dict) -> bool:
 
         # Create narratives
         for narrative_data in event_data.get("narratives", []):
-            stored_cluster_id = (
-                f"{event_data['id']}:{narrative_data['cluster_id']}"
-            )
+            stored_cluster_id = f"{event_data['id']}:{narrative_data['cluster_id']}"
             narrative = Narrative(
                 id=str(uuid.uuid4()),
                 cluster_id=stored_cluster_id,

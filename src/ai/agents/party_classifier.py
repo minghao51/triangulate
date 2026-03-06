@@ -14,7 +14,7 @@ PARTY_CLASSIFIER_PROMPT = """You are an expert analyst who groups entity variati
 
 Given this article:
 Title: {title}
-Summary: {summary[:200]}
+Summary: {summary_excerpt}
 
 Extracted entities from the article: {entities}
 
@@ -38,7 +38,9 @@ Output format (JSON):
 Provide the party classification:"""
 
 
-async def classify_parties(article: dict[str, Any], entities: list[str]) -> dict[str, Any]:
+async def classify_parties(
+    article: dict[str, Any], entities: list[str]
+) -> dict[str, Any]:
     """Classify entities into canonical parties using LLM.
 
     Args:
@@ -58,11 +60,12 @@ async def classify_parties(article: dict[str, Any], entities: list[str]) -> dict
 
         # Format entities list
         entities_str = ", ".join(entities[:50])  # Limit to 50 entities
+        summary_excerpt = article.get("content", "")[:200]
 
         prompt = PARTY_CLASSIFIER_PROMPT.format(
             title=article.get("title", ""),
-            summary=article.get("content", ""),
-            entities=entities_str
+            summary_excerpt=summary_excerpt,
+            entities=entities_str,
         )
 
         logger.info(f"Classifying {len(entities)} entities into parties")
@@ -128,11 +131,13 @@ def _fallback_classification(entities: list[str]) -> dict[str, Any]:
                     aliases.append(other)
                     used_entities.add(other)
 
-        parties.append({
-            "canonical_name": entity,
-            "aliases": aliases,
-            "reasoning": "Rule-based grouping by string similarity"
-        })
+        parties.append(
+            {
+                "canonical_name": entity,
+                "aliases": aliases,
+                "reasoning": "Rule-based grouping by string similarity",
+            }
+        )
         used_entities.add(entity)
 
     return {"parties": parties}

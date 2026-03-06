@@ -1,4 +1,5 @@
 """Tests for Party classifier agent."""
+
 import pytest
 from unittest.mock import patch
 from src.ai.agents.party_classifier import classify_parties, _fallback_classification
@@ -9,7 +10,7 @@ async def test_classify_parties_returns_dict_structure():
     """Test that classify_parties returns proper dict structure."""
     article = {
         "title": "Test Article",
-        "content": "Test content about US and America..."
+        "content": "Test content about US and America...",
     }
     entities = ["US", "America"]
 

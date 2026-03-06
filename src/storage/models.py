@@ -12,6 +12,8 @@ from sqlalchemy import (
     ForeignKey,
     Enum as SQLEnum,
     JSON,
+    Float,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import declarative_base
 
@@ -31,6 +33,13 @@ class VerificationStatus(str, enum.Enum):
     ALLEGED = "ALLEGED"
     CONTESTED = "CONTESTED"
     DEBUNKED = "DEBUNKED"
+
+
+class FactAllegationType(str, enum.Enum):
+    """Classification of claims as facts or allegations."""
+
+    FACT = "FACT"
+    ALLEGATION = "ALLEGATION"
 
 
 class ReviewStatus(str, enum.Enum):
@@ -89,6 +98,13 @@ class Claim(Base):
     narrative_cluster_id = Column(String)
     verification_status = Column(SQLEnum(VerificationStatus), nullable=False)
     party_id = Column(String, ForeignKey("parties.id"))
+
+    # Party investigation fields
+    fact_allegation_type = Column(SQLEnum(FactAllegationType))
+    arbiter_reasoning = Column(Text)
+    party_positions = Column(JSON)  # {"party_id": "SUPPORTS|CONTESTS|NEUTRAL"}
+    controversy_score = Column(Float)
+
     created_at = Column(DateTime(timezone=True), default=utc_now)
 
 
@@ -127,4 +143,25 @@ class Party(Base):
     aliases = Column(JSON, nullable=False)
     description = Column(Text)
     event_id = Column(String, ForeignKey("events.id"))
+    created_at = Column(DateTime(timezone=True), default=utc_now)
+
+
+class PartyInvestigation(Base):
+    """Party investigation results from adversarial analysis."""
+
+    __tablename__ = "party_investigations"
+    __table_args__ = (
+        UniqueConstraint(
+            "event_id", "party_id", name="uq_party_investigation_event_party"
+        ),
+    )
+
+    id = Column(String, primary_key=True)
+    event_id = Column(String, ForeignKey("events.id"), nullable=False)
+    party_id = Column(String, ForeignKey("parties.id"), nullable=False)
+
+    # Full investigation data
+    investigation_data = Column(JSON, nullable=False)
+    party_stance = Column(Text)
+
     created_at = Column(DateTime(timezone=True), default=utc_now)

@@ -9,9 +9,11 @@ from src.storage.models import (
     Narrative,
     Review,
     VerificationStatus,
+    FactAllegationType,
     ReviewStatus,
     SourceType,
     Party,
+    PartyInvestigation,
 )
 from src.storage.migrations import Migration, MigrationManager, run_migrations
 
@@ -26,9 +28,11 @@ __all__ = [
     "Narrative",
     "Review",
     "VerificationStatus",
+    "FactAllegationType",
     "ReviewStatus",
     "SourceType",
     "Party",
+    "PartyInvestigation",
     "Migration",
     "MigrationManager",
     "run_migrations",

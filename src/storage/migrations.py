@@ -1,7 +1,8 @@
 """Simple database migration system."""
 
-from sqlalchemy import text
-from src.storage.database import get_database
+from sqlalchemy import inspect, text
+
+from src.storage.database import Database, get_database
 
 
 class Migration:
@@ -31,7 +32,7 @@ class MigrationManager:
         Args:
             db_path: Path to database file
         """
-        self.db = get_database()
+        self.db = Database(db_path) if db_path else get_database()
         self.migrations_table = "_migrations"
         self._ensure_migrations_table()
 
@@ -75,8 +76,11 @@ class MigrationManager:
         print(f"Applying migration {migration.version}: {migration.name}")
 
         with self.db.get_session_sync() as session:
-            # Apply migration SQL
-            session.execute(text(migration.up_sql))
+            if migration.version == 1:
+                self._apply_party_investigation_schema(session)
+            else:
+                # Apply migration SQL
+                session.execute(text(migration.up_sql))
 
             # Record migration
             session.execute(
@@ -90,6 +94,61 @@ class MigrationManager:
             session.commit()
 
         print(f"Migration {migration.version} applied successfully")
+
+    def _apply_party_investigation_schema(self, session) -> None:
+        """Apply the party investigation schema in an idempotent way.
+
+        The ORM model now includes these fields for fresh databases, so the
+        migration must tolerate already-created columns/tables.
+        """
+        inspector = inspect(session.bind)
+        existing_tables = set(inspector.get_table_names())
+
+        if "claims" not in existing_tables:
+            raise ValueError("Migration 1 requires the claims table to exist")
+
+        existing_columns = {
+            column["name"] for column in inspector.get_columns("claims")
+        }
+        missing_columns = {
+            "fact_allegation_type": "TEXT",
+            "arbiter_reasoning": "TEXT",
+            "party_positions": "JSON",
+            "controversy_score": "FLOAT",
+        }
+
+        for column_name, column_type in missing_columns.items():
+            if column_name not in existing_columns:
+                session.execute(
+                    text(
+                        f"ALTER TABLE claims ADD COLUMN {column_name} {column_type}"
+                    )
+                )
+
+        session.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS party_investigations (
+                    id TEXT PRIMARY KEY,
+                    event_id TEXT NOT NULL,
+                    party_id TEXT NOT NULL,
+                    investigation_data JSON NOT NULL,
+                    party_stance TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY(event_id) REFERENCES events(id),
+                    FOREIGN KEY(party_id) REFERENCES parties(id)
+                )
+                """
+            )
+        )
+        session.execute(
+            text(
+                """
+                CREATE UNIQUE INDEX IF NOT EXISTS uq_party_investigation_event_party
+                    ON party_investigations (event_id, party_id)
+                """
+            )
+        )
 
     def rollback_migration(self, migration: Migration) -> None:
         """Rollback a migration.
@@ -131,13 +190,34 @@ class MigrationManager:
 
 # Define migrations
 MIGRATIONS: list[Migration] = [
-    # Add future migrations here
-    # Migration(
-    #     version=1,
-    #     name="Initial schema",
-    #     up="...",
-    #     down="..."
-    # )
+    Migration(
+        version=1,
+        name="Add party investigation schema",
+        up="""
+        ALTER TABLE claims ADD COLUMN fact_allegation_type TEXT;
+        ALTER TABLE claims ADD COLUMN arbiter_reasoning TEXT;
+        ALTER TABLE claims ADD COLUMN party_positions JSON;
+        ALTER TABLE claims ADD COLUMN controversy_score FLOAT;
+
+        CREATE TABLE IF NOT EXISTS party_investigations (
+            id TEXT PRIMARY KEY,
+            event_id TEXT NOT NULL,
+            party_id TEXT NOT NULL,
+            investigation_data JSON NOT NULL,
+            party_stance TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(event_id) REFERENCES events(id),
+            FOREIGN KEY(party_id) REFERENCES parties(id)
+        );
+
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_party_investigation_event_party
+            ON party_investigations (event_id, party_id);
+        """,
+        down="""
+        DROP INDEX IF EXISTS uq_party_investigation_event_party;
+        DROP TABLE IF EXISTS party_investigations;
+        """,
+    ),
 ]
 
 
@@ -167,7 +247,7 @@ def migrate_add_party_table(session):
     Args:
         session: SQLAlchemy session
     """
-    from src.storage.models import Party, Base
+    from src.storage.models import Party
 
     # Create Party table
     try:
