@@ -7,11 +7,16 @@ Implements Alibaba Model Studio best practices for 2026:
 """
 
 import asyncio
+import json
 import logging
 from typing import Any, Callable, Coroutine
 import os
+from dotenv import load_dotenv
 
 logger = logging.getLogger(__name__)
+
+# Load local .env early so LLM settings are available in scripts/CLI runs.
+load_dotenv()
 
 
 # Status codes that should trigger retry
@@ -127,6 +132,7 @@ def build_completion_params(
     messages: list[dict[str, str]],
     temperature: float = 0.3,
     max_tokens: int = 2000,
+    llm_config: dict[str, Any] | None = None,
     **kwargs,
 ) -> dict[str, Any]:
     """Build completion parameters with best practices defaults.
@@ -135,6 +141,7 @@ def build_completion_params(
         messages: Chat messages for the LLM
         temperature: Sampling temperature (0-1)
         max_tokens: Maximum tokens in response
+        llm_config: Optional config overrides for model/provider/auth settings
         **kwargs: Additional parameters
 
     Returns:
@@ -149,5 +156,72 @@ def build_completion_params(
 
     # Add auth and endpoint config
     params.update(get_llm_config())
+    if llm_config:
+        params.update({key: value for key, value in llm_config.items() if value is not None})
 
     return params
+
+
+async def call_llm(
+    prompt: str,
+    response_format: str = "text",
+    config: dict[str, Any] | None = None,
+    temperature: float = 0.3,
+    max_tokens: int = 2000,
+) -> Any:
+    """Call LLM with a prompt and return response.
+
+    This is a convenience wrapper around build_completion_params and call_with_retry.
+
+    Args:
+        prompt: The prompt to send to the LLM
+        response_format: Expected response format ("text" or "json")
+        config: Optional configuration dictionary (uses defaults if None)
+        temperature: Sampling temperature
+        max_tokens: Maximum tokens in response
+
+    Returns:
+        LLM response (text string or parsed JSON object)
+    """
+    from litellm import acompletion
+
+    if config is None:
+        config = {}
+
+    messages = [{"role": "user", "content": prompt}]
+
+    # Build parameters
+    params = build_completion_params(
+        messages=messages,
+        temperature=temperature,
+        max_tokens=max_tokens,
+        llm_config=config,
+    )
+
+    # Add response format if specified
+    if response_format == "json":
+        params["response_format"] = {"type": "json_object"}
+
+    # Call LLM with retry
+    response = await call_with_retry(acompletion, **params)
+
+    # Extract content
+    content = response.get("choices", [{}])[0].get("message", {}).get("content", "")
+
+    # Parse JSON if requested
+    if response_format == "json":
+        try:
+            return json.loads(content)
+        except json.JSONDecodeError:
+            # Try to extract JSON from markdown code block
+            if "```json" in content:
+                json_str = content.split("```json")[1].split("```")[0].strip()
+                return json.loads(json_str)
+            elif "```" in content:
+                json_str = content.split("```")[1].split("```")[0].strip()
+                return json.loads(json_str)
+            else:
+                # Return raw content if parsing fails
+                return content
+
+    return content
