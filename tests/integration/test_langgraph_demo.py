@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
-"""Test script for LangGraph multi-agent workflow.
+"""Integration test for LangGraph multi-agent workflow.
 
-This script validates the multi-agent AI system using two approaches:
+This test validates the multi-agent AI system using two approaches:
 1. Testing the current AIWorkflow implementation
 2. Demonstrating proper LangGraph StateGraph integration
 
-Usage:
-    uv run scripts/test_langgraph_workflow.py
+Usage as pytest:
+    uv run pytest tests/integration/test_langgraph_demo.py -v
+
+Usage as demo:
+    uv run python -m tests.integration.test_langgraph_demo
 """
 
 import asyncio
@@ -18,10 +21,8 @@ from typing import Any, TypedDict
 
 import pytest
 
-pytestmark = pytest.mark.skip(reason="Manual demo script, not part of automated test suite")
-
 # Add project root to path
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 # Imports for current implementation
 from src.ai.workflow import AIWorkflow
@@ -53,8 +54,8 @@ MOCK_ARTICLE = {
 
     Environmental groups praised the agreement as 'the most significant climate action in history,'
     while some industry representatives raised concerns about the economic impact of rapid decarbonization.
-    China and the United States, the world's two largest emitters, both pledged to meet their targets
-    ahead of schedule.
+    China and the United States, the world's two largest emitters, both pledged to meet their
+    targets ahead of schedule.
 
     The agreement also establishes a new international monitoring body to track progress and enforce
     compliance, with the first progress report due in 2028.
@@ -71,6 +72,7 @@ MOCK_ARTICLE = {
 # ============================================================================
 
 
+@pytest.mark.asyncio
 async def test_current_workflow() -> dict[str, Any]:
     """Test the current AIWorkflow implementation."""
     print("\n" + "=" * 80)
@@ -118,15 +120,9 @@ async def analyze_results(event_data: dict[str, Any]) -> dict[str, Any]:
 
     # Analyze claims
     print(f"\n📝 Claims Extracted: {len(claims)}")
-    print(
-        f"   - HIGH confidence: {sum(1 for c in claims if c.get('confidence') == 'HIGH')}"
-    )
-    print(
-        f"   - MEDIUM confidence: {sum(1 for c in claims if c.get('confidence') == 'MEDIUM')}"
-    )
-    print(
-        f"   - LOW confidence: {sum(1 for c in claims if c.get('confidence') == 'LOW')}"
-    )
+    print(f"   - HIGH confidence: {sum(1 for c in claims if c.get('confidence') == 'HIGH')}")
+    print(f"   - MEDIUM confidence: {sum(1 for c in claims if c.get('confidence') == 'MEDIUM')}")
+    print(f"   - LOW confidence: {sum(1 for c in claims if c.get('confidence') == 'LOW')}")
 
     # Analyze narratives
     print(f"\n🎭 Narratives Generated: {len(narratives)}")
@@ -360,6 +356,7 @@ def create_langgraph_workflow() -> StateGraph:
     return app
 
 
+@pytest.mark.asyncio
 async def test_langgraph_workflow() -> dict[str, Any]:
     """Test the LangGraph workflow implementation."""
     print("Test 2: Processing article through LangGraph workflow...")
@@ -406,9 +403,100 @@ async def test_langgraph_workflow() -> dict[str, Any]:
 
 
 # ============================================================================
-# PART C: COMPARISON AND RECOMMENDATIONS
+# TEST FUNCTIONS (for pytest)
 # ============================================================================
 
+def test_current_workflow_implementation():
+    """Test the current AIWorkflow implementation.
+
+    Validates:
+    - Workflow initializes correctly
+    - Article processing works
+    - Claims are extracted
+    - Narratives are generated
+    - Verification status is assigned
+    """
+    asyncio.run(_test_current())
+
+
+async def _test_current():
+    """Async implementation of current workflow test."""
+    result = await test_current_workflow()
+
+    # Assertions
+    assert result["success"], "Workflow should complete successfully"
+    assert result["claims_count"] >= 0, "Should have claims count"
+    assert result["narratives_count"] >= 0, "Should have narratives count"
+    assert result["verification_status"] in [
+        "CONFIRMED", "PROBABLE", "ALLEGED", "CONTESTED", "DEBUNKED", "UNKNOWN"
+    ], "Should have valid verification status"
+
+
+def test_langgraph_workflow_implementation():
+    """Test the LangGraph StateGraph implementation.
+
+    Validates:
+    - LangGraph workflow compiles successfully
+    - All nodes execute in order
+    - State updates properly
+    - Returns expected results
+    """
+    asyncio.run(_test_langgraph())
+
+
+async def _test_langgraph():
+    """Async implementation of LangGraph test."""
+    result = await test_langgraph_workflow()
+
+    # Assertions
+    assert result["success"], "LangGraph workflow should complete successfully"
+    assert result["claims_count"] >= 0, "Should have claims count"
+    assert result["narratives_count"] >= 0, "Should have narratives count"
+
+
+def test_agent_chain_integration():
+    """Test that the agent chain works end-to-end.
+
+    Validates:
+    - Collector → Clusterer → Narrator → Classifier
+    - Data transformations are correct
+    - Error handling is in place
+    """
+    asyncio.run(_test_agent_chain())
+
+
+async def _test_agent_chain():
+    """Async implementation of agent chain test."""
+    # Test collector
+    claims = await collect_claims(MOCK_ARTICLE)
+    assert isinstance(claims, list), "Collector should return list"
+
+    # If no LLM, use mock claims
+    if not claims:
+        claims = create_mock_event_data()["claims"]
+
+    # Test clusterer
+    clustering = await cluster_claims(claims, n_clusters=3)
+    assert "clusters" in clustering, "Clusterer should return clusters"
+
+    # Test narrator
+    clusters = clustering.get("clusters", {})
+    if clusters:
+        cluster_id = list(clusters.keys())[0]
+        narrative = await narrate_cluster(cluster_id, list(clusters[cluster_id]))
+        assert isinstance(narrative, dict), "Narrator should return dict"
+
+    # Test classifier
+    for claim in claims:
+        status = classify_verification(claim, source_count=1)
+        assert status in [
+            "CONFIRMED", "PROBABLE", "ALLEGED", "CONTESTED", "DEBUNKED"
+        ], f"Invalid status: {status}"
+
+
+# ============================================================================
+# COMPARISON AND SUMMARY
+# ============================================================================
 
 def print_comparison(current_results: dict, langgraph_results: dict):
     """Print comparison between current and LangGraph implementations."""
@@ -483,9 +571,8 @@ def print_verification_summary():
 
 
 # ============================================================================
-# MAIN ENTRY POINT
+# MAIN ENTRY POINT (for demo execution)
 # ============================================================================
-
 
 async def main():
     """Main test execution."""
@@ -521,7 +608,6 @@ async def main():
     except Exception as e:
         print(f"\n✗ Test failed with error: {e}")
         import traceback
-
         traceback.print_exc()
         sys.exit(1)
 

@@ -78,6 +78,8 @@ class MigrationManager:
         with self.db.get_session_sync() as session:
             if migration.version == 1:
                 self._apply_party_investigation_schema(session)
+            elif migration.version == 2:
+                self._apply_case_management_schema(session)
             else:
                 # Apply migration SQL
                 session.execute(text(migration.up_sql))
@@ -150,6 +152,154 @@ class MigrationManager:
             )
         )
 
+    def _apply_case_management_schema(self, session) -> None:
+        """Apply the topic case orchestration schema idempotently."""
+        inspector = inspect(session.bind)
+        existing_tables = set(inspector.get_table_names())
+
+        if "events" in existing_tables:
+            existing_event_columns = {
+                column["name"] for column in inspector.get_columns("events")
+            }
+            if "case_id" not in existing_event_columns:
+                session.execute(text("ALTER TABLE events ADD COLUMN case_id TEXT"))
+            if "case_run_id" not in existing_event_columns:
+                session.execute(text("ALTER TABLE events ADD COLUMN case_run_id TEXT"))
+
+        session.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS topic_cases (
+                    id TEXT PRIMARY KEY,
+                    query TEXT NOT NULL,
+                    slug TEXT NOT NULL UNIQUE,
+                    conflict TEXT,
+                    status TEXT NOT NULL,
+                    priority INTEGER NOT NULL DEFAULT 0,
+                    importance TEXT,
+                    routing_mode TEXT,
+                    current_stage TEXT,
+                    report_path TEXT,
+                    latest_manifest_path TEXT,
+                    latest_run_started_at TIMESTAMP,
+                    latest_run_completed_at TIMESTAMP,
+                    last_reviewed_at TIMESTAMP,
+                    review_notes TEXT,
+                    source_count INTEGER NOT NULL DEFAULT 0,
+                    article_count INTEGER NOT NULL DEFAULT 0,
+                    event_count INTEGER NOT NULL DEFAULT 0,
+                    open_review_items INTEGER NOT NULL DEFAULT 0,
+                    metadata_json JSON,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
+        )
+        session.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS case_stage_runs (
+                    id TEXT PRIMARY KEY,
+                    case_id TEXT NOT NULL,
+                    stage_name TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    attempt INTEGER NOT NULL DEFAULT 1,
+                    started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    completed_at TIMESTAMP,
+                    duration_ms INTEGER,
+                    workflow_name TEXT,
+                    model_used TEXT,
+                    input_artifact_ids JSON,
+                    output_artifact_ids JSON,
+                    retry_count INTEGER NOT NULL DEFAULT 0,
+                    error_message TEXT,
+                    confidence_score FLOAT,
+                    controversy_score FLOAT,
+                    fallback_count INTEGER NOT NULL DEFAULT 0,
+                    parse_failure_count INTEGER NOT NULL DEFAULT 0,
+                    cost_estimate_usd FLOAT,
+                    metrics_json JSON,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY(case_id) REFERENCES topic_cases(id)
+                )
+                """
+            )
+        )
+        session.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS case_artifacts (
+                    id TEXT PRIMARY KEY,
+                    case_id TEXT NOT NULL,
+                    stage_run_id TEXT NOT NULL,
+                    artifact_type TEXT NOT NULL,
+                    path TEXT,
+                    payload_json JSON,
+                    checksum TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY(case_id) REFERENCES topic_cases(id),
+                    FOREIGN KEY(stage_run_id) REFERENCES case_stage_runs(id)
+                )
+                """
+            )
+        )
+        session.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS case_articles (
+                    id TEXT PRIMARY KEY,
+                    case_id TEXT NOT NULL,
+                    url TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    source TEXT,
+                    published_at TEXT,
+                    relevance_score FLOAT NOT NULL DEFAULT 0.0,
+                    fingerprint TEXT NOT NULL,
+                    content TEXT,
+                    raw_payload JSON,
+                    first_seen_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    last_seen_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    status TEXT NOT NULL DEFAULT 'ACTIVE',
+                    is_new INTEGER NOT NULL DEFAULT 1,
+                    FOREIGN KEY(case_id) REFERENCES topic_cases(id)
+                )
+                """
+            )
+        )
+        session.execute(
+            text(
+                """
+                CREATE UNIQUE INDEX IF NOT EXISTS uq_case_article_case_url
+                    ON case_articles (case_id, url)
+                """
+            )
+        )
+        session.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS monitor_checkpoints (
+                    id TEXT PRIMARY KEY,
+                    case_id TEXT NOT NULL,
+                    monitor_key TEXT NOT NULL,
+                    cursor TEXT,
+                    last_checked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    last_successful_run_at TIMESTAMP,
+                    metadata_json JSON,
+                    FOREIGN KEY(case_id) REFERENCES topic_cases(id)
+                )
+                """
+            )
+        )
+        session.execute(
+            text(
+                """
+                CREATE UNIQUE INDEX IF NOT EXISTS uq_monitor_checkpoint
+                    ON monitor_checkpoints (case_id, monitor_key)
+                """
+            )
+        )
+
     def rollback_migration(self, migration: Migration) -> None:
         """Rollback a migration.
 
@@ -216,6 +366,28 @@ MIGRATIONS: list[Migration] = [
         down="""
         DROP INDEX IF EXISTS uq_party_investigation_event_party;
         DROP TABLE IF EXISTS party_investigations;
+        """,
+    ),
+    Migration(
+        version=2,
+        name="Add topic case orchestration schema",
+        up="""
+        CREATE TABLE IF NOT EXISTS topic_cases (
+            id TEXT PRIMARY KEY,
+            query TEXT NOT NULL,
+            slug TEXT NOT NULL UNIQUE,
+            conflict TEXT,
+            status TEXT NOT NULL
+        );
+        """,
+        down="""
+        DROP INDEX IF EXISTS uq_monitor_checkpoint;
+        DROP INDEX IF EXISTS uq_case_article_case_url;
+        DROP TABLE IF EXISTS monitor_checkpoints;
+        DROP TABLE IF EXISTS case_articles;
+        DROP TABLE IF EXISTS case_artifacts;
+        DROP TABLE IF EXISTS case_stage_runs;
+        DROP TABLE IF EXISTS topic_cases;
         """,
     ),
 ]

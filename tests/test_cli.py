@@ -10,7 +10,15 @@ from typer.testing import CliRunner
 from src.cli.main import app
 from src.cli.commands.ingest import cmd_ingest
 from src.cli.commands.query import cmd_query
-from src.storage import Event, Review, ReviewStatus, VerificationStatus, init_database
+from src.storage import (
+    CaseStatus,
+    Event,
+    Review,
+    ReviewStatus,
+    TopicCase,
+    VerificationStatus,
+    init_database,
+)
 
 runner = CliRunner()
 
@@ -144,3 +152,43 @@ def test_store_event_allows_reused_cluster_ids(tmp_path):
 
     assert asyncio.run(store_event_in_db(event_one)) is True
     assert asyncio.run(store_event_in_db(event_two)) is True
+
+
+def test_cases_command_lists_topic_cases(tmp_path):
+    """The case list command should surface persisted cases."""
+    db = init_database(str(tmp_path / "triangulate.db"))
+    session = db.get_session_sync()
+    session.add(
+        TopicCase(
+            id="case-1",
+            query="Example topic",
+            slug="example-topic",
+            status=CaseStatus.REVIEW_READY,
+        )
+    )
+    session.commit()
+    session.close()
+
+    result = runner.invoke(app, ["cases"])
+    assert result.exit_code == 0
+    assert "case-1" in result.stdout
+
+
+def test_case_show_command(tmp_path):
+    """The case show command should display case metadata."""
+    db = init_database(str(tmp_path / "triangulate.db"))
+    session = db.get_session_sync()
+    session.add(
+        TopicCase(
+            id="case-1",
+            query="Example topic",
+            slug="example-topic",
+            status=CaseStatus.REVIEW_READY,
+        )
+    )
+    session.commit()
+    session.close()
+
+    result = runner.invoke(app, ["case", "show", "case-1"])
+    assert result.exit_code == 0
+    assert "Example topic" in result.stdout

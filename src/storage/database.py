@@ -31,7 +31,7 @@ class Database:
             echo=False,
         )
         self.SessionLocal = sessionmaker(
-            autocommit=False, autoflush=False, bind=self.engine
+            autocommit=False, autoflush=False, expire_on_commit=False, bind=self.engine
         )
 
     def init_db(self) -> None:

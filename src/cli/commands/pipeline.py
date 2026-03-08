@@ -1,58 +1,33 @@
-"""Run-pipeline command: Execute full pipeline."""
+"""Run the configured topic pipeline once."""
 
-import logging
+from __future__ import annotations
+
+import asyncio
 from pathlib import Path
+
+import yaml
 from rich.console import Console
 
-from src.cli.commands.ingest import save_fetched_articles
-from src.cli.commands.process import cmd_process
-from src.cli.commands.review import cmd_review
+from src.cli.commands.cases import build_case_service
 
-logger = logging.getLogger(__name__)
 console = Console()
 
 
 def cmd_run_pipeline() -> None:
-    """Run the complete pipeline: ingest -> process -> review."""
-    console.print("[bold blue]Running Triangulate Pipeline[/bold blue]\n")
-
-    # Step 1: Ingest
-    console.print("[bold]Step 1: Ingesting content...[/bold]")
-    console.print("=" * 50)
-
-    # Temporarily patch the ingest command to save articles
-    import toml
-
-    config_path = Path("config.toml")
-    with open(config_path) as f:
-        config = toml.load(f)
-
-    from src.ingester import ContentFetcher
-
-    fetcher = ContentFetcher(config)
-    articles = fetcher.fetch_all(limit=50)
-
-    if not articles:
-        console.print("[yellow]No articles fetched. Exiting.[/yellow]")
+    """Run the topic case pipeline for configured topics once."""
+    topics_path = Path("./topics.yaml")
+    if not topics_path.exists():
+        console.print("[yellow]topics.yaml not found; nothing to run[/yellow]")
         return
 
-    save_fetched_articles(articles)
-    console.print(
-        f"[dim]Saved {len(articles)} articles to data/fetched_articles.json[/dim]"
-    )
-    console.print()
+    with open(topics_path) as handle:
+        config = yaml.safe_load(handle) or {}
 
-    # Step 2: Process
-    console.print("[bold]Step 2: Processing with AI...[/bold]")
-    console.print("=" * 50)
+    topics = config.get("topics", [])
+    if not topics:
+        console.print("[yellow]No topics configured in topics.yaml[/yellow]")
+        return
 
-    cmd_process(limit=None)
-    console.print()
-
-    # Step 3: Review
-    console.print("[bold]Step 3: Reviewing events...[/bold]")
-    console.print("=" * 50)
-
-    cmd_review()
-
-    console.print("\n[bold green]Pipeline complete![/bold green]")
+    service = build_case_service()
+    cases = asyncio.run(service.run_monitor_cycle(topics, output_root=Path("./output")))
+    console.print(f"[green]Pipeline complete for {len(cases)} case(s)[/green]")

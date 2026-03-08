@@ -257,9 +257,9 @@ async def cmd_process_url_async(
     # Save to database if requested
     if save:
         console.print("\n[bold blue]Saving to database...[/bold blue]")
-        from src.cli.commands.process import store_event_in_db
+        from src.storage.event_store import store_event_in_db
 
-        await store_event_in_db(event)
+        store_event_in_db(event)
         console.print("[green]✓ Saved to database[/green]")
 
 

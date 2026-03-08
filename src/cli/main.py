@@ -12,6 +12,13 @@ from src.cli.commands.review import cmd_review
 from src.cli.commands.query import cmd_query
 from src.cli.commands.pipeline import cmd_run_pipeline
 from src.cli.commands.process_url import cmd_process_url
+from src.cli.commands.topic import cmd_fetch_topic, cmd_interactive, cmd_monitor_start
+from src.cli.commands.cases import (
+    cmd_list_cases,
+    cmd_show_case,
+    cmd_review_case,
+    cmd_rerun_case,
+)
 from src.storage import init_database
 
 app = typer.Typer(
@@ -20,6 +27,8 @@ app = typer.Typer(
     add_completion=False,
 )
 console = Console()
+case_app = typer.Typer(help="Case lifecycle commands", add_completion=False)
+app.add_typer(case_app, name="case")
 
 # Ensure runtime directories exist before any file-backed services initialize.
 Path("logs").mkdir(exist_ok=True)
@@ -79,8 +88,14 @@ def review(
     event_id: str | None = typer.Option(
         None, "--event-id", "-e", help="Specific event to review"
     ),
+    case_id: str | None = typer.Option(
+        None, "--case-id", "-c", help="Specific case to review"
+    ),
 ) -> None:
     """Review pending events interactively."""
+    if case_id:
+        cmd_review_case(case_id=case_id)
+        return
     cmd_review(event_id=event_id)
 
 
@@ -101,7 +116,7 @@ def query(
 
 @app.command()
 def run_pipeline() -> None:
-    """Run the complete pipeline: ingest -> process -> review."""
+    """Run the configured topic case pipeline once."""
     cmd_run_pipeline()
 
 
@@ -115,10 +130,113 @@ def init_db() -> None:
 
 
 @app.command()
+def fetch_topic(
+    query: str = typer.Argument(..., help="Topic to search for"),
+    output: Path = typer.Option(
+        Path("./output"), "--output", "-o", help="Output directory"
+    ),
+    format: str = typer.Option(
+        "json,markdown", "--format", "-f", help="Export formats (comma-separated)"
+    ),
+    max_articles: int = typer.Option(
+        50, "--max-articles", "-m", help="Maximum articles to fetch"
+    ),
+    relevance_threshold: float = typer.Option(
+        0.3, "--relevance-threshold", "-r", help="Minimum relevance score (0-1)"
+    ),
+    conflict: str | None = typer.Option(
+        None, "--conflict", "-c", help="Override conflict detection"
+    ),
+) -> None:
+    """Fetch and analyze news by topic using AI."""
+    cmd_fetch_topic(
+        query=query,
+        output=output,
+        format=format,
+        max_articles=max_articles,
+        relevance_threshold=relevance_threshold,
+        conflict=conflict,
+    )
+
+
+@app.command()
+def interactive() -> None:
+    """Launch interactive topic exploration session."""
+    cmd_interactive()
+
+
+@app.command()
+def monitor(
+    start: bool = typer.Option(False, "--start", help="Start monitoring service"),
+    topics_config: Path = typer.Option(
+        Path("./topics.yaml"), "--topics", "-t", help="Topics configuration file"
+    ),
+    interval: int = typer.Option(
+        30, "--interval", "-i", help="Check interval in minutes"
+    ),
+) -> None:
+    """Background monitoring service for topics."""
+    if start:
+        cmd_monitor_start(topics_config=topics_config, interval=interval)
+    else:
+        console.print("[yellow]Use --start flag to start the monitor service[/yellow]")
+
+
+@app.command()
 def version() -> None:
     """Show version information."""
     console.print("Triangulate v0.1.0")
     console.print("Multi-agent fact verification system")
+
+
+@app.command("cases")
+def cases(
+    output: Path = typer.Option(
+        Path("./output"), "--output", "-o", help="Output directory root"
+    ),
+) -> None:
+    """List persisted topic cases."""
+    cmd_list_cases(output=output)
+
+
+@case_app.command("show")
+def case_show(
+    case_id: str = typer.Argument(..., help="Case ID"),
+    output: Path = typer.Option(
+        Path("./output"), "--output", "-o", help="Output directory root"
+    ),
+) -> None:
+    """Show case details."""
+    cmd_show_case(case_id=case_id, output=output)
+
+
+@case_app.command("review")
+def case_review(
+    case_id: str = typer.Argument(..., help="Case ID"),
+    decision: str | None = typer.Option(
+        None, "--decision", "-d", help="approve, reject, or defer"
+    ),
+    notes: str | None = typer.Option(None, "--notes", "-n", help="Review notes"),
+    output: Path = typer.Option(
+        Path("./output"), "--output", "-o", help="Output directory root"
+    ),
+) -> None:
+    """Review a case."""
+    cmd_review_case(case_id=case_id, decision=decision, notes=notes, output=output)
+
+
+@case_app.command("rerun")
+def case_rerun(
+    case_id: str = typer.Argument(..., help="Case ID"),
+    from_stage: str = typer.Option(
+        "retrieve", "--from", help="Stage to rerun from"
+    ),
+    output: Path = typer.Option(
+        Path("./output"), "--output", "-o", help="Output directory root"
+    ),
+) -> None:
+    """Rerun a case from a specific stage."""
+    cmd_rerun_case(case_id=case_id, from_stage=from_stage, output=output)
 
 
 def main() -> None:

@@ -24,9 +24,11 @@ Inspired by the verification methodologies of the **International Crisis Group (
 
 ## ✨ Key Features
 
+- **🔍 AI-Powered Topic Retrieval:** NEW - Intelligent search and analysis of news by topic with automatic conflict detection, query generation, and relevance scoring
 - **📅 Chronological Visualization:** Interactive timeline (Vis.js) showing events linearly with clustering for high-density periods.
 - **✅ Verification Status:** Clear visual encoding for `CONFIRMED`, `PROBABLE`, `ALLEGED`, `CONTESTED`, and `DEBUNKED`.
 - **🤖 Dynamic AI Clustering:** Multi-agent AI system that automatically groups sources by narrative stance (e.g., "Official Sources" vs. "Eyewitnesses") rather than hardcoded bias.
+- **⚖️ Multi-Party Analysis:** Adversarial investigation where multiple party agents analyze claims from different perspectives, with an arbiter making objective determinations
 - **🔒 Local-First Architecture:** All data (media, database, archives) stored locally by default. Cloud APIs used only for AI reasoning (with PII scrubbing).
 - **🔗 Evidence Chain:** Every claim is linked to archived evidence (WARC, screenshots) with SHA-256 integrity hashing.
 - **👤 Human-in-the-Loop:** AI drafts events; human analysts verify before publication. No AI auto-publishing.
@@ -159,7 +161,44 @@ uv run triangulate query --days 7
 
 # Run complete pipeline
 uv run triangulate run-pipeline
+
+# 🆕 Topic-Based News Retrieval (NEW)
+# Fetch and analyze news by topic using AI
+uv run triangulate fetch-topic "Gaza ceasefire negotiations"
+
+# Interactive topic exploration
+uv run triangulate interactive
+
+# Background monitoring service
+uv run triangulate monitor --start --topics ./topics.yaml
 ```
+
+#### Topic-Based Retrieval
+
+The new `fetch-topic` command enables intelligent, AI-powered retrieval and analysis of news articles by topic:
+
+**Features:**
+- **Automatic conflict detection** (Gaza, Ukraine, Iran)
+- **AI-generated search queries** (5-10 relevant queries per topic)
+- **Source prioritization** by relevance to topic
+- **Article relevance scoring** (filters low-relevance content)
+- **Multi-party analysis** through existing AI workflow
+- **Structured export** (JSON + Markdown)
+
+**Example:**
+```bash
+uv run triangulate fetch-topic "Gaza ceasefire negotiations" \
+  --output ./results \
+  --max-articles 50 \
+  --relevance-threshold 0.4
+```
+
+**Output:**
+- `./results/topic_analysis.json` - Complete structured data
+- `./results/topic_report.md` - Human-readable summary
+- `./results/metadata.json` - Query and processing metadata
+
+See [docs/20260308-topic-based-retrieval.md](docs/20260308-topic-based-retrieval.md) for detailed documentation.
 
 ### Verification Workflow
 1. **Ingest:** Fetch articles from configured RSS/API sources
@@ -197,13 +236,20 @@ temperature = 0.3
 - [x] **Phase 4: AI Agent System** (Collector, Clusterer, Narrator, Classifier)
 - [x] **Phase 5: CLI Interface** (ingest, process, review, query commands)
 - [x] **Phase 6: Testing** (unit tests, fixtures)
+- [x] **Phase 7: Party-Based Analysis** (multi-party adversarial workflow)
+- [x] **Phase 8: Topic-Based Retrieval** (AI-powered topic search & analysis)
+  - [x] Conflict detection
+  - [x] Query generation
+  - [x] Source prioritization
+  - [x] Relevance scoring
+  - [x] Structured export (JSON + Markdown)
 
 ### Full Version (Planned)
-- [ ] **Phase 7: Web Frontend** (React timeline visualization)
-- [ ] **Phase 8: Evidence Pipeline** (ArchiveBox integration, SHA-256 hashing)
-- [ ] **Phase 9: Privacy Layer** (Presidio PII scrubbing)
-- [ ] **Phase 10: Production Database** (PostgreSQL + TimescaleDB)
-- [ ] **Phase 11: Cloud Migration** (S3 storage, managed infrastructure)
+- [ ] **Phase 9: Web Frontend** (React timeline visualization)
+- [ ] **Phase 10: Evidence Pipeline** (ArchiveBox integration, SHA-256 hashing)
+- [ ] **Phase 11: Privacy Layer** (Presidio PII scrubbing)
+- [ ] **Phase 12: Production Database** (PostgreSQL + TimescaleDB)
+- [ ] **Phase 13: Cloud Migration** (S3 storage, managed infrastructure)
 
 ---
 

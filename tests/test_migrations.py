@@ -21,10 +21,15 @@ def test_run_migrations_is_idempotent_on_fresh_database(tmp_path):
     assert "party_positions" in claim_columns
     assert "controversy_score" in claim_columns
     assert "party_investigations" in inspector.get_table_names()
+    assert "topic_cases" in inspector.get_table_names()
+    assert "case_stage_runs" in inspector.get_table_names()
+    assert "case_artifacts" in inspector.get_table_names()
+    assert "case_articles" in inspector.get_table_names()
+    assert "monitor_checkpoints" in inspector.get_table_names()
 
     with db.get_session_sync() as session:
         current_version = session.execute(
             text("SELECT MAX(version) FROM _migrations")
         ).scalar()
 
-    assert current_version == 1
+    assert current_version == 2
