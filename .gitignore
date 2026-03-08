@@ -7,6 +7,7 @@
 # Local project data
 data/
 logs/
+output/
 *.log
 *.pid
 *.out
