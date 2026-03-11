@@ -52,6 +52,7 @@ class StubService:
                 "conflict": "Global Trade",
                 "status": "REVIEW_READY",
                 "current_stage": "REPORT",
+                "routing_mode": "autonomous",
                 "report_path": None,
                 "latest_manifest_path": None,
                 "article_count": 8,
@@ -60,7 +61,6 @@ class StubService:
                 "review_notes": None,
                 "metadata": {
                     "last_retrieve_changed": True,
-                    "bootstrap": {"automation_mode": "blocked"},
                 },
                 "updated_at": "2026-03-11T10:00:00+00:00",
             },
@@ -220,6 +220,7 @@ def test_get_case_counts_only_open_exceptions(client):
     response = test_client.get("/api/cases/case-1")
     assert response.status_code == 200
     assert response.json()["case"]["openExceptionsCount"] == 1
+    assert response.json()["case"]["automationMode"] == "autonomous"
 
 
 def test_tab_endpoints_return_frontend_slices(client):

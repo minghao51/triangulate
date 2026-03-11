@@ -1745,6 +1745,7 @@ class TopicCaseService:
                 "conflict": case.conflict,
                 "status": case.status.value,
                 "current_stage": case.current_stage.value if case.current_stage else None,
+                "routing_mode": case.routing_mode,
                 "report_path": case.report_path,
                 "latest_manifest_path": case.latest_manifest_path,
                 "source_count": case.source_count,

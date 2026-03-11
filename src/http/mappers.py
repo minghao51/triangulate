@@ -145,7 +145,11 @@ def _map_case_banner(detail: dict[str, Any]) -> CaseBanner:
             case.get("open_review_items", 0),
         ),
         reportPath=case.get("report_path"),
-        automationMode=_map_automation((case.get("metadata") or {}).get("bootstrap", {}).get("automation_mode") or (case.get("metadata") or {}).get("routing_mode")),
+        automationMode=_map_automation(
+            (case.get("metadata") or {}).get("bootstrap", {}).get("automation_mode")
+            or case.get("routing_mode")
+            or (case.get("metadata") or {}).get("routing_mode")
+        ),
         hasNewMaterial=bool((case.get("metadata") or {}).get("last_retrieve_changed", False)),
         openExceptionsCount=_count_open_exceptions(exceptions),
         reviewNotes=case.get("review_notes"),
