@@ -111,3 +111,72 @@ def test_get_party_mapping(db_session):
     assert mapping["US"] == "party-1"
     assert mapping["America"] == "party-1"
     assert mapping["Tehran"] == "party-2"
+
+
+def test_create_parties_reuses_global_party(db_session):
+    """Creating the same canonical party for a later event should update rather than fail."""
+    service = PartyService(db_session)
+
+    existing = Party(
+        id="party-1",
+        canonical_name="United States",
+        aliases=["US"],
+        event_id="event-1",
+    )
+    db_session.add(existing)
+    db_session.commit()
+
+    parties = service.create_parties(
+        "event-2",
+        {
+            "parties": [
+                {
+                    "canonical_name": "United States",
+                    "aliases": ["America"],
+                    "reasoning": "Merged canonical record",
+                }
+            ]
+        },
+    )
+
+    assert len(parties) == 1
+    assert parties[0].id == "party-1"
+    assert parties[0].event_id == "event-2"
+    assert parties[0].aliases == ["US", "America", "United States"]
+
+
+def test_normalize_entity_falls_back_to_global_party(db_session):
+    """Lookup should still work when the canonical party is no longer scoped to the event."""
+    service = PartyService(db_session)
+
+    party = Party(
+        id="party-1",
+        canonical_name="United States",
+        aliases=["US", "America"],
+        event_id="event-2",
+    )
+    db_session.add(party)
+    db_session.commit()
+
+    result = service.normalize_entity("US", "event-1")
+    assert result is not None
+    assert result.id == "party-1"
+
+
+def test_get_party_mapping_falls_back_to_global_parties(db_session):
+    """Mapping should still be available when no parties remain directly attached to the event."""
+    service = PartyService(db_session)
+
+    party = Party(
+        id="party-1",
+        canonical_name="United States",
+        aliases=["US", "America"],
+        event_id="event-2",
+    )
+    db_session.add(party)
+    db_session.commit()
+
+    mapping = service.get_party_mapping("event-1")
+
+    assert mapping["United States"] == "party-1"
+    assert mapping["US"] == "party-1"
