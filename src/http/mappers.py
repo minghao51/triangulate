@@ -88,6 +88,10 @@ def _map_automation(value: str | None) -> AutomationMode:
 
 
 def _map_exception(item: dict[str, Any]) -> ExceptionDTO:
+    is_open = not (
+        bool(item.get("resolved_at") or item.get("resolvedAt"))
+        or item.get("status", "open") == "resolved"
+    )
     return ExceptionDTO(
         id=item.get("id") or f"exception-{item.get('type', 'unknown')}",
         type=item.get("type", "unknown"),
@@ -96,7 +100,7 @@ def _map_exception(item: dict[str, Any]) -> ExceptionDTO:
         recommendedAction=item.get("recommended_action")
         or item.get("recommendedAction")
         or "Review and resolve before proceeding.",
-        isOpen=not bool(item.get("resolved_at") or item.get("resolvedAt")),
+        isOpen=is_open,
     )
 
 

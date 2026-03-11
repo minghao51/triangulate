@@ -1604,13 +1604,25 @@ class TopicCaseService:
             if claims
             else []
         )
-        parties = (
-            session.query(Party)
-            .filter(Party.event_id.in_([event.id for event in events]))
-            .all()
-            if events
-            else []
+        party_ids = {
+            claim.party_id for claim in claims if getattr(claim, "party_id", None)
+        }
+        party_ids.update(
+            investigation.party_id
+            for investigation in party_investigations
+            if getattr(investigation, "party_id", None)
         )
+        party_names = set()
+        for claim in claims:
+            party_names.update((claim.party_positions or {}).keys())
+        parties = []
+        if events:
+            party_filters = [Party.event_id.in_([event.id for event in events])]
+            if party_ids:
+                party_filters.append(Party.id.in_(party_ids))
+            if party_names:
+                party_filters.append(Party.canonical_name.in_(party_names))
+            parties = session.query(Party).filter(or_(*party_filters)).all()
         reviews = (
             session.query(Review)
             .join(Event, Review.event_id == Event.id)

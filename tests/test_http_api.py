@@ -240,6 +240,7 @@ def test_tab_endpoints_return_frontend_slices(client):
     assert timeline.json()[0]["linkedEvidenceCount"] == 1
     assert run_history.json()[0]["status"] == "success"
     assert report.json()["status"] == "pending"
+    assert exceptions.json()[1]["isOpen"] is False
 
 
 def test_create_case_validates_and_calls_service(client):

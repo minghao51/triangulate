@@ -542,6 +542,65 @@ async def test_monitor_rerun_keeps_total_event_count(monkeypatch, tmp_path):
         session.close()
 
 
+@pytest.mark.asyncio
+async def test_case_details_keep_parties_when_reused_by_later_case(monkeypatch, tmp_path):
+    """Case detail party lists should survive when a shared party is reused in another case."""
+    service = make_service(tmp_path)
+
+    async def fake_fetch(*args, **kwargs):
+        query = kwargs["query"]
+        slug = query.replace(" ", "-").lower()
+        return {
+            "articles": [
+                {
+                    "url": f"https://example.com/{slug}",
+                    "title": query,
+                    "source": "Example",
+                    "published_at": "2026-03-08T12:00:00+00:00",
+                    "content": f"{query} content.",
+                    "relevance_score": 0.9,
+                }
+            ],
+            "conflict": "ukraine_war",
+            "queries_generated": [query],
+            "sources_used": ["Example"],
+            "articles_fetched": 1,
+            "articles_processed": 1,
+        }
+
+    async def fake_process(article):
+        return {
+            "id": "temporary",
+            "timestamp": datetime(2026, 3, 8, 12, 0, tzinfo=UTC),
+            "title": article["title"],
+            "summary": article["content"][:500],
+            "verification_status": "CONTESTED",
+            "claims": [
+                {
+                    "claim": "Shared claim",
+                    "who": ["Alpha", "Beta"],
+                    "verification_status": "ALLEGED",
+                }
+            ],
+            "narratives": [{"cluster_id": "0", "stance_summary": "Narrative", "claim_count": 1}],
+            "parties": [
+                {"canonical_name": "Alpha", "aliases": ["Alpha"]},
+                {"canonical_name": "Beta", "aliases": ["Beta"]},
+            ],
+        }
+
+    monkeypatch.setattr(service.topic_fetcher, "fetch_articles_by_topic", fake_fetch)
+    monkeypatch.setattr(service.ai_workflow, "process_article", fake_process)
+
+    first = await service.run_case(query="First party case", output_dir=tmp_path)
+    await service.run_case(query="Second party case", output_dir=tmp_path)
+
+    detail = service.get_case_details(first.id)
+
+    assert detail is not None
+    assert [party["canonical_name"] for party in detail["parties"]] == ["Alpha", "Beta"]
+
+
 def test_review_case_transitions(tmp_path):
     """Case review updates the case and underlying event reviews."""
     service = make_service(tmp_path)
