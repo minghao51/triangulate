@@ -1,0 +1,77 @@
+.report-container {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.report-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+}
+
+.report-title-area {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.report-title-area h3 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0;
+}
+
+.report-actions {
+    display: flex;
+    gap: 0.75rem;
+}
+
+.report-canvas {
+    padding: 2.5rem;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-subtle);
+    min-height: 500px;
+}
+
+.markdown-body {
+    color: var(--text-primary);
+    font-family: inherit;
+    line-height: 1.6;
+}
+
+.markdown-body h1 {
+    font-size: 2rem;
+    font-weight: 700;
+    margin-bottom: 1.5rem;
+    border-bottom: 1px solid var(--border-subtle);
+    padding-bottom: 0.5rem;
+}
+
+.markdown-body h2 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    margin-top: 2rem;
+    margin-bottom: 1rem;
+    color: var(--text-primary);
+}
+
+.markdown-body p {
+    margin-bottom: 1rem;
+    color: var(--text-secondary);
+}
+
+.markdown-body ul {
+    padding-left: 1.5rem;
+    margin-bottom: 1rem;
+}
+
+.markdown-body li {
+    margin-bottom: 0.5rem;
+    color: var(--text-secondary);
+}
+
+.markdown-body strong {
+    color: var(--text-primary);
+}

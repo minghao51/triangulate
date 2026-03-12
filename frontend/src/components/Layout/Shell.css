@@ -1,0 +1,112 @@
+.shell-container {
+    display: flex;
+    height: 100vh;
+    width: 100vw;
+    overflow: hidden;
+}
+
+.shell-sidebar {
+    width: 260px;
+    background-color: var(--bg-surface);
+    border-right: 1px solid var(--border-subtle);
+    display: flex;
+    flex-direction: column;
+}
+
+.shell-brand {
+    height: 60px;
+    display: flex;
+    align-items: center;
+    padding: 0 1.5rem;
+    font-size: 1.125rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    border-bottom: 1px solid var(--border-subtle);
+    gap: 0.75rem;
+}
+
+.brand-icon {
+    color: var(--accent-primary);
+}
+
+.shell-nav-section {
+    padding: 1.5rem 1rem 0;
+}
+
+.shell-nav-title {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-tertiary);
+    margin-bottom: 0.5rem;
+    padding: 0 0.5rem;
+    letter-spacing: 0.05em;
+}
+
+.shell-nav-item {
+    display: flex;
+    align-items: center;
+    padding: 0.5rem;
+    border-radius: 6px;
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    font-weight: 500;
+    gap: 0.75rem;
+    margin-bottom: 0.25rem;
+    transition: all 0.2s;
+}
+
+.shell-nav-item:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+    color: var(--text-primary);
+    text-decoration: none;
+}
+
+.shell-nav-item.active {
+    background-color: rgba(59, 130, 246, 0.1);
+    color: var(--accent-primary);
+}
+
+.shell-main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background-color: var(--bg-app);
+}
+
+.shell-header {
+    height: 60px;
+    border-bottom: 1px solid var(--border-subtle);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 2rem;
+    background-color: rgba(25, 28, 36, 0.8);
+    backdrop-filter: blur(8px);
+}
+
+.header-breadcrumbs {
+    font-size: 0.875rem;
+    color: var(--text-tertiary);
+    font-weight: 500;
+}
+
+.active-breadcrumb {
+    color: var(--text-primary);
+}
+
+.user-profile {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    background: var(--bg-surface-hover);
+    padding: 0.375rem 0.75rem;
+    border-radius: 6px;
+    border: 1px solid var(--border-subtle);
+}
+
+.shell-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 2rem;
+}

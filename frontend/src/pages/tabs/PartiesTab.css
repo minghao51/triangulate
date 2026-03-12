@@ -1,0 +1,135 @@
+.parties-container {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.parties-header h3 {
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 0.25rem;
+}
+
+.parties-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+    gap: 1.25rem;
+}
+
+.party-card {
+    display: flex;
+    background: var(--bg-surface-hover);
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    overflow: hidden;
+    transition: border-color 0.2s;
+}
+
+.party-card:hover {
+    border-color: var(--border-strong);
+}
+
+.party-stance-bar {
+    width: 6px;
+    flex-shrink: 0;
+}
+
+.stance-for {
+    background-color: var(--status-success);
+}
+
+.stance-against {
+    background-color: var(--status-danger);
+}
+
+.stance-neutral {
+    background-color: var(--status-neutral);
+}
+
+.stance-mixed {
+    background-color: var(--status-warning);
+}
+
+.party-card-inner {
+    padding: 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    flex: 1;
+}
+
+.party-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+}
+
+.party-card-header h4 {
+    font-size: 1.125rem;
+    color: var(--text-primary);
+    margin: 0;
+}
+
+.party-aliases {
+    font-size: 0.8125rem;
+    color: var(--text-tertiary);
+    font-family: monospace;
+}
+
+.alias-label {
+    color: var(--text-secondary);
+}
+
+.party-description {
+    font-size: 0.9375rem;
+    color: var(--text-primary);
+    line-height: 1.5;
+    margin: 0;
+}
+
+.party-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-top: 1px solid var(--border-subtle);
+    padding-top: 1rem;
+    margin-top: auto;
+}
+
+.party-metric {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+}
+
+.party-stance-badge {
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 0.25rem 0.625rem;
+    border-radius: 9999px;
+    text-transform: uppercase;
+}
+
+.stance-badge-for {
+    background: rgba(16, 185, 129, 0.1);
+    color: var(--status-success);
+}
+
+.stance-badge-against {
+    background: rgba(239, 68, 68, 0.1);
+    color: var(--status-danger);
+}
+
+.stance-badge-neutral {
+    background: rgba(108, 115, 133, 0.1);
+    color: var(--status-neutral);
+}
+
+.stance-badge-mixed {
+    background: rgba(245, 158, 11, 0.1);
+    color: var(--status-warning);
+}

@@ -1,0 +1,115 @@
+.claims-container {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.claims-header h3 {
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 0.25rem;
+}
+
+.subtitle {
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+}
+
+.claims-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.claim-row {
+    display: grid;
+    grid-template-columns: 2.5fr 1fr 0.5fr;
+    gap: 1.5rem;
+    background: var(--bg-surface-hover);
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    padding: 1.5rem;
+    align-items: center;
+}
+
+.claim-main {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.claim-tags {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.claim-text {
+    font-size: 1.125rem;
+    font-weight: 500;
+    color: var(--text-primary);
+    margin: 0;
+    line-height: 1.5;
+}
+
+.claim-signature {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    font-family: monospace;
+    font-size: 0.75rem;
+    color: var(--text-tertiary);
+}
+
+.claim-metrics {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    border-left: 1px solid var(--border-subtle);
+    padding-left: 1.5rem;
+}
+
+.corroboration-bar {
+    display: flex;
+    gap: 1rem;
+}
+
+.corroboration-stat {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    font-weight: 600;
+    font-size: 1.125rem;
+}
+
+.support {
+    color: var(--status-success);
+}
+
+.oppose {
+    color: var(--status-danger);
+}
+
+.diversity-badge {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    background: rgba(0, 0, 0, 0.2);
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    display: inline-block;
+    align-self: flex-start;
+}
+
+.controversy-warning {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    font-size: 0.75rem;
+    color: var(--status-warning);
+    font-weight: 600;
+}
+
+.claim-actions {
+    display: flex;
+    justify-content: flex-end;
+}
