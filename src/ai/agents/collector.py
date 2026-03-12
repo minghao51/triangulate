@@ -2,11 +2,11 @@
 
 import logging
 from typing import Any
-from litellm import acompletion
 import os
-import json
+from litellm import acompletion
 
-from src.ai.utils import call_with_retry, build_completion_params
+from src.ai.schemas import ClaimCollectionSchema
+from src.ai.utils import call_structured_llm, make_agent_envelope
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +47,9 @@ Output format (JSON array):
 Extract claims:"""
 
 
-async def collect_claims(article: dict[str, Any]) -> list[dict[str, Any]]:
+async def collect_claims(
+    article: dict[str, Any], *, include_metadata: bool = False
+) -> list[dict[str, Any]] | dict[str, Any]:
     """Extract claims from an article using LLM.
 
     Args:
@@ -59,7 +61,13 @@ async def collect_claims(article: dict[str, Any]) -> list[dict[str, Any]]:
     try:
         if not os.getenv("LLM_API_KEY"):
             logger.error("No LLM_API_KEY found")
-            return []
+            result = make_agent_envelope(
+                {"claims": _fallback_claims(article)},
+                parse_status="no_api_key",
+                structured_output_used=False,
+                fallback_used=True,
+            )
+            return result if include_metadata else []
 
         prompt = COLLECTOR_PROMPT.format(
             title=article.get("title", ""),
@@ -68,38 +76,55 @@ async def collect_claims(article: dict[str, Any]) -> list[dict[str, Any]]:
 
         logger.info(f"Extracting claims from article: {article.get('title', '')[:50]}")
 
-        # Build completion parameters with retry logic
-        params = build_completion_params(
-            messages=[{"role": "user", "content": prompt}],
+        result = await call_structured_llm(
+            prompt=prompt,
+            schema=ClaimCollectionSchema,
             temperature=0.3,
             max_tokens=2000,
+            fallback=lambda: {"claims": _fallback_claims(article)},
+            completion_func=acompletion,
         )
-
-        # Call with retry for rate limiting and error handling
-        response = await call_with_retry(acompletion, **params)
-
-        content = response.get("choices", [{}])[0].get("message", {}).get("content", "")
-
-        # Parse JSON response
-        try:
-            claims = json.loads(content)
-            if isinstance(claims, list):
-                logger.info(f"Extracted {len(claims)} claims")
-                return claims
-            else:
-                logger.warning("LLM response is not a list")
-                return []
-        except json.JSONDecodeError:
-            # Try to extract JSON from markdown code block
-            if "```json" in content:
-                json_str = content.split("```json")[1].split("```")[0].strip()
-                claims = json.loads(json_str)
-                if isinstance(claims, list):
-                    logger.info(f"Extracted {len(claims)} claims from markdown")
-                    return claims
-            logger.error(f"Failed to parse LLM response as JSON: {content[:200]}")
+        claims = result["output"].get("claims", [])
+        logger.info("Extracted %s claims", len(claims))
+        if result.get("fallback_used") and not include_metadata and not result.get(
+            "raw_response_excerpt"
+        ):
             return []
-
+        return result if include_metadata else claims
     except Exception as e:
         logger.error(f"Error extracting claims: {e}")
-        return []
+        result = make_agent_envelope(
+            {"claims": _fallback_claims(article)},
+            parse_status="error",
+            structured_output_used=True,
+            fallback_used=True,
+        )
+        return result if include_metadata else []
+
+
+def _fallback_claims(article: dict[str, Any]) -> list[dict[str, Any]]:
+    """Extract coarse claims from article text without an LLM."""
+    content = " ".join(
+        part.strip()
+        for part in [article.get("title", ""), article.get("content", "")]
+        if part
+    )
+    sentences = [
+        sentence.strip(" -\n\t")
+        for sentence in content.replace("\n", " ").split(".")
+        if sentence.strip()
+    ]
+    claims = []
+    for sentence in sentences[:5]:
+        if len(sentence) < 8:
+            continue
+        claims.append(
+            {
+                "claim": sentence,
+                "who": [],
+                "when": "",
+                "where": "",
+                "confidence": "LOW",
+            }
+        )
+    return claims[:3]

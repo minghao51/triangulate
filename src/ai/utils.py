@@ -9,9 +9,11 @@ Implements Alibaba Model Studio best practices for 2026:
 import asyncio
 import json
 import logging
-from typing import Any, Callable, Coroutine
+from typing import Any, Callable, Coroutine, Type
 import os
 from dotenv import load_dotenv
+from litellm import acompletion
+from pydantic import BaseModel, ValidationError
 
 logger = logging.getLogger(__name__)
 
@@ -162,6 +164,132 @@ def build_completion_params(
     return params
 
 
+def extract_json_payload(content: str) -> Any:
+    """Extract a JSON payload from raw model content."""
+    if not isinstance(content, str):
+        return content
+
+    stripped = content.strip()
+    if not stripped:
+        raise json.JSONDecodeError("Empty content", stripped, 0)
+
+    try:
+        return json.loads(stripped)
+    except json.JSONDecodeError:
+        pass
+
+    for fence in ("```json", "```"):
+        if fence in stripped:
+            try:
+                json_str = stripped.split(fence, 1)[1].split("```", 1)[0].strip()
+                return json.loads(json_str)
+            except (IndexError, json.JSONDecodeError):
+                continue
+
+    start_index = -1
+    for marker in ("{", "["):
+        idx = stripped.find(marker)
+        if idx != -1 and (start_index == -1 or idx < start_index):
+            start_index = idx
+    if start_index != -1:
+        candidate = stripped[start_index:]
+        for end_char in ("}", "]"):
+            end_index = candidate.rfind(end_char)
+            if end_index != -1:
+                try:
+                    return json.loads(candidate[: end_index + 1])
+                except json.JSONDecodeError:
+                    continue
+
+    raise json.JSONDecodeError("Unable to extract JSON", stripped, 0)
+
+
+async def call_structured_llm(
+    prompt: str,
+    schema: Type[BaseModel],
+    *,
+    config: dict[str, Any] | None = None,
+    temperature: float = 0.3,
+    max_tokens: int = 2000,
+    fallback: Callable[[], Any] | None = None,
+    system_prompt: str | None = None,
+    completion_func: Callable[..., Coroutine[Any, Any, Any]] | None = None,
+) -> dict[str, Any]:
+    """Call the LLM and parse the response into a typed schema by default."""
+    messages = []
+    if system_prompt:
+        messages.append({"role": "system", "content": system_prompt})
+    messages.append(
+        {
+            "role": "user",
+            "content": (
+                f"{prompt}\n\nReturn a JSON object that matches this schema exactly:\n"
+                f"{json.dumps(schema.model_json_schema(), indent=2)}"
+            ),
+        }
+    )
+
+    params = build_completion_params(
+        messages=messages,
+        temperature=temperature,
+        max_tokens=max_tokens,
+        llm_config=config,
+        response_format={"type": "json_object"},
+    )
+
+    raw_content = ""
+    parse_status = "ok"
+    fallback_used = False
+    try:
+        response = await call_with_retry(completion_func or acompletion, **params)
+        raw_content = response.get("choices", [{}])[0].get("message", {}).get(
+            "content", ""
+        )
+        payload = extract_json_payload(raw_content)
+        parsed = schema.model_validate(payload)
+        return {
+            "output": parsed.model_dump(),
+            "parse_status": parse_status,
+            "structured_output_used": True,
+            "fallback_used": fallback_used,
+            "raw_response_excerpt": raw_content[:400],
+        }
+    except (json.JSONDecodeError, ValidationError, Exception) as exc:
+        logger.warning("Structured LLM call failed for %s: %s", schema.__name__, exc)
+        parse_status = "fallback"
+        if fallback is None:
+            raise
+        fallback_used = True
+        fallback_output = fallback()
+        if isinstance(fallback_output, BaseModel):
+            fallback_output = fallback_output.model_dump()
+        return {
+            "output": fallback_output,
+            "parse_status": parse_status,
+            "structured_output_used": True,
+            "fallback_used": fallback_used,
+            "raw_response_excerpt": raw_content[:400],
+        }
+
+
+def make_agent_envelope(
+    output: Any,
+    *,
+    parse_status: str = "ok",
+    structured_output_used: bool = True,
+    fallback_used: bool = False,
+    raw_response_excerpt: str = "",
+) -> dict[str, Any]:
+    """Create a normalized agent result envelope."""
+    return {
+        "output": output,
+        "parse_status": parse_status,
+        "structured_output_used": structured_output_used,
+        "fallback_used": fallback_used,
+        "raw_response_excerpt": raw_response_excerpt,
+    }
+
+
 async def call_llm(
     prompt: str,
     response_format: str = "text",
@@ -211,17 +339,8 @@ async def call_llm(
     # Parse JSON if requested
     if response_format == "json":
         try:
-            return json.loads(content)
+            return extract_json_payload(content)
         except json.JSONDecodeError:
-            # Try to extract JSON from markdown code block
-            if "```json" in content:
-                json_str = content.split("```json")[1].split("```")[0].strip()
-                return json.loads(json_str)
-            elif "```" in content:
-                json_str = content.split("```")[1].split("```")[0].strip()
-                return json.loads(json_str)
-            else:
-                # Return raw content if parsing fails
-                return content
+            return content
 
     return content

@@ -8,10 +8,10 @@ This module uses AI to analyze user queries and determine:
 """
 
 import logging
-from datetime import datetime
 from typing import Optional
 
-from src.ai.utils import call_llm
+from src.ai.schemas import DateRangeSchema, QueryGenerationSchema, SourcePrioritySchema
+from src.ai.utils import call_llm, call_structured_llm
 
 logger = logging.getLogger(__name__)
 
@@ -148,23 +148,19 @@ class TopicAnalyzer:
         )
 
         try:
-            response = await call_llm(
+            response = await call_structured_llm(
                 prompt=prompt,
-                response_format="json",
+                schema=QueryGenerationSchema,
                 config=self.ai_config,
+                max_tokens=800,
+                fallback=lambda: {"queries": [query]},
             )
         except Exception as exc:
             logger.warning("Query generation failed, using original topic: %s", exc)
             return [query]
 
-        # Parse response as list
-        if isinstance(response, list):
-            return response
-        elif isinstance(response, dict) and "queries" in response:
-            return response["queries"]
-        else:
-            # Fallback: return original query
-            return [query]
+        payload = response["output"] if isinstance(response, dict) else response
+        return payload.get("queries", [query]) or [query]
 
     async def prioritize_sources(
         self,
@@ -198,19 +194,21 @@ class TopicAnalyzer:
         )
 
         try:
-            response = await call_llm(
+            response = await call_structured_llm(
                 prompt=prompt,
-                response_format="json",
+                schema=SourcePrioritySchema,
                 config=self.ai_config,
+                max_tokens=1500,
+                fallback=lambda: {"scores": {}},
             )
         except Exception as exc:
             logger.warning("Source prioritization failed, using default ordering: %s", exc)
-            response = {}
+            response = {"output": {"scores": {}}}
 
         # Add relevance scores to sources
         source_scores = {}
         if isinstance(response, dict):
-            source_scores = response
+            source_scores = response.get("output", {}).get("scores", {})
 
         # Score and sort sources
         scored_sources = []
@@ -240,18 +238,21 @@ class TopicAnalyzer:
         prompt = DATE_EXTRACTION_PROMPT.format(topic=query)
 
         try:
-            response = await call_llm(
+            response = await call_structured_llm(
                 prompt=prompt,
-                response_format="json",
+                schema=DateRangeSchema,
                 config=self.ai_config,
+                max_tokens=300,
+                fallback=lambda: {"start": None, "end": None},
             )
         except Exception as exc:
             logger.warning("Date extraction failed, omitting range: %s", exc)
             return None
 
         if isinstance(response, dict):
-            start = response.get("start")
-            end = response.get("end")
+            payload = response.get("output", response)
+            start = payload.get("start")
+            end = payload.get("end")
             if start and end:
                 return (start, end)
 

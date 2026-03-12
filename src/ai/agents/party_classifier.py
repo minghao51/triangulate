@@ -2,11 +2,10 @@
 
 import logging
 from typing import Any
-from litellm import acompletion
-import json
 import os
 
-from src.ai.utils import call_with_retry, build_completion_params
+from src.ai.schemas import PartyClassificationSchema
+from src.ai.utils import call_structured_llm, make_agent_envelope
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +38,7 @@ Provide the party classification:"""
 
 
 async def classify_parties(
-    article: dict[str, Any], entities: list[str]
+    article: dict[str, Any], entities: list[str], *, include_metadata: bool = False
 ) -> dict[str, Any]:
     """Classify entities into canonical parties using LLM.
 
@@ -51,12 +50,19 @@ async def classify_parties(
         Dictionary with "parties" list containing canonical names and aliases
     """
     if not entities:
-        return {"parties": []}
+        result = make_agent_envelope({"parties": []})
+        return result if include_metadata else result["output"]
 
     try:
         if not os.getenv("LLM_API_KEY"):
             logger.error("No LLM_API_KEY found")
-            return _fallback_classification(entities)
+            result = make_agent_envelope(
+                _fallback_classification(entities),
+                parse_status="no_api_key",
+                structured_output_used=False,
+                fallback_used=True,
+            )
+            return result if include_metadata else result["output"]
 
         # Format entities list
         entities_str = ", ".join(entities[:50])  # Limit to 50 entities
@@ -70,35 +76,27 @@ async def classify_parties(
 
         logger.info(f"Classifying {len(entities)} entities into parties")
 
-        # Build completion parameters
-        params = build_completion_params(
-            messages=[{"role": "user", "content": prompt}],
+        result = await call_structured_llm(
+            prompt=prompt,
+            schema=PartyClassificationSchema,
             temperature=0.3,
             max_tokens=800,
+            fallback=lambda: _fallback_classification(entities),
         )
-
-        # Call LLM with retry
-        response = await call_with_retry(acompletion, **params)
-
-        content = response.get("choices", [{}])[0].get("message", {}).get("content", "")
-
-        # Parse JSON response
-        try:
-            result = json.loads(content)
-            logger.info(f"Classified into {len(result.get('parties', []))} parties")
-            return result
-        except json.JSONDecodeError:
-            # Try to extract JSON from markdown code blocks
-            if "```json" in content:
-                json_str = content.split("```json")[1].split("```")[0].strip()
-                result = json.loads(json_str)
-                return result
-            logger.error(f"Failed to parse party classification JSON: {content[:200]}")
-            return _fallback_classification(entities)
+        logger.info(
+            "Classified into %s parties", len(result["output"].get("parties", []))
+        )
+        return result if include_metadata else result["output"]
 
     except Exception as e:
         logger.warning(f"LLM party classification failed: {e}, using fallback")
-        return _fallback_classification(entities)
+        result = make_agent_envelope(
+            _fallback_classification(entities),
+            parse_status="error",
+            structured_output_used=True,
+            fallback_used=True,
+        )
+        return result if include_metadata else result["output"]
 
 
 def _fallback_classification(entities: list[str]) -> dict[str, Any]:

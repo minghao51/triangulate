@@ -1,6 +1,5 @@
 """Unit tests for Markdown exporter."""
 
-from pathlib import Path
 import pytest
 
 from src.exporter.markdown_exporter import MarkdownExporter

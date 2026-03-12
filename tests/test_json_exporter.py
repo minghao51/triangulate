@@ -1,7 +1,6 @@
 """Unit tests for JSON exporter."""
 
 import json
-from pathlib import Path
 import pytest
 
 from src.exporter.json_exporter import JSONExporter

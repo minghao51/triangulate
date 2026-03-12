@@ -147,6 +147,21 @@ def fetch_topic(
     conflict: str | None = typer.Option(
         None, "--conflict", "-c", help="Override conflict detection"
     ),
+    confirmed_parties: list[str] = typer.Option(
+        None,
+        "--party",
+        help="Bootstrap-confirmed parties/nationalities. Repeat for multiple values.",
+    ),
+    manual_links: list[str] = typer.Option(
+        None,
+        "--manual-link",
+        help="Manual article or social links to include as evidence seeds.",
+    ),
+    automation_mode: str = typer.Option(
+        "exceptions_only",
+        "--automation-mode",
+        help="Automation mode for the case bootstrap.",
+    ),
 ) -> None:
     """Fetch and analyze news by topic using AI."""
     cmd_fetch_topic(
@@ -156,6 +171,9 @@ def fetch_topic(
         max_articles=max_articles,
         relevance_threshold=relevance_threshold,
         conflict=conflict,
+        confirmed_parties=confirmed_parties or None,
+        manual_links=manual_links or None,
+        automation_mode=automation_mode,
     )
 
 

@@ -80,6 +80,10 @@ class MigrationManager:
                 self._apply_party_investigation_schema(session)
             elif migration.version == 2:
                 self._apply_case_management_schema(session)
+            elif migration.version == 3:
+                self._apply_evidence_and_bootstrap_schema(session)
+            elif migration.version == 4:
+                self._apply_party_provenance_schema(session)
             else:
                 # Apply migration SQL
                 session.execute(text(migration.up_sql))
@@ -300,6 +304,155 @@ class MigrationManager:
             )
         )
 
+    def _apply_evidence_and_bootstrap_schema(self, session) -> None:
+        """Apply schema for evidence objects and richer case state."""
+        inspector = inspect(session.bind)
+        existing_tables = set(inspector.get_table_names())
+
+        if "claims" in existing_tables:
+            existing_claim_columns = {
+                column["name"] for column in inspector.get_columns("claims")
+            }
+            claim_columns = {
+                "claim_signature": "TEXT",
+                "support_count": "INTEGER NOT NULL DEFAULT 0",
+                "oppose_count": "INTEGER NOT NULL DEFAULT 0",
+                "source_diversity_count": "INTEGER NOT NULL DEFAULT 0",
+            }
+            for column_name, column_type in claim_columns.items():
+                if column_name not in existing_claim_columns:
+                    session.execute(
+                        text(
+                            f"ALTER TABLE claims ADD COLUMN {column_name} {column_type}"
+                        )
+                    )
+            session.execute(
+                text(
+                    """
+                    CREATE INDEX IF NOT EXISTS ix_claims_claim_signature
+                        ON claims (claim_signature)
+                    """
+                )
+            )
+
+        if "case_articles" in existing_tables:
+            existing_case_article_columns = {
+                column["name"] for column in inspector.get_columns("case_articles")
+            }
+            article_columns = {
+                "source_type": "TEXT NOT NULL DEFAULT 'rss'",
+                "source_metadata": "JSON",
+            }
+            for column_name, column_type in article_columns.items():
+                if column_name not in existing_case_article_columns:
+                    session.execute(
+                        text(
+                            f"ALTER TABLE case_articles ADD COLUMN {column_name} {column_type}"
+                        )
+                    )
+
+        if "parties" in existing_tables:
+            existing_party_columns = {
+                column["name"] for column in inspector.get_columns("parties")
+            }
+            if "is_bootstrap_confirmed" not in existing_party_columns:
+                session.execute(
+                    text(
+                        "ALTER TABLE parties ADD COLUMN is_bootstrap_confirmed INTEGER NOT NULL DEFAULT 0"
+                    )
+                )
+
+        session.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS evidence_items (
+                    id TEXT PRIMARY KEY,
+                    case_id TEXT NOT NULL,
+                    event_id TEXT,
+                    case_article_id TEXT,
+                    evidence_type TEXT NOT NULL,
+                    source_type TEXT NOT NULL,
+                    title TEXT,
+                    origin_url TEXT,
+                    canonical_url TEXT,
+                    archived_url TEXT,
+                    publisher TEXT,
+                    published_at TEXT,
+                    content TEXT,
+                    capture_metadata JSON,
+                    verification_status TEXT NOT NULL DEFAULT 'UNVERIFIED',
+                    credibility_tier TEXT,
+                    requires_human_review INTEGER NOT NULL DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY(case_id) REFERENCES topic_cases(id),
+                    FOREIGN KEY(event_id) REFERENCES events(id),
+                    FOREIGN KEY(case_article_id) REFERENCES case_articles(id)
+                )
+                """
+            )
+        )
+        session.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS evidence_verification_checks (
+                    id TEXT PRIMARY KEY,
+                    evidence_id TEXT NOT NULL,
+                    check_type TEXT NOT NULL,
+                    result TEXT NOT NULL,
+                    method TEXT,
+                    notes TEXT,
+                    verified_by TEXT,
+                    verified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY(evidence_id) REFERENCES evidence_items(id)
+                )
+                """
+            )
+        )
+        session.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS claim_evidence_links (
+                    id TEXT PRIMARY KEY,
+                    claim_id TEXT NOT NULL,
+                    evidence_id TEXT NOT NULL,
+                    relation TEXT NOT NULL,
+                    source_diversity_rank INTEGER NOT NULL DEFAULT 1,
+                    confidence_score FLOAT,
+                    notes TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY(claim_id) REFERENCES claims(id),
+                    FOREIGN KEY(evidence_id) REFERENCES evidence_items(id)
+                )
+                """
+            )
+        )
+        session.execute(
+            text(
+                """
+                CREATE INDEX IF NOT EXISTS ix_claim_evidence_links_claim_id
+                    ON claim_evidence_links (claim_id)
+                """
+            )
+        )
+
+    def _apply_party_provenance_schema(self, session) -> None:
+        """Persist bootstrap party provenance without assuming column absence."""
+        inspector = inspect(session.bind)
+        existing_tables = set(inspector.get_table_names())
+
+        if "parties" not in existing_tables:
+            return
+
+        existing_party_columns = {
+            column["name"] for column in inspector.get_columns("parties")
+        }
+        if "is_bootstrap_confirmed" not in existing_party_columns:
+            session.execute(
+                text(
+                    "ALTER TABLE parties ADD COLUMN is_bootstrap_confirmed INTEGER NOT NULL DEFAULT 0"
+                )
+            )
+
     def rollback_migration(self, migration: Migration) -> None:
         """Rollback a migration.
 
@@ -388,6 +541,73 @@ MIGRATIONS: list[Migration] = [
         DROP TABLE IF EXISTS case_artifacts;
         DROP TABLE IF EXISTS case_stage_runs;
         DROP TABLE IF EXISTS topic_cases;
+        """,
+    ),
+    Migration(
+        version=3,
+        name="Add evidence objects and bootstrap metadata schema",
+        up="""
+        ALTER TABLE claims ADD COLUMN claim_signature TEXT;
+        ALTER TABLE claims ADD COLUMN support_count INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE claims ADD COLUMN oppose_count INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE claims ADD COLUMN source_diversity_count INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE case_articles ADD COLUMN source_type TEXT NOT NULL DEFAULT 'rss';
+        ALTER TABLE case_articles ADD COLUMN source_metadata JSON;
+        CREATE TABLE IF NOT EXISTS evidence_items (
+            id TEXT PRIMARY KEY,
+            case_id TEXT NOT NULL,
+            event_id TEXT,
+            case_article_id TEXT,
+            evidence_type TEXT NOT NULL,
+            source_type TEXT NOT NULL,
+            title TEXT,
+            origin_url TEXT,
+            canonical_url TEXT,
+            archived_url TEXT,
+            publisher TEXT,
+            published_at TEXT,
+            content TEXT,
+            capture_metadata JSON,
+            verification_status TEXT NOT NULL DEFAULT 'UNVERIFIED',
+            credibility_tier TEXT,
+            requires_human_review INTEGER NOT NULL DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE TABLE IF NOT EXISTS evidence_verification_checks (
+            id TEXT PRIMARY KEY,
+            evidence_id TEXT NOT NULL,
+            check_type TEXT NOT NULL,
+            result TEXT NOT NULL,
+            method TEXT,
+            notes TEXT,
+            verified_by TEXT,
+            verified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE TABLE IF NOT EXISTS claim_evidence_links (
+            id TEXT PRIMARY KEY,
+            claim_id TEXT NOT NULL,
+            evidence_id TEXT NOT NULL,
+            relation TEXT NOT NULL,
+            source_diversity_rank INTEGER NOT NULL DEFAULT 1,
+            confidence_score FLOAT,
+            notes TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        """,
+        down="""
+        DROP INDEX IF EXISTS ix_claim_evidence_links_claim_id;
+        DROP TABLE IF EXISTS claim_evidence_links;
+        DROP TABLE IF EXISTS evidence_verification_checks;
+        DROP TABLE IF EXISTS evidence_items;
+        """,
+    ),
+    Migration(
+        version=4,
+        name="Persist party provenance metadata",
+        up="""
+        ALTER TABLE parties ADD COLUMN is_bootstrap_confirmed INTEGER NOT NULL DEFAULT 0;
+        """,
+        down="""
         """,
     ),
 ]

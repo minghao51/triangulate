@@ -7,7 +7,8 @@ using AI to score and filter by relevance.
 import csv
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
+from urllib.parse import urlparse
 
 from src.ai.topic_analyzer import TopicAnalyzer
 from src.ai.utils import call_llm
@@ -56,6 +57,8 @@ class TopicFetcher:
         conflict: Optional[str] = None,
         max_articles: int = 50,
         relevance_threshold: float = 0.3,
+        manual_links: Optional[list[str]] = None,
+        confirmed_parties: Optional[list[str]] = None,
     ) -> dict:
         """Fetch articles relevant to the topic.
 
@@ -77,6 +80,16 @@ class TopicFetcher:
 
         # Load sources for this conflict
         sources = self._load_sources(conflict)
+        fetch_exceptions: list[dict[str, Any]] = []
+        if not sources:
+            fetch_exceptions.append(
+                {
+                    "type": "source_fetch_failure",
+                    "message": f"No source pack available for conflict '{conflict}'.",
+                    "severity": "high",
+                    "details": {"conflict": conflict},
+                }
+            )
 
         # Prioritize sources
         prioritized_sources = await self.analyzer.prioritize_sources(
@@ -86,10 +99,37 @@ class TopicFetcher:
         )
 
         # Fetch articles from RSS feeds
-        articles = await self._fetch_from_sources(
+        source_plan = self._build_source_plan(
             prioritized_sources,
+            search_queries=search_queries,
+            confirmed_parties=confirmed_parties or [],
+        )
+
+        for link in manual_links or []:
+            source_plan.append(
+                {
+                    "name": urlparse(link).netloc.replace("www.", "") or "manual",
+                    "url": link,
+                    "source_type": "manual",
+                    "party_affiliation": "",
+                    "language": "",
+                    "credibility_tier": "user_supplied",
+                    "fetch_strategy": "manual",
+                    "queries": search_queries[:5],
+                    "confirmed_parties": confirmed_parties or [],
+                    "relevance_score": 1.0,
+                }
+            )
+
+        fetched = await self._fetch_from_sources(
+            source_plan,
             max_articles * 2,  # Fetch more to account for filtering
         )
+        if isinstance(fetched, list):
+            articles = fetched
+        else:
+            articles = fetched["articles"]
+            fetch_exceptions.extend(fetched["exceptions"])
 
         # Score articles by relevance
         scored_articles = await self._score_articles(
@@ -106,9 +146,13 @@ class TopicFetcher:
             "articles": final_articles,
             "conflict": conflict,
             "queries_generated": search_queries,
+            "source_plan": source_plan[:20],
             "sources_used": [s.get("name") for s in prioritized_sources[:10]],
             "articles_fetched": len(articles),
             "articles_processed": len(final_articles),
+            "confirmed_parties": confirmed_parties or [],
+            "manual_links": manual_links or [],
+            "fetch_exceptions": fetch_exceptions,
         }
 
     def _load_sources(self, conflict: str) -> list[dict]:
@@ -143,17 +187,49 @@ class TopicFetcher:
                     "url": row.get("url", row.get("rss", "")),
                     "country": row.get("country", ""),
                     "language": row.get("language", ""),
-                    "affiliation": row.get("affiliation", ""),
+                    "affiliation": row.get(
+                        "affiliation", row.get("party_affiliation", "")
+                    ),
+                    "source_type": row.get("source_type", "rss"),
+                    "credibility_tier": row.get("credibility_tier", "unknown"),
+                    "fetch_strategy": row.get("fetch_strategy", "rss"),
+                    "perspective": row.get("perspective", ""),
                 })
 
         return sources
+
+    def _build_source_plan(
+        self,
+        sources: list[dict],
+        *,
+        search_queries: list[str],
+        confirmed_parties: list[str],
+    ) -> list[dict]:
+        """Build a source-plan that preserves acquisition intent."""
+        plan = []
+        for source in sources:
+            plan.append(
+                {
+                    "name": source.get("name", ""),
+                    "url": source.get("url", ""),
+                    "source_type": source.get("source_type", "rss"),
+                    "party_affiliation": source.get("affiliation", ""),
+                    "language": source.get("language", ""),
+                    "credibility_tier": source.get("credibility_tier", "unknown"),
+                    "fetch_strategy": source.get("fetch_strategy", "rss"),
+                    "queries": search_queries[:5],
+                    "confirmed_parties": confirmed_parties,
+                    "relevance_score": source.get("relevance_score", 0.0),
+                }
+            )
+        return plan
 
     async def _fetch_from_sources(
         self,
         sources: list[dict],
         max_per_source: int,
-    ) -> list[dict]:
-        """Fetch articles from RSS feeds.
+    ) -> dict[str, list[dict]]:
+        """Fetch articles using the source plan.
 
         Args:
             sources: Prioritized list of sources
@@ -162,33 +238,146 @@ class TopicFetcher:
         Returns:
             List of article dictionaries
         """
-        articles = []
+        articles: list[dict[str, Any]] = []
+        exceptions: list[dict[str, Any]] = []
 
         for source in sources:
-            rss_url = source.get("url")
-            if not rss_url:
+            strategy = source.get("fetch_strategy", source.get("source_type", "rss"))
+            source_name = source.get("name", "unknown")
+            source_url = source.get("url")
+
+            if strategy == "manual":
+                if source_url:
+                    articles.append(self._build_sparse_article(source, source_url, "manual"))
+                else:
+                    exceptions.append(
+                        self._build_fetch_exception(
+                            source,
+                            "source_fetch_failure",
+                            "Manual link source is missing a URL.",
+                        )
+                    )
                 continue
 
-            try:
-                # Use existing RSSFeed class
-                feed = RSSFeed(rss_url)
-                feed_articles = feed.fetch(max_articles=max_per_source)
-
-                for article in feed_articles:
-                    articles.append({
-                        "title": article.get("title", ""),
-                        "url": article.get("link", ""),
-                        "content": article.get("content", ""),
-                        "published_at": article.get("timestamp", datetime.now().isoformat()),
-                        "source": source.get("name", article.get("source_name", "")),
-                    })
-
-            except Exception as e:
-                # Continue to next source on error
-                print(f"Warning: Failed to fetch from {source.get('name')}: {e}")
+            if strategy == "social":
+                if source_url:
+                    articles.append(self._build_sparse_article(source, source_url, "social"))
+                else:
+                    exceptions.append(
+                        self._build_fetch_exception(
+                            source,
+                            "source_fetch_failure",
+                            "Social source is missing a URL.",
+                        )
+                    )
                 continue
 
-        return articles
+            if strategy == "rss":
+                if not source_url:
+                    exceptions.append(
+                        self._build_fetch_exception(
+                            source,
+                            "source_fetch_failure",
+                            "RSS source is missing a feed URL.",
+                        )
+                    )
+                    continue
+                try:
+                    feed = RSSFeed(source_url)
+                    feed_articles = feed.fetch(max_articles=max_per_source)
+
+                    for article in feed_articles:
+                        articles.append(
+                            {
+                                "title": article.get("title", ""),
+                                "url": article.get("link", ""),
+                                "content": article.get("content", ""),
+                                "published_at": article.get(
+                                    "timestamp", datetime.now().isoformat()
+                                ),
+                                "source": source.get("name", article.get("source_name", "")),
+                                "source_type": source.get("source_type", "rss"),
+                                "source_metadata": {
+                                    "party_affiliation": source.get("party_affiliation")
+                                    or source.get("affiliation", ""),
+                                    "credibility_tier": source.get(
+                                        "credibility_tier", "unknown"
+                                    ),
+                                    "fetch_strategy": strategy,
+                                    "queries": source.get("queries", []),
+                                    "confirmed_parties": source.get(
+                                        "confirmed_parties", []
+                                    ),
+                                    "source_plan_score": source.get("relevance_score", 0.0),
+                                },
+                            }
+                        )
+                except Exception as exc:
+                    print(f"Warning: Failed to fetch from {source_name}: {exc}")
+                    exceptions.append(
+                        self._build_fetch_exception(
+                            source,
+                            "source_fetch_failure",
+                            f"Failed to fetch RSS source '{source_name}'.",
+                            details={"error": str(exc)},
+                        )
+                    )
+                continue
+
+            exceptions.append(
+                self._build_fetch_exception(
+                    source,
+                    "source_fetch_failure",
+                    f"Unsupported fetch strategy '{strategy}' for source '{source_name}'.",
+                )
+            )
+
+        return {"articles": articles, "exceptions": exceptions}
+
+    def _build_sparse_article(
+        self, source: dict[str, Any], url: str, source_type: str
+    ) -> dict[str, Any]:
+        source_name = source.get("name") or urlparse(url).netloc.replace("www.", "") or source_type
+        content = (
+            f"{source_type.title()} source placeholder for {source_name}. "
+            f"Original URL: {url}. Queries: {', '.join(source.get('queries', [])[:3])}"
+        )
+        return {
+            "title": f"{source_type.title()} source: {source_name}",
+            "url": url,
+            "content": content,
+            "published_at": datetime.now().isoformat(),
+            "source": source_name,
+            "source_type": source_type,
+            "source_metadata": {
+                "submitted_via": "source_plan",
+                "credibility_tier": source.get("credibility_tier", "unknown"),
+                "fetch_strategy": source.get("fetch_strategy", source_type),
+                "queries": source.get("queries", []),
+                "confirmed_parties": source.get("confirmed_parties", []),
+                "source_plan_score": source.get("relevance_score", 0.0),
+            },
+        }
+
+    def _build_fetch_exception(
+        self,
+        source: dict[str, Any],
+        exception_type: str,
+        message: str,
+        *,
+        details: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        return {
+            "type": exception_type,
+            "message": message,
+            "severity": "high",
+            "details": {
+                "source_name": source.get("name"),
+                "source_type": source.get("source_type"),
+                "fetch_strategy": source.get("fetch_strategy"),
+                **(details or {}),
+            },
+        }
 
     async def _score_articles(
         self,

@@ -17,17 +17,21 @@ async def test_collect_claims():
 
     # Mock the LLM response and environment
     with (
-        patch("src.ai.agents.collector.acompletion") as mock_completion,
+        patch("src.ai.agents.collector.call_structured_llm") as mock_structured,
         patch("src.ai.agents.collector.os.getenv", return_value="test-api-key"),
     ):
-        mock_completion.return_value = {
-            "choices": [
-                {
-                    "message": {
-                        "content": '[{"claim": "Event happened on March 1st", "who": ["Entity A"], "when": "March 1st", "where": "Unknown", "confidence": "HIGH"}]'
+        mock_structured.return_value = {
+            "output": {
+                "claims": [
+                    {
+                        "claim": "Event happened on March 1st",
+                        "who": ["Entity A"],
+                        "when": "March 1st",
+                        "where": "Unknown",
+                        "confidence": "HIGH",
                     }
-                }
-            ]
+                ]
+            }
         }
 
         claims = await collect_claims(article)

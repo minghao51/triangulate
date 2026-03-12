@@ -15,7 +15,6 @@ Usage as demo:
 
 import asyncio
 import sys
-import json
 import os
 from datetime import datetime
 from pathlib import Path

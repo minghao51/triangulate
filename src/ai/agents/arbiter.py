@@ -2,11 +2,10 @@
 
 import logging
 from typing import Any
-from litellm import acompletion
-import json
 import os
 
-from src.ai.utils import call_with_retry, build_completion_params
+from src.ai.schemas import ArbiterResultSchema
+from src.ai.utils import call_structured_llm, make_agent_envelope
 from src.ai.agents.fact_allegation_classifier import classify_fact_vs_allegation
 
 logger = logging.getLogger(__name__)
@@ -86,6 +85,8 @@ async def arbitrate_findings(
     party_investigations: list[dict[str, Any]],
     original_claims: list[dict[str, Any]],
     article: dict[str, Any],
+    *,
+    include_metadata: bool = False,
 ) -> dict[str, Any]:
     """Review all party investigations and make final determinations.
 
@@ -98,24 +99,34 @@ async def arbitrate_findings(
         Dictionary with final_determinations and event_summary
     """
     if not original_claims:
-        return {
-            "final_determinations": [],
-            "event_summary": {
-                "total_claims": 0,
-                "facts_count": 0,
-                "allegations_count": 0,
-                "verification_distribution": {},
-                "party_agreement_level": "NONE",
-                "controversy_score": 0.0,
-            },
-        }
+        result = make_agent_envelope(
+            {
+                "final_determinations": [],
+                "event_summary": {
+                    "total_claims": 0,
+                    "facts_count": 0,
+                    "allegations_count": 0,
+                    "verification_distribution": {},
+                    "party_agreement_level": "NONE",
+                    "controversy_score": 0.0,
+                },
+            }
+        )
+        return result if include_metadata else result["output"]
 
     try:
         if not os.getenv("LLM_API_KEY"):
             logger.error("No LLM_API_KEY found")
-            return await _fallback_arbitration(
+            result = await _fallback_arbitration(
                 party_investigations, original_claims, article
             )
+            envelope = make_agent_envelope(
+                result,
+                parse_status="no_api_key",
+                structured_output_used=False,
+                fallback_used=True,
+            )
+            return envelope if include_metadata else result
 
         # Format claims and investigations for the prompt
         claims_formatted = "\n".join(
@@ -150,48 +161,49 @@ async def arbitrate_findings(
             f"Arbitrating {len(original_claims)} claims based on {len(party_investigations)} party investigations"
         )
 
-        # Build completion parameters
-        params = build_completion_params(
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.5,  # Balanced temperature for reasoning
+        result = await call_structured_llm(
+            prompt=prompt,
+            schema=ArbiterResultSchema,
+            temperature=0.5,
             max_tokens=3000,
+            fallback=lambda: {
+                "final_determinations": [],
+                "event_summary": {
+                    "total_claims": len(original_claims),
+                    "facts_count": 0,
+                    "allegations_count": 0,
+                    "verification_distribution": {},
+                    "party_agreement_level": "NONE",
+                    "controversy_score": 0.0,
+                },
+            },
         )
-
-        # Call LLM with retry
-        response = await call_with_retry(acompletion, **params)
-
-        content = response.get("choices", [{}])[0].get("message", {}).get("content", "")
-
-        # Parse JSON response
-        try:
-            result = _normalize_arbiter_result(
-                json.loads(content), len(original_claims)
-            )
-            logger.info(
-                f"Arbitration complete: "
-                f"{result['event_summary']['facts_count']} facts, "
-                f"{result['event_summary']['allegations_count']} allegations, "
-                f"agreement level: {result['event_summary']['party_agreement_level']}"
-            )
-            return result
-
-        except json.JSONDecodeError:
-            # Try to extract JSON from markdown code blocks
-            if "```json" in content:
-                json_str = content.split("```json")[1].split("```")[0].strip()
-                return _normalize_arbiter_result(
-                    json.loads(json_str), len(original_claims)
-                )
-            logger.error(f"Failed to parse arbitration JSON: {content[:200]}")
-            return await _fallback_arbitration(
+        normalized = _normalize_arbiter_result(result["output"], len(original_claims))
+        logger.info(
+            f"Arbitration complete: "
+            f"{normalized['event_summary']['facts_count']} facts, "
+            f"{normalized['event_summary']['allegations_count']} allegations, "
+            f"agreement level: {normalized['event_summary']['party_agreement_level']}"
+        )
+        if result["fallback_used"]:
+            normalized = await _fallback_arbitration(
                 party_investigations, original_claims, article
             )
+        result["output"] = normalized
+        return result if include_metadata else normalized
 
     except Exception as e:
         logger.warning(f"LLM arbitration failed: {e}, using fallback")
-        return await _fallback_arbitration(
+        result = await _fallback_arbitration(
             party_investigations, original_claims, article
         )
+        envelope = make_agent_envelope(
+            result,
+            parse_status="error",
+            structured_output_used=True,
+            fallback_used=True,
+        )
+        return envelope if include_metadata else result
 
 
 async def _fallback_arbitration(
@@ -228,9 +240,13 @@ async def _fallback_arbitration(
 
         # Use fact/allegation classifier
         context = {"article": article}
-        classification_result = await classify_fact_vs_allegation(claim, context)
+        classification_result = await classify_fact_vs_allegation(
+            claim, context, include_metadata=True
+        )
 
-        fact_allegation = classification_result.get("classification", "ALLEGATION")
+        fact_allegation = classification_result["output"].get(
+            "classification", "ALLEGATION"
+        )
 
         # Count party positions
         supporting_parties = []
@@ -300,6 +316,8 @@ async def _fallback_arbitration(
                 "verification_status": verification_status,
                 "arbiter_reasoning": {
                     "is_fact": classification_result.get(
+                        "output", {}
+                    ).get(
                         "reasoning", "Rule-based classification"
                     ),
                     "verification_rationale": f"Based on party consensus: {len(supporting_parties)} support, {len(opposing_parties)} oppose",

@@ -13,6 +13,26 @@ from src.ai.agents.party_classifier import classify_parties
 logger = logging.getLogger(__name__)
 
 
+def _normalize_agent_result(
+    result: Any, default_key: str | None = None
+) -> dict[str, Any]:
+    if isinstance(result, dict) and "output" in result:
+        return result
+    if default_key is None:
+        payload = result if isinstance(result, dict) else {}
+    else:
+        payload = result if isinstance(result, dict) else {default_key: result}
+        if not isinstance(result, dict):
+            payload = {default_key: result}
+    return {
+        "output": payload,
+        "parse_status": "compat_raw",
+        "structured_output_used": False,
+        "fallback_used": False,
+        "raw_response_excerpt": "",
+    }
+
+
 class AIWorkflow:
     """Orchestrate the multi-agent AI pipeline."""
 
@@ -36,7 +56,11 @@ class AIWorkflow:
         logger.info(f"Processing article: {article.get('title', '')[:50]}")
 
         # Step 1: Extract claims
-        claims = await collect_claims(article)
+        collector_result = _normalize_agent_result(
+            await collect_claims(article, include_metadata=True), "claims"
+        )
+        claims = collector_result.get("output", {}).get("claims", [])
+        collector_meta = collector_result
 
         if not claims:
             logger.warning("No claims extracted from article")
@@ -49,7 +73,32 @@ class AIWorkflow:
             all_entities.update(claim.get("who", []))
 
         # Run party classifier
-        party_data = await classify_parties(article, list(all_entities))
+        bootstrap_parties = article.get("confirmed_parties", [])
+        if bootstrap_parties:
+            party_data = {
+                "parties": [
+                    {
+                        "canonical_name": party_name,
+                        "aliases": [party_name],
+                        "reasoning": "Bootstrap-confirmed party",
+                    }
+                    for party_name in bootstrap_parties
+                ]
+            }
+            party_classifier_result = {
+                "output": party_data,
+                "parse_status": "bootstrap_override",
+                "structured_output_used": False,
+                "fallback_used": False,
+                "raw_response_excerpt": "",
+            }
+        else:
+            party_classifier_result = _normalize_agent_result(
+                await classify_parties(
+                    article, list(all_entities), include_metadata=True
+                )
+            )
+            party_data = party_classifier_result.get("output", {"parties": []})
 
         # Step 3: Normalize claims with party information
         # Create simple entity -> canonical name mapping
@@ -75,9 +124,23 @@ class AIWorkflow:
         for cluster_id, claims_in_cluster in clustering_result.get(
             "clusters", {}
         ).items():
-            narrative = await narrate_cluster(cluster_id, claims_in_cluster)
+            narrative_result = _normalize_agent_result(
+                await narrate_cluster(
+                    cluster_id, claims_in_cluster, include_metadata=True
+                )
+            )
+            narrative = narrative_result.get("output", {})
             narrative["cluster_id"] = cluster_id
             narrative["claim_count"] = len(claims_in_cluster)
+            narrative["llm_metadata"] = {
+                key: narrative_result.get(key)
+                for key in (
+                    "parse_status",
+                    "structured_output_used",
+                    "fallback_used",
+                    "raw_response_excerpt",
+                )
+            }
             narratives.append(narrative)
 
         # Step 6: Classify verification status
@@ -104,6 +167,29 @@ class AIWorkflow:
             "parties": party_data.get("parties", []),  # NEW
             "source_url": article.get("link", ""),
             "source_name": article.get("source_name", "unknown"),
+            "llm_metadata": {
+                "collector": {
+                    key: collector_meta.get(key)
+                    for key in (
+                        "parse_status",
+                        "structured_output_used",
+                        "fallback_used",
+                        "raw_response_excerpt",
+                    )
+                },
+                "party_classifier": {
+                    key: party_classifier_result.get(key)
+                    for key in (
+                        "parse_status",
+                        "structured_output_used",
+                        "fallback_used",
+                        "raw_response_excerpt",
+                    )
+                },
+                "narrator": [
+                    narrative.get("llm_metadata", {}) for narrative in narratives
+                ],
+            },
         }
 
         logger.info(

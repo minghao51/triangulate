@@ -19,6 +19,9 @@ def cmd_fetch_topic(
     max_articles: int = 50,
     relevance_threshold: float = 0.3,
     conflict: str | None = None,
+    confirmed_parties: list[str] | None = None,
+    manual_links: list[str] | None = None,
+    automation_mode: str = "exceptions_only",
 ) -> None:
     """Fetch and analyze news by topic through the case pipeline."""
     cmd_fetch_topic_case(
@@ -28,6 +31,9 @@ def cmd_fetch_topic(
         max_articles=max_articles,
         relevance_threshold=relevance_threshold,
         conflict=conflict,
+        confirmed_parties=confirmed_parties,
+        manual_links=manual_links,
+        automation_mode=automation_mode,
     )
 
 

@@ -105,20 +105,23 @@ class TestTopicFetcher:
         """Test fetching articles by topic."""
         with patch.object(fetcher, '_load_sources', return_value=mock_sources):
             with patch.object(fetcher, '_fetch_from_sources', new_callable=AsyncMock) as mock_fetch:
-                mock_fetch.return_value = [
-                    {
-                        "title": "Test Article",
-                        "url": "http://test.com/article1",
-                        "content": "Test content",
-                        "published_at": "2024-01-01",
-                        "source": "Reuters"
-                    }
-                ]
+                mock_fetch.return_value = {
+                    "articles": [
+                        {
+                            "title": "Test Article",
+                            "url": "http://test.com/article1",
+                            "content": "Test content",
+                            "published_at": "2024-01-01",
+                            "source": "Reuters"
+                        }
+                    ],
+                    "exceptions": [],
+                }
 
                 with patch.object(fetcher, '_score_articles', new_callable=AsyncMock) as mock_score:
                     mock_score.return_value = [
                         {
-                            **mock_fetch.return_value[0],
+                            **mock_fetch.return_value["articles"][0],
                             "relevance_score": 0.9
                         }
                     ]
@@ -138,7 +141,7 @@ class TestTopicFetcher:
         """Test fetching from empty source list."""
         result = await fetcher._fetch_from_sources([], 10)
 
-        assert result == []
+        assert result == {"articles": [], "exceptions": []}
 
     @pytest.mark.asyncio
     async def test_fetch_from_sources_rss_error(self, fetcher, mock_sources):
@@ -150,8 +153,8 @@ class TestTopicFetcher:
 
             result = await fetcher._fetch_from_sources(mock_sources, 10)
 
-            # Should handle error gracefully and return empty list
-            assert result == []
+            assert result["articles"] == []
+            assert len(result["exceptions"]) == len(mock_sources)
 
     @pytest.mark.asyncio
     async def test_score_articles(self, fetcher):

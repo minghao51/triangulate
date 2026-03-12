@@ -1,7 +1,6 @@
 """Unit tests for topic analyzer module."""
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 
 from src.ai.topic_analyzer import TopicAnalyzer
 

@@ -2,11 +2,10 @@
 
 import logging
 from typing import Any
-from litellm import acompletion
-import json
 import os
 
-from src.ai.utils import call_with_retry, build_completion_params
+from src.ai.schemas import PartyInvestigationSchema
+from src.ai.utils import call_structured_llm, make_agent_envelope
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +71,11 @@ Provide the investigation from {party_name}'s perspective:"""
 
 
 async def investigate_from_party_perspective(
-    party: dict[str, Any], claims: list[dict[str, Any]], article: dict[str, Any]
+    party: dict[str, Any],
+    claims: list[dict[str, Any]],
+    article: dict[str, Any],
+    *,
+    include_metadata: bool = False,
 ) -> dict[str, Any]:
     """Investigate claims from a specific party's perspective.
 
@@ -88,25 +91,34 @@ async def investigate_from_party_perspective(
     party_id = party.get("party_id", party_name)
 
     if not claims:
-        return {
-            "party_id": party_id,
-            "party_name": party_name,
-            "investigation": {
-                "claims_supported": [],
-                "claims_contested": [],
-                "unique_claims": [],
-            },
-            "party_stance": {
-                "overall_position": "No claims to analyze",
-                "key_concerns": [],
-                "priorities": [],
-            },
-        }
+        result = make_agent_envelope(
+            {
+                "party_id": party_id,
+                "party_name": party_name,
+                "investigation": {
+                    "claims_supported": [],
+                    "claims_contested": [],
+                    "unique_claims": [],
+                },
+                "party_stance": {
+                    "overall_position": "No claims to analyze",
+                    "key_concerns": [],
+                    "priorities": [],
+                },
+            }
+        )
+        return result if include_metadata else result["output"]
 
     try:
         if not os.getenv("LLM_API_KEY"):
             logger.error("No LLM_API_KEY found")
-            return _fallback_investigation(party_id, party_name, claims)
+            result = make_agent_envelope(
+                _fallback_investigation(party_id, party_name, claims),
+                parse_status="no_api_key",
+                structured_output_used=False,
+                fallback_used=True,
+            )
+            return result if include_metadata else result["output"]
 
         # Format claims for the prompt
         claims_formatted = "\n".join(
@@ -130,54 +142,38 @@ async def investigate_from_party_perspective(
             f"Investigating {len(claims)} claims from {party_name}'s perspective"
         )
 
-        # Build completion parameters
-        params = build_completion_params(
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.7,  # Higher temperature for perspective-taking
+        result = await call_structured_llm(
+            prompt=prompt,
+            schema=PartyInvestigationSchema,
+            temperature=0.7,
             max_tokens=2000,
+            fallback=lambda: _fallback_investigation(party_id, party_name, claims)[
+                "investigation"
+            ],
         )
-
-        # Call LLM with retry
-        response = await call_with_retry(acompletion, **params)
-
-        content = response.get("choices", [{}])[0].get("message", {}).get("content", "")
-
-        # Parse JSON response
-        try:
-            investigation = json.loads(content)
-            logger.info(
-                f"{party_name} investigation: "
-                f"{len(investigation.get('claims_supported', []))} supports, "
-                f"{len(investigation.get('claims_contested', []))} contests, "
-                f"{len(investigation.get('unique_claims', []))} unique claims"
-            )
-
-            return {
-                "party_id": party_id,
-                "party_name": party_name,
-                "investigation": investigation,
-                "party_stance": investigation.get("party_stance", {}),
-            }
-
-        except json.JSONDecodeError:
-            # Try to extract JSON from markdown code blocks
-            if "```json" in content:
-                json_str = content.split("```json")[1].split("```")[0].strip()
-                investigation = json.loads(json_str)
-                return {
-                    "party_id": party_id,
-                    "party_name": party_name,
-                    "investigation": investigation,
-                    "party_stance": investigation.get("party_stance", {}),
-                }
-            logger.error(f"Failed to parse investigation JSON: {content[:200]}")
-            return _fallback_investigation(party_id, party_name, claims)
+        investigation = result["output"]
+        enriched = {
+            "party_id": party_id,
+            "party_name": party_name,
+            "investigation": investigation,
+            "party_stance": investigation.get("party_stance", {}),
+        }
+        if include_metadata:
+            result["output"] = enriched
+            return result
+        return enriched
 
     except Exception as e:
         logger.warning(
             f"LLM investigation failed for {party_name}: {e}, using fallback"
         )
-        return _fallback_investigation(party_id, party_name, claims)
+        result = make_agent_envelope(
+            _fallback_investigation(party_id, party_name, claims),
+            parse_status="error",
+            structured_output_used=True,
+            fallback_used=True,
+        )
+        return result if include_metadata else result["output"]
 
 
 def _fallback_investigation(

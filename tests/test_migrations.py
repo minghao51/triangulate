@@ -32,4 +32,4 @@ def test_run_migrations_is_idempotent_on_fresh_database(tmp_path):
             text("SELECT MAX(version) FROM _migrations")
         ).scalar()
 
-    assert current_version == 2
+    assert current_version == 4

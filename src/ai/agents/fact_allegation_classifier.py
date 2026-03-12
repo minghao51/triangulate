@@ -2,11 +2,10 @@
 
 import logging
 from typing import Any
-from litellm import acompletion
-import json
 import os
 
-from src.ai.utils import call_with_retry, build_completion_params
+from src.ai.schemas import FactAllegationResultSchema
+from src.ai.utils import call_structured_llm, make_agent_envelope
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +51,7 @@ Provide the classification:"""
 
 
 async def classify_fact_vs_allegation(
-    claim: dict[str, Any], context: dict[str, Any]
+    claim: dict[str, Any], context: dict[str, Any], *, include_metadata: bool = False
 ) -> dict[str, Any]:
     """Classify a claim as FACT or ALLEGATION.
 
@@ -66,18 +65,27 @@ async def classify_fact_vs_allegation(
     claim_text = claim.get("claim", "")
 
     if not claim_text:
-        return {
-            "claim": "",
-            "classification": "ALLEGATION",
-            "reasoning": "Empty claim",
-            "confidence": 0.0,
-            "indicators": {"factual_elements": [], "allegation_elements": []},
-        }
+        result = make_agent_envelope(
+            {
+                "claim": "",
+                "classification": "ALLEGATION",
+                "reasoning": "Empty claim",
+                "confidence": 0.0,
+                "indicators": {"factual_elements": [], "allegation_elements": []},
+            }
+        )
+        return result if include_metadata else result["output"]
 
     try:
         if not os.getenv("LLM_API_KEY"):
             logger.error("No LLM_API_KEY found")
-            return _fallback_classification(claim)
+            result = make_agent_envelope(
+                _fallback_classification(claim),
+                parse_status="no_api_key",
+                structured_output_used=False,
+                fallback_used=True,
+            )
+            return result if include_metadata else result["output"]
 
         article_title = context.get("article", {}).get("title", "")
         source_name = context.get("article", {}).get("source_name", "")
@@ -88,37 +96,29 @@ async def classify_fact_vs_allegation(
 
         logger.info(f"Classifying claim as FACT or ALLEGATION: {claim_text[:60]}...")
 
-        # Build completion parameters
-        params = build_completion_params(
-            messages=[{"role": "user", "content": prompt}],
+        result = await call_structured_llm(
+            prompt=prompt,
+            schema=FactAllegationResultSchema,
             temperature=0.3,
             max_tokens=500,
+            fallback=lambda: _fallback_classification(claim),
         )
-
-        # Call LLM with retry
-        response = await call_with_retry(acompletion, **params)
-
-        content = response.get("choices", [{}])[0].get("message", {}).get("content", "")
-
-        # Parse JSON response
-        try:
-            result = json.loads(content)
-            logger.info(
-                f"Classified as {result.get('classification')} with confidence {result.get('confidence', 0.0)}"
-            )
-            return result
-        except json.JSONDecodeError:
-            # Try to extract JSON from markdown code blocks
-            if "```json" in content:
-                json_str = content.split("```json")[1].split("```")[0].strip()
-                result = json.loads(json_str)
-                return result
-            logger.error(f"Failed to parse classification JSON: {content[:200]}")
-            return _fallback_classification(claim)
+        logger.info(
+            "Classified as %s with confidence %s",
+            result["output"].get("classification"),
+            result["output"].get("confidence", 0.0),
+        )
+        return result if include_metadata else result["output"]
 
     except Exception as e:
         logger.warning(f"LLM classification failed: {e}, using fallback")
-        return _fallback_classification(claim)
+        result = make_agent_envelope(
+            _fallback_classification(claim),
+            parse_status="error",
+            structured_output_used=True,
+            fallback_used=True,
+        )
+        return result if include_metadata else result["output"]
 
 
 def _fallback_classification(claim: dict[str, Any]) -> dict[str, Any]:

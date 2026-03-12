@@ -97,6 +97,7 @@ def _map_exception(item: dict[str, Any]) -> ExceptionDTO:
         type=item.get("type", "unknown"),
         message=item.get("message", ""),
         severity=item.get("severity", "medium"),
+        status=item.get("status", "open"),
         recommendedAction=item.get("recommended_action")
         or item.get("recommendedAction")
         or "Review and resolve before proceeding.",
@@ -236,7 +237,7 @@ def _map_party(party: dict[str, Any], claims: list[dict[str, Any]], investigatio
         aliases=party.get("aliases") or [],
         description=party.get("description") or "",
         overallStance=stance,
-        isModelInferred=True,
+        isModelInferred=not bool(party.get("is_bootstrap_confirmed")),
         associatedClaimsCount=associated_claims,
     )
 

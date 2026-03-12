@@ -29,9 +29,14 @@ class JSONExporter:
         # Construct complete JSON structure
         output_data = {
             "metadata": self._format_metadata(metadata),
+            "case_detail": results.get("case_detail"),
             "articles": self._format_articles(results.get("articles", [])),
+            "claims": results.get("claims", []),
             "narratives": self._format_narratives(results.get("narratives", [])),
             "parties": self._format_parties(results.get("parties", [])),
+            "party_investigations": results.get("party_investigations", []),
+            "evidence": results.get("evidence", []),
+            "exceptions": results.get("exceptions", []),
             "timeline": self._format_timeline(results.get("timeline", [])),
         }
 
@@ -59,6 +64,9 @@ class JSONExporter:
             "articles_fetched": metadata.get("articles_fetched", 0),
             "articles_processed": metadata.get("articles_processed", 0),
             "queries_generated": metadata.get("queries_generated", []),
+            "bootstrap": metadata.get("bootstrap", {}),
+            "exception_queue": metadata.get("exception_queue", []),
+            "stage_runs": metadata.get("stage_runs", []),
         }
 
     def _format_articles(self, articles: list[dict]) -> list[dict]:

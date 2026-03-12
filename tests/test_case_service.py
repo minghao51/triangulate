@@ -15,6 +15,7 @@ from src.storage import (
     CaseStatus,
     EvidenceItem,
     Event,
+    Party,
     Review,
     ReviewStatus,
     TopicCase,
@@ -637,3 +638,142 @@ def test_review_case_transitions(tmp_path):
         assert review.status == ReviewStatus.APPROVED
     finally:
         session.close()
+
+
+@pytest.mark.asyncio
+async def test_blocked_automation_stops_after_each_stage(monkeypatch, tmp_path):
+    service = make_service(tmp_path)
+
+    async def fake_fetch(*args, **kwargs):
+        return {
+            "articles": [],
+            "conflict": "ukraine_war",
+            "queries_generated": [],
+            "sources_used": [],
+            "articles_fetched": 0,
+            "articles_processed": 0,
+        }
+
+    monkeypatch.setattr(service.topic_fetcher, "fetch_articles_by_topic", fake_fetch)
+
+    case = await service.run_case(
+        query="Blocked automation",
+        output_dir=tmp_path,
+        conflict="ukraine_war",
+        confirmed_parties=["Alpha"],
+        automation_mode="blocked",
+    )
+
+    assert case.status == CaseStatus.REVIEW_READY
+    assert case.current_stage == CaseStageName.BOOTSTRAP
+
+    rerun = await service.rerun_case(case.id, output_dir=tmp_path)
+    assert rerun.status == CaseStatus.REVIEW_READY
+    assert rerun.current_stage == CaseStageName.RETRIEVE
+
+
+@pytest.mark.asyncio
+async def test_safe_automation_pauses_when_exceptions_remain(tmp_path):
+    service = make_service(tmp_path)
+
+    case = await service.run_case(
+        query="Needs manual gate",
+        output_dir=tmp_path,
+        conflict="ukraine_war",
+        automation_mode="safe",
+    )
+
+    assert case.status == CaseStatus.REVIEW_READY
+    assert case.current_stage == CaseStageName.BOOTSTRAP
+    assert case.metadata_json["manual_gate"]["stage"] == "BOOTSTRAP"
+
+
+def test_update_exception_status_marks_exception_resolved(tmp_path):
+    service = make_service(tmp_path)
+    session = init_database(str(tmp_path / "triangulate.db")).get_session_sync()
+    try:
+        case = TopicCase(
+            id="case-1",
+            query="Test",
+            slug="test",
+            status=CaseStatus.REVIEW_READY,
+            metadata_json={
+                "exception_queue": [
+                    {
+                        "id": "exc-1",
+                        "type": "needs_more_sources",
+                        "severity": "high",
+                        "status": "open",
+                        "message": "Need more sources",
+                    }
+                ]
+            },
+        )
+        session.add(case)
+        session.commit()
+    finally:
+        session.close()
+
+    updated = service.update_exception_status("case-1", "exc-1", action="resolve")
+    assert updated.metadata_json["exception_queue"][0]["status"] == "resolved"
+
+
+@pytest.mark.asyncio
+async def test_case_persists_bootstrap_confirmed_party_provenance(monkeypatch, tmp_path):
+    service = make_service(tmp_path)
+
+    async def fake_fetch(*args, **kwargs):
+        return {
+            "articles": [
+                {
+                    "url": "https://example.com/a",
+                    "title": "Article A",
+                    "source": "Example",
+                    "published_at": "2026-03-08T12:00:00+00:00",
+                    "content": "Alpha update",
+                    "relevance_score": 0.9,
+                }
+            ],
+            "conflict": "ukraine_war",
+            "queries_generated": ["alpha"],
+            "sources_used": ["Example"],
+            "articles_fetched": 1,
+            "articles_processed": 1,
+        }
+
+    async def fake_process(article):
+        return {
+            "id": "temporary",
+            "timestamp": datetime(2026, 3, 8, 12, 0, tzinfo=UTC),
+            "title": article["title"],
+            "summary": article["content"],
+            "verification_status": "PROBABLE",
+            "claims": [
+                {"claim": "Alpha happened", "who": ["Alpha"], "verification_status": "PROBABLE"}
+            ],
+            "narratives": [{"cluster_id": "0", "stance_summary": "Narrative", "claim_count": 1}],
+            "parties": [{"canonical_name": "Alpha", "aliases": ["Alpha"]}],
+        }
+
+    monkeypatch.setattr(service.topic_fetcher, "fetch_articles_by_topic", fake_fetch)
+    monkeypatch.setattr(service.ai_workflow, "process_article", fake_process)
+
+    case = await service.run_case(
+        query="Alpha confirmed",
+        output_dir=tmp_path,
+        conflict="ukraine_war",
+        confirmed_parties=["Alpha"],
+        automation_mode="autonomous",
+    )
+
+    session = init_database(str(tmp_path / "triangulate.db")).get_session_sync()
+    try:
+        party = session.query(Party).filter(Party.canonical_name == "Alpha").first()
+        assert party is not None
+        assert party.is_bootstrap_confirmed == 1
+    finally:
+        session.close()
+
+    detail = service.get_case_details(case.id)
+    assert detail is not None
+    assert detail["parties"][0]["is_bootstrap_confirmed"] is True

@@ -39,6 +39,7 @@ class PartyInvestigationState(TypedDict):
     # Arbiter output
     final_determinations: Sequence[dict[str, Any]]
     event_summary: dict[str, Any]
+    llm_metadata: dict[str, Any]
 
     # Metadata
     error: str
@@ -53,17 +54,22 @@ async def collector_node(state: PartyInvestigationState) -> dict[str, Any]:
     """Extract claims from article."""
     logger.info("Executing Collector node...")
 
-    claims = await collect_claims(state["article"])
+    result = await collect_claims(state["article"], include_metadata=True)
+    claims = result.get("output", {}).get("claims", [])
 
     if not claims:
         logger.warning("No claims extracted from article")
 
-    return {"claims": list(claims)}
+    return {
+        "claims": list(claims),
+        "llm_metadata": {**state.get("llm_metadata", {}), "collector": result},
+    }
 
 
 async def party_classifier_node(state: PartyInvestigationState) -> dict[str, Any]:
     """Identify parties mentioned in the article."""
     logger.info("Executing Party Classifier node...")
+    bootstrap_parties = state.get("article", {}).get("confirmed_parties", [])
 
     # Extract all entities from claims
     entities = set()
@@ -71,15 +77,62 @@ async def party_classifier_node(state: PartyInvestigationState) -> dict[str, Any
         for entity in claim.get("who", []):
             entities.add(entity)
 
+    if bootstrap_parties:
+        party_data = {
+            "parties": [
+                {
+                    "canonical_name": party_name,
+                    "aliases": [party_name],
+                    "reasoning": "Bootstrap-confirmed party",
+                }
+                for party_name in bootstrap_parties
+            ]
+        }
+        party_result = {
+            "output": party_data,
+            "parse_status": "bootstrap_override",
+            "structured_output_used": False,
+            "fallback_used": False,
+            "raw_response_excerpt": "",
+        }
+        return {
+            "parties": party_data,
+            "llm_metadata": {
+                **state.get("llm_metadata", {}),
+                "party_classifier": party_result,
+            },
+        }
+
     if not entities:
         logger.warning("No entities found in claims")
-        return {"parties": {"parties": []}}
+        return {
+            "parties": {"parties": []},
+            "llm_metadata": {
+                **state.get("llm_metadata", {}),
+                "party_classifier": {
+                    "output": {"parties": []},
+                    "parse_status": "no_entities",
+                    "structured_output_used": False,
+                    "fallback_used": False,
+                    "raw_response_excerpt": "",
+                },
+            },
+        }
 
-    party_data = await classify_parties(state["article"], list(entities))
+    party_result = await classify_parties(
+        state["article"], list(entities), include_metadata=True
+    )
+    party_data = party_result.get("output", {"parties": []})
 
     logger.info(f"Identified {len(party_data.get('parties', []))} parties")
 
-    return {"parties": party_data}
+    return {
+        "parties": party_data,
+        "llm_metadata": {
+            **state.get("llm_metadata", {}),
+            "party_classifier": party_result,
+        },
+    }
 
 
 async def party_investigators_node(state: PartyInvestigationState) -> dict[str, Any]:
@@ -99,13 +152,16 @@ async def party_investigators_node(state: PartyInvestigationState) -> dict[str, 
 
     raw_results = await asyncio.gather(
         *[
-            investigate_from_party_perspective(party, claims, article)
+            investigate_from_party_perspective(
+                party, claims, article, include_metadata=True
+            )
             for party in parties
         ],
         return_exceptions=True,
     )
 
     investigations = []
+    diagnostics = []
     for party, result in zip(parties, raw_results, strict=False):
         if isinstance(result, Exception):
             party_name = party.get("canonical_name", "Unknown Party")
@@ -126,23 +182,43 @@ async def party_investigators_node(state: PartyInvestigationState) -> dict[str, 
                     },
                 }
             )
+            diagnostics.append(
+                {"party_name": party_name, "parse_status": "error", "fallback_used": True}
+            )
             continue
-        investigations.append(result)
+        investigations.append(result.get("output", {}))
+        diagnostics.append(
+            {
+                "party_name": result.get("output", {}).get("party_name"),
+                "parse_status": result.get("parse_status"),
+                "structured_output_used": result.get("structured_output_used"),
+                "fallback_used": result.get("fallback_used"),
+                "raw_response_excerpt": result.get("raw_response_excerpt"),
+            }
+        )
 
     logger.info(f"Completed {len(investigations)} party investigations")
 
-    return {"party_investigations": list(investigations)}
+    return {
+        "party_investigations": list(investigations),
+        "llm_metadata": {
+            **state.get("llm_metadata", {}),
+            "party_investigators": diagnostics,
+        },
+    }
 
 
 async def arbiter_node(state: PartyInvestigationState) -> dict[str, Any]:
     """Arbiter reviews all findings and makes final determinations."""
     logger.info("Executing Arbiter node...")
 
-    findings = await arbitrate_findings(
+    findings_result = await arbitrate_findings(
         party_investigations=list(state.get("party_investigations", [])),
         original_claims=list(state.get("claims", [])),
         article=state["article"],
+        include_metadata=True,
     )
+    findings = findings_result.get("output", {})
 
     logger.info(
         f"Arbitration complete: "
@@ -154,6 +230,7 @@ async def arbiter_node(state: PartyInvestigationState) -> dict[str, Any]:
     return {
         "final_determinations": findings["final_determinations"],
         "event_summary": findings["event_summary"],
+        "llm_metadata": {**state.get("llm_metadata", {}), "arbiter": findings_result},
     }
 
 

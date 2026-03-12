@@ -46,6 +46,7 @@ class ReviewStatus(str, enum.Enum):
     """Review workflow status."""
 
     PENDING = "pending"
+    ACTION_REQUIRED = "action_required"
     APPROVED = "approved"
     REJECTED = "rejected"
     EDITED = "edited"
@@ -67,6 +68,7 @@ class CaseStatus(str, enum.Enum):
 class CaseStageName(str, enum.Enum):
     """Named stages for persisted case runs."""
 
+    BOOTSTRAP = "BOOTSTRAP"
     RETRIEVE = "RETRIEVE"
     TRIAGE = "TRIAGE"
     INVESTIGATE = "INVESTIGATE"
@@ -140,6 +142,10 @@ class Claim(Base):
     arbiter_reasoning = Column(Text)
     party_positions = Column(JSON)  # {"party_id": "SUPPORTS|CONTESTS|NEUTRAL"}
     controversy_score = Column(Float)
+    claim_signature = Column(String, index=True)
+    support_count = Column(Integer, nullable=False, default=0)
+    oppose_count = Column(Integer, nullable=False, default=0)
+    source_diversity_count = Column(Integer, nullable=False, default=0)
 
     created_at = Column(DateTime(timezone=True), default=utc_now)
 
@@ -178,6 +184,7 @@ class Party(Base):
     canonical_name = Column(String, nullable=False, unique=True)
     aliases = Column(JSON, nullable=False)
     description = Column(Text)
+    is_bootstrap_confirmed = Column(Integer, nullable=False, default=0)
     event_id = Column(String, ForeignKey("events.id"))
     created_at = Column(DateTime(timezone=True), default=utc_now)
 
@@ -301,6 +308,8 @@ class CaseArticle(Base):
     last_seen_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
     status = Column(String, nullable=False, default="ACTIVE")
     is_new = Column(Integer, nullable=False, default=1)
+    source_type = Column(String, nullable=False, default="rss")
+    source_metadata = Column(JSON, nullable=False, default=dict)
 
 
 class MonitorCheckpoint(Base):
@@ -318,3 +327,62 @@ class MonitorCheckpoint(Base):
     last_checked_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
     last_successful_run_at = Column(DateTime(timezone=True))
     metadata_json = Column(JSON, nullable=False, default=dict)
+
+
+class EvidenceItem(Base):
+    """First-class evidence objects linked to cases and events."""
+
+    __tablename__ = "evidence_items"
+
+    id = Column(String, primary_key=True)
+    case_id = Column(String, ForeignKey("topic_cases.id"), nullable=False, index=True)
+    event_id = Column(String, ForeignKey("events.id"), index=True)
+    case_article_id = Column(String, ForeignKey("case_articles.id"), index=True)
+    evidence_type = Column(String, nullable=False, index=True)
+    source_type = Column(String, nullable=False, index=True)
+    title = Column(String)
+    origin_url = Column(String)
+    canonical_url = Column(String)
+    archived_url = Column(String)
+    publisher = Column(String)
+    published_at = Column(String)
+    content = Column(Text)
+    capture_metadata = Column(JSON, nullable=False, default=dict)
+    verification_status = Column(String, nullable=False, default="UNVERIFIED")
+    credibility_tier = Column(String)
+    requires_human_review = Column(Integer, nullable=False, default=0)
+    created_at = Column(DateTime(timezone=True), default=utc_now, index=True)
+
+
+class EvidenceVerificationCheck(Base):
+    """Verification metadata for a specific evidence item."""
+
+    __tablename__ = "evidence_verification_checks"
+
+    id = Column(String, primary_key=True)
+    evidence_id = Column(
+        String, ForeignKey("evidence_items.id"), nullable=False, index=True
+    )
+    check_type = Column(String, nullable=False)
+    result = Column(String, nullable=False)
+    method = Column(String)
+    notes = Column(Text)
+    verified_by = Column(String)
+    verified_at = Column(DateTime(timezone=True), default=utc_now)
+
+
+class ClaimEvidenceLink(Base):
+    """Relationship between a claim and the evidence that supports or contests it."""
+
+    __tablename__ = "claim_evidence_links"
+
+    id = Column(String, primary_key=True)
+    claim_id = Column(String, ForeignKey("claims.id"), nullable=False, index=True)
+    evidence_id = Column(
+        String, ForeignKey("evidence_items.id"), nullable=False, index=True
+    )
+    relation = Column(String, nullable=False, index=True)
+    source_diversity_rank = Column(Integer, nullable=False, default=1)
+    confidence_score = Column(Float)
+    notes = Column(Text)
+    created_at = Column(DateTime(timezone=True), default=utc_now)

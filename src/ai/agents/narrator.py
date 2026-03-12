@@ -2,11 +2,11 @@
 
 import logging
 from typing import Any
-from litellm import acompletion
 import os
-import json
+from litellm import acompletion
 
-from src.ai.utils import call_with_retry, build_completion_params
+from src.ai.schemas import NarrativeSchema
+from src.ai.utils import call_structured_llm, make_agent_envelope
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +33,7 @@ Provide the narrative summary:"""
 
 
 async def narrate_cluster(
-    cluster_id: str, claims: list[dict[str, Any]]
+    cluster_id: str, claims: list[dict[str, Any]], *, include_metadata: bool = False
 ) -> dict[str, Any]:
     """Generate a narrative summary for a cluster of claims.
 
@@ -45,16 +45,25 @@ async def narrate_cluster(
         Narrative summary dictionary
     """
     if not claims:
-        return {
-            "stance_summary": "No claims in this cluster",
-            "key_themes": [],
-            "main_entities": [],
-        }
+        result = make_agent_envelope(
+            {
+                "stance_summary": "No claims in this cluster",
+                "key_themes": [],
+                "main_entities": [],
+            }
+        )
+        return result if include_metadata else result["output"]
 
     try:
         if not os.getenv("LLM_API_KEY"):
             logger.error("No LLM_API_KEY found")
-            return _fallback_narrative(claims)
+            result = make_agent_envelope(
+                _fallback_narrative(claims),
+                parse_status="no_api_key",
+                structured_output_used=False,
+                fallback_used=True,
+            )
+            return result if include_metadata else result["output"]
 
         # Format claims for prompt
         claims_text = "\n".join(
@@ -70,34 +79,26 @@ async def narrate_cluster(
             f"Generating narrative for cluster {cluster_id} with {len(claims)} claims"
         )
 
-        # Build completion parameters with retry logic
-        params = build_completion_params(
-            messages=[{"role": "user", "content": prompt}],
+        result = await call_structured_llm(
+            prompt=prompt,
+            schema=NarrativeSchema,
             temperature=0.4,
             max_tokens=500,
+            fallback=lambda: _fallback_narrative(claims),
+            completion_func=acompletion,
         )
-
-        # Call with retry for rate limiting and error handling
-        response = await call_with_retry(acompletion, **params)
-
-        content = response.get("choices", [{}])[0].get("message", {}).get("content", "")
-
-        # Parse JSON response
-        try:
-            narrative = json.loads(content)
-            logger.info(f"Generated narrative for cluster {cluster_id}")
-            return narrative
-        except json.JSONDecodeError:
-            if "```json" in content:
-                json_str = content.split("```json")[1].split("```")[0].strip()
-                narrative = json.loads(json_str)
-                return narrative
-            logger.error(f"Failed to parse narrative JSON: {content[:200]}")
-            return _fallback_narrative(claims)
+        logger.info(f"Generated narrative for cluster {cluster_id}")
+        return result if include_metadata else result["output"]
 
     except Exception as e:
         logger.error(f"Error generating narrative: {e}")
-        return _fallback_narrative(claims)
+        result = make_agent_envelope(
+            _fallback_narrative(claims),
+            parse_status="error",
+            structured_output_used=True,
+            fallback_used=True,
+        )
+        return result if include_metadata else result["output"]
 
 
 def _fallback_narrative(claims: list[dict[str, Any]]) -> dict[str, Any]:

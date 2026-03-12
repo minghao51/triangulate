@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+import json
 from pathlib import Path
 
 import pytest
@@ -19,6 +20,9 @@ class StubService:
 
     def __init__(self) -> None:
         self.created_payload = None
+        self.review_payload = None
+        self.rerun_payload = None
+        self.exception_payload = None
 
     def list_cases(self):
         case = TopicCase(
@@ -129,6 +133,7 @@ class StubService:
                     "canonical_name": "Alpha",
                     "aliases": ["Alpha"],
                     "description": "Party A",
+                    "is_bootstrap_confirmed": True,
                 }
             ],
             "events": [
@@ -155,6 +160,52 @@ class StubService:
             ],
             "party_investigations": [],
         }
+
+    def review_case(self, case_id: str, decision: str, notes: str | None = None):
+        self.review_payload = {"case_id": case_id, "decision": decision, "notes": notes}
+        return TopicCase(
+            id=case_id,
+            query="Example case",
+            slug="example-case",
+            conflict="Global Trade",
+            status=CaseStatus.REVIEW_READY,
+        )
+
+    async def rerun_case(self, case_id: str, start_stage=None, output_dir=None):
+        self.rerun_payload = {
+            "case_id": case_id,
+            "start_stage": start_stage.value if start_stage else None,
+            "output_dir": str(output_dir) if output_dir else None,
+        }
+        return TopicCase(
+            id=case_id,
+            query="Example case",
+            slug="example-case",
+            conflict="Global Trade",
+            status=CaseStatus.REVIEW_READY,
+        )
+
+    def update_exception_status(
+        self,
+        case_id: str,
+        exception_id: str,
+        *,
+        action: str,
+        notes: str | None = None,
+    ):
+        self.exception_payload = {
+            "case_id": case_id,
+            "exception_id": exception_id,
+            "action": action,
+            "notes": notes,
+        }
+        return TopicCase(
+            id=case_id,
+            query="Example case",
+            slug="example-case",
+            conflict="Global Trade",
+            status=CaseStatus.REVIEW_READY,
+        )
 
     async def run_case(self, **kwargs):
         self.created_payload = kwargs
@@ -237,7 +288,9 @@ def test_tab_endpoints_return_frontend_slices(client):
     assert claims.json()[0]["text"] == "Claim text"
     assert evidence.json()[0]["linkedClaims"] == ["claim-1"]
     assert exceptions.json()[0]["recommendedAction"] == "Provide more links"
+    assert exceptions.json()[0]["status"] == "open"
     assert parties.json()[0]["name"] == "Alpha"
+    assert parties.json()[0]["isModelInferred"] is False
     assert timeline.json()[0]["linkedEvidenceCount"] == 1
     assert run_history.json()[0]["status"] == "success"
     assert report.json()["status"] == "pending"
@@ -276,6 +329,52 @@ def test_create_case_validates_and_calls_service(client):
         "max_articles": 12,
         "relevance_threshold": 0.5,
         "automation_mode": "blocked",
+    }
+
+
+def test_review_endpoint_calls_service(client):
+    test_client, service = client
+    response = test_client.post(
+        "/api/cases/case-1/review",
+        json={"decision": "action_required", "notes": "Needs analyst review"},
+    )
+    assert response.status_code == 200
+    assert response.json()["case"]["id"] == "case-1"
+    assert service.review_payload == {
+        "case_id": "case-1",
+        "decision": "action_required",
+        "notes": "Needs analyst review",
+    }
+
+
+def test_rerun_endpoint_calls_service(client):
+    test_client, service = client
+    response = test_client.post(
+        "/api/cases/case-1/rerun",
+        json={"fromStage": "RETRIEVE"},
+    )
+    assert response.status_code == 200
+    assert response.json()["case"]["id"] == "case-1"
+    assert service.rerun_payload == {
+        "case_id": "case-1",
+        "start_stage": "RETRIEVE",
+        "output_dir": None,
+    }
+
+
+def test_exception_endpoint_calls_service(client):
+    test_client, service = client
+    response = test_client.post(
+        "/api/cases/case-1/exceptions/exc-1",
+        json={"action": "resolve", "notes": "Handled"},
+    )
+    assert response.status_code == 200
+    assert response.json()["case"]["id"] == "case-1"
+    assert service.exception_payload == {
+        "case_id": "case-1",
+        "exception_id": "exc-1",
+        "action": "resolve",
+        "notes": "Handled",
     }
 
 
@@ -351,5 +450,64 @@ async def test_api_smoke_with_real_service(monkeypatch, tmp_path):
         assert detail_response.status_code == 200
         assert list_response.json()[0]["id"] == case.id
         assert detail_response.json()["case"]["query"] == "Alpha"
+    finally:
+        app.dependency_overrides.clear()
+
+
+@pytest.mark.asyncio
+async def test_report_download_endpoints(monkeypatch, tmp_path):
+    service = make_real_service(tmp_path)
+
+    async def fake_fetch(*args, **kwargs):
+        return {
+            "articles": [
+                {
+                    "url": "https://example.com/a",
+                    "title": "Article A",
+                    "source": "Example",
+                    "published_at": "2026-03-08T12:00:00+00:00",
+                    "content": "Alpha update",
+                    "relevance_score": 0.9,
+                }
+            ],
+            "conflict": "trade",
+            "queries_generated": ["alpha"],
+            "sources_used": ["Example"],
+            "articles_fetched": 1,
+            "articles_processed": 1,
+        }
+
+    async def fake_process(article):
+        return {
+            "id": "temporary",
+            "timestamp": datetime(2026, 3, 8, 12, 0, tzinfo=UTC),
+            "title": article["title"],
+            "summary": article["content"],
+            "verification_status": "PROBABLE",
+            "claims": [
+                {
+                    "claim": "Alpha happened",
+                    "who": ["Alpha"],
+                    "verification_status": "PROBABLE",
+                }
+            ],
+            "narratives": [{"cluster_id": "0", "stance_summary": "Narrative", "claim_count": 1}],
+            "parties": [{"canonical_name": "Alpha", "aliases": ["Alpha"]}],
+        }
+
+    monkeypatch.setattr(service.topic_fetcher, "fetch_articles_by_topic", fake_fetch)
+    monkeypatch.setattr(service.ai_workflow, "process_article", fake_process)
+
+    case = await service.run_case(query="Alpha report", output_dir=tmp_path, automation_mode="autonomous")
+
+    app.dependency_overrides[get_case_service] = lambda: service
+    try:
+        client = TestClient(app)
+        markdown_response = client.get(f"/api/cases/{case.id}/report/markdown")
+        manifest_response = client.get(f"/api/cases/{case.id}/report/manifest")
+        assert markdown_response.status_code == 200
+        assert "Alpha report" in markdown_response.text
+        assert manifest_response.status_code == 200
+        assert json.loads(manifest_response.text)["case_id"] == case.id
     finally:
         app.dependency_overrides.clear()

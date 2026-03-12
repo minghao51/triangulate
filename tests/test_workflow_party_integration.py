@@ -3,6 +3,7 @@
 import pytest
 from unittest.mock import AsyncMock, patch
 from src.ai.workflow import AIWorkflow
+from src.ai.workflows.party_investigation_workflow import party_classifier_node
 
 
 @pytest.mark.asyncio
@@ -73,3 +74,24 @@ async def test_workflow_classifies_parties():
     assert "parties" in result
     assert len(result["parties"]) == 2
     assert any("party_name" in c for c in result.get("claims", []))
+
+
+@pytest.mark.asyncio
+async def test_party_workflow_uses_bootstrap_confirmed_parties_without_entities():
+    """Bootstrap-confirmed parties should bypass empty-entity classification."""
+    result = await party_classifier_node(
+        {
+            "article": {"confirmed_parties": ["Alpha", "Beta"]},
+            "claims": [{"claim": "Sparse claim", "who": []}],
+            "parties": {},
+            "party_investigations": [],
+            "final_determinations": [],
+            "event_summary": {},
+            "llm_metadata": {},
+            "error": "",
+        }
+    )
+
+    parties = result["parties"]["parties"]
+    assert [party["canonical_name"] for party in parties] == ["Alpha", "Beta"]
+    assert result["llm_metadata"]["party_classifier"]["parse_status"] == "bootstrap_override"

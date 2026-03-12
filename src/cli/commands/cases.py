@@ -5,28 +5,15 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 
-import toml
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
 from rich.table import Table
 
-from src.cases import TopicCaseService
+from src.runtime import build_case_service
 from src.storage import CaseStageName, CaseStatus
 
 console = Console()
-
-
-def load_runtime_config() -> dict:
-    """Load runtime configuration for CLI commands."""
-    config_path = Path("config.toml")
-    with open(config_path) as handle:
-        return toml.load(handle)
-
-
-def build_case_service(output: Path = Path("./output")) -> TopicCaseService:
-    """Create the case service with runtime config."""
-    return TopicCaseService(load_runtime_config(), output_root=output)
 
 
 def cmd_list_cases(output: Path = Path("./output")) -> None:
@@ -72,15 +59,15 @@ def cmd_show_case(case_id: str, output: Path = Path("./output")) -> None:
     case = details["case"]
     console.print(
         Panel.fit(
-            f"[bold]{case.query}[/bold]\n\n"
-            f"Status: [yellow]{case.status.value}[/yellow]\n"
-            f"Conflict: {case.conflict or 'n/a'}\n"
-            f"Stage: {case.current_stage.value if case.current_stage else 'n/a'}\n"
-            f"Articles: {case.article_count}\n"
-            f"Events: {case.event_count}\n"
-            f"Open review items: {case.open_review_items}\n"
-            f"Report: {case.report_path or 'n/a'}",
-            title=f"Case {case.id}",
+            f"[bold]{case['query']}[/bold]\n\n"
+            f"Status: [yellow]{case['status']}[/yellow]\n"
+            f"Conflict: {case.get('conflict') or 'n/a'}\n"
+            f"Stage: {case.get('current_stage') or 'n/a'}\n"
+            f"Articles: {case.get('article_count', 0)}\n"
+            f"Events: {case.get('event_count', 0)}\n"
+            f"Open review items: {case.get('open_review_items', 0)}\n"
+            f"Report: {case.get('report_path') or 'n/a'}",
+            title=f"Case {case['id']}",
         )
     )
 
@@ -93,11 +80,11 @@ def cmd_show_case(case_id: str, output: Path = Path("./output")) -> None:
 
     for run in details["stage_runs"]:
         stage_table.add_row(
-            run.stage_name.value,
-            run.status.value,
-            str(run.attempt),
-            f"{run.duration_ms or 0} ms",
-            run.workflow_name or "-",
+            run["stage"],
+            run["status"],
+            str(run.get("attempt", 1)),
+            f"{run.get('duration_ms') or 0} ms",
+            run.get("workflow_name") or "-",
         )
     console.print(stage_table)
 
@@ -107,9 +94,9 @@ def cmd_show_case(case_id: str, output: Path = Path("./output")) -> None:
     events_table.add_column("Date", style="cyan")
     for event in details["events"][:15]:
         events_table.add_row(
-            event.verification_status.value,
-            event.title[:70],
-            event.timestamp.strftime("%Y-%m-%d %H:%M") if event.timestamp else "-",
+            event["verification_status"],
+            event["title"][:70],
+            (event.get("timestamp") or "-")[:16].replace("T", " "),
         )
     console.print(events_table)
 
@@ -141,38 +128,43 @@ def cmd_review_case(
     case = details["case"]
     console.print(
         Panel.fit(
-            f"[bold]{case.query}[/bold]\n\n"
-            f"Status: {case.status.value}\n"
-            f"Articles: {case.article_count}\n"
-            f"Events: {case.event_count}\n"
-            f"Open review items: {case.open_review_items}\n"
-            f"Notes: {case.review_notes or 'n/a'}",
+            f"[bold]{case['query']}[/bold]\n\n"
+            f"Status: {case['status']}\n"
+            f"Articles: {case.get('article_count', 0)}\n"
+            f"Events: {case.get('event_count', 0)}\n"
+            f"Open review items: {case.get('open_review_items', 0)}\n"
+            f"Notes: {case.get('review_notes') or 'n/a'}",
             title="Case Review",
         )
     )
 
     contested = [
-        event for event in details["events"] if event.verification_status.value == "CONTESTED"
+        event for event in details["events"] if event["verification_status"] == "CONTESTED"
     ]
     if contested:
         table = Table(title="Contested Events")
         table.add_column("Title", style="white")
         table.add_column("Summary", style="dim")
         for event in contested[:10]:
-            table.add_row(event.title[:50], (event.summary or "")[:80])
+            table.add_row(event["title"][:50], (event.get("summary") or "")[:80])
         console.print(table)
 
     if decision is None:
         console.print("\n[bold]Actions:[/bold]")
-        console.print("  [A]pprove  [R]eject  [D]efer")
+        console.print("  [A]pprove  [R]eject  [X] Action required  [D]efer")
         decision = Prompt.ask(
             "What would you like to do?",
-            choices=["a", "r", "d"],
+            choices=["a", "r", "x", "d"],
             default="d",
         ).lower()
-        decision = {"a": "approve", "r": "reject", "d": "defer"}[decision]
+        decision = {
+            "a": "approve",
+            "r": "reject",
+            "x": "action_required",
+            "d": "defer",
+        }[decision]
 
-    reviewed = service.review_case(case.id, decision, notes)
+    reviewed = service.review_case(case["id"], decision, notes)
     console.print(f"[green]Case updated: {reviewed.status.value}[/green]")
 
 
@@ -199,6 +191,9 @@ def cmd_fetch_topic_case(
     max_articles: int = 50,
     relevance_threshold: float = 0.3,
     conflict: str | None = None,
+    confirmed_parties: list[str] | None = None,
+    manual_links: list[str] | None = None,
+    automation_mode: str = "exceptions_only",
 ) -> None:
     """Run the canonical topic case pipeline."""
     del format  # Reports are always emitted as part of the case bundle.
@@ -208,8 +203,11 @@ def cmd_fetch_topic_case(
             query=query,
             output_dir=output,
             conflict=conflict,
+            confirmed_parties=confirmed_parties,
+            manual_links=manual_links,
             max_articles=max_articles,
             relevance_threshold=relevance_threshold,
+            automation_mode=automation_mode,
         )
     )
     console.print(f"[green]Case ready:[/green] {case.id}")

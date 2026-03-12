@@ -56,6 +56,13 @@ STAGE_ORDER = [
     CaseStageName.REPORT,
 ]
 
+AUTOMATION_MODE_ALIASES = {
+    "exceptions_only": "safe",
+    "safe": "safe",
+    "blocked": "blocked",
+    "autonomous": "autonomous",
+}
+
 
 @dataclass
 class CaseRunContext:
@@ -108,6 +115,17 @@ def _payload_checksum(payload: dict[str, Any]) -> str:
 
 def _claim_signature(claim_text: str) -> str:
     return hashlib.sha256(claim_text.lower().strip().encode("utf-8")).hexdigest()
+
+
+def _normalize_automation_mode(value: str | None) -> str:
+    return AUTOMATION_MODE_ALIASES.get((value or "").strip().lower(), "safe")
+
+
+def _execution_automation_mode(value: str | None) -> str:
+    normalized = (value or "").strip().lower()
+    if normalized == "exceptions_only":
+        return "autonomous"
+    return _normalize_automation_mode(value)
 
 
 class TopicCaseService:
@@ -186,6 +204,17 @@ class TopicCaseService:
         if start_stage != CaseStageName.BOOTSTRAP:
             self._hydrate_context_from_case(context)
 
+        effective_automation_mode = _normalize_automation_mode(
+            automation_mode
+            or context.case.routing_mode
+            or (context.case.metadata_json or {}).get("bootstrap", {}).get("automation_mode")
+        )
+        execution_automation_mode = _execution_automation_mode(
+            automation_mode
+            or context.case.routing_mode
+            or (context.case.metadata_json or {}).get("bootstrap", {}).get("automation_mode")
+        )
+
         requested_index = STAGE_ORDER.index(start_stage)
         for stage in STAGE_ORDER[requested_index:]:
             if stage == CaseStageName.BOOTSTRAP:
@@ -194,7 +223,7 @@ class TopicCaseService:
                     conflict=conflict,
                     confirmed_parties=confirmed_parties or [],
                     manual_links=manual_links or [],
-                    automation_mode=automation_mode,
+                    automation_mode=effective_automation_mode,
                 )
             elif stage == CaseStageName.RETRIEVE:
                 await self._stage_retrieve(
@@ -220,13 +249,24 @@ class TopicCaseService:
             if context.case.status == CaseStatus.FAILED:
                 break
 
+            if self._should_pause_after_stage(
+                context.case, stage_name=stage, automation_mode=execution_automation_mode
+            ):
+                self._pause_case_for_manual_action(
+                    context.case.id,
+                    stage_name=stage,
+                    automation_mode=execution_automation_mode,
+                )
+                context.case = self._reload_case(context.case.id)
+                break
+
         return self._reload_case(context.case.id)
 
     async def rerun_case(
         self,
         case_id: str,
         *,
-        start_stage: CaseStageName,
+        start_stage: CaseStageName | None = None,
         output_dir: Path | None = None,
     ) -> TopicCase:
         session = get_database().get_session_sync()
@@ -237,6 +277,12 @@ class TopicCaseService:
             query = case.query
             conflict = case.conflict
             importance = case.importance
+            monitor_mode = case.status == CaseStatus.MONITORING
+            automation_mode = (
+                case.routing_mode
+                or (case.metadata_json or {}).get("bootstrap", {}).get("automation_mode")
+            )
+            next_stage = start_stage or self._next_stage_for_case(case)
         finally:
             session.close()
 
@@ -245,9 +291,10 @@ class TopicCaseService:
             output_dir=output_dir,
             conflict=conflict,
             importance=importance,
-            start_stage=start_stage,
+            start_stage=next_stage,
             case_id=case_id,
-            monitor_mode=(start_stage == CaseStageName.RETRIEVE),
+            automation_mode=automation_mode,
+            monitor_mode=monitor_mode,
         )
 
     def review_case(
@@ -299,6 +346,60 @@ class TopicCaseService:
             case.open_review_items = self._compute_open_review_items(
                 case.metadata_json, reviews
             )
+            session.commit()
+            return case
+        finally:
+            session.close()
+
+    def update_exception_status(
+        self,
+        case_id: str,
+        exception_id: str,
+        *,
+        action: str,
+        notes: str | None = None,
+    ) -> TopicCase:
+        session = get_database().get_session_sync()
+        try:
+            case = session.query(TopicCase).filter(TopicCase.id == case_id).first()
+            if case is None:
+                raise ValueError(f"Case {case_id} not found")
+
+            normalized_action = action.strip().lower()
+            if normalized_action not in {"resolve", "defer", "reopen"}:
+                raise ValueError(f"Unsupported exception action: {action}")
+
+            exception_queue = []
+            found = False
+            for item in (case.metadata_json or {}).get("exception_queue", []):
+                normalized = self._coerce_exception(item)
+                if normalized["id"] == exception_id:
+                    found = True
+                    if normalized_action == "resolve":
+                        normalized["status"] = "resolved"
+                    elif normalized_action == "defer":
+                        normalized["status"] = "deferred"
+                    else:
+                        normalized["status"] = "open"
+                    normalized["updated_at"] = _utcnow().isoformat()
+                    if notes:
+                        normalized["resolution_notes"] = notes
+                exception_queue.append(normalized)
+
+            if not found:
+                raise ValueError(f"Exception {exception_id} not found for case {case_id}")
+
+            metadata_json = dict(case.metadata_json or {})
+            metadata_json["exception_queue"] = exception_queue
+            case.metadata_json = metadata_json
+            reviews = (
+                session.query(Review)
+                .join(Event, Review.event_id == Event.id)
+                .filter(Event.case_id == case_id)
+                .all()
+            )
+            case.open_review_items = self._compute_open_review_items(metadata_json, reviews)
+            case.updated_at = _utcnow()
             session.commit()
             return case
         finally:
@@ -931,6 +1032,10 @@ class TopicCaseService:
                 case_id=context.case.id,
                 case_run_id=stage_run.id,
                 create_review=True,
+                confirmed_parties=(
+                    (context.bootstrap_result or {}).get("confirmed_parties")
+                    or (context.case.metadata_json or {}).get("bootstrap", {}).get("confirmed_parties", [])
+                ),
             )
 
         payload = {
@@ -1458,6 +1563,53 @@ class TopicCaseService:
             if item.get("status", "open") != "resolved"
         ]
 
+    def _should_pause_after_stage(
+        self,
+        case: TopicCase,
+        *,
+        stage_name: CaseStageName,
+        automation_mode: str,
+    ) -> bool:
+        normalized_mode = _normalize_automation_mode(automation_mode)
+        if normalized_mode == "autonomous" or stage_name == CaseStageName.REPORT:
+            return False
+        if normalized_mode == "blocked":
+            return True
+        return bool(self._get_open_exceptions(case.metadata_json or {}))
+
+    def _pause_case_for_manual_action(
+        self,
+        case_id: str,
+        *,
+        stage_name: CaseStageName,
+        automation_mode: str,
+    ) -> None:
+        session = get_database().get_session_sync()
+        try:
+            case = session.query(TopicCase).filter(TopicCase.id == case_id).first()
+            metadata_json = dict(case.metadata_json or {})
+            metadata_json["manual_gate"] = {
+                "stage": stage_name.value,
+                "automation_mode": _normalize_automation_mode(automation_mode),
+                "updated_at": _utcnow().isoformat(),
+            }
+            case.metadata_json = metadata_json
+            case.status = CaseStatus.REVIEW_READY
+            case.current_stage = stage_name
+            case.updated_at = _utcnow()
+            session.commit()
+        finally:
+            session.close()
+
+    def _next_stage_for_case(self, case: TopicCase) -> CaseStageName:
+        current_stage = case.current_stage or CaseStageName.BOOTSTRAP
+        if current_stage not in STAGE_ORDER:
+            return CaseStageName.BOOTSTRAP
+        current_index = STAGE_ORDER.index(current_stage)
+        if current_index >= len(STAGE_ORDER) - 1:
+            return current_stage
+        return STAGE_ORDER[current_index + 1]
+
     def _resolve_case_exceptions(
         self, metadata_json: dict[str, Any], *, decision: str, notes: str | None
     ) -> dict[str, Any]:
@@ -1833,6 +1985,7 @@ class TopicCaseService:
                     "canonical_name": party.canonical_name,
                     "aliases": party.aliases,
                     "description": party.description,
+                    "is_bootstrap_confirmed": bool(party.is_bootstrap_confirmed),
                 }
                 for party in parties
             ],
