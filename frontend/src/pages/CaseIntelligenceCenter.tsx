@@ -32,6 +32,7 @@ import PartiesTab from './tabs/PartiesTab';
 import TimelineTab from './tabs/TimelineTab';
 import ReportTab from './tabs/ReportTab';
 import RunHistoryTab from './tabs/RunHistoryTab';
+import { Map } from 'lucide-react';
 
 interface TabConfig {
   id: string;
@@ -108,6 +109,7 @@ const CaseIntelligenceCenter: React.FC = () => {
     { id: 'evidence', label: 'Evidence', icon: <FileText size={16} />, path: 'evidence' },
     { id: 'claims', label: 'Claims', icon: <GitMerge size={16} />, path: 'claims' },
     { id: 'parties', label: 'Parties', icon: <Users size={16} />, path: 'parties' },
+    { id: 'map', label: 'Map', icon: <Map size={16} />, path: 'map' },
     { id: 'timeline', label: 'Timeline', icon: <Clock size={16} />, path: 'timeline' },
     {
       id: 'exceptions',

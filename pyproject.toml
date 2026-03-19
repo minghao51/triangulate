@@ -55,3 +55,4 @@ dev = [
 markers = [
     "integration: tests that exercise real external integrations",
 ]
+addopts = "-m 'not integration'"

@@ -20,6 +20,8 @@ from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlparse
 
+import pytest
+
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
@@ -245,6 +247,7 @@ def pretty_print_results(event_data: dict):
 # TEST FUNCTIONS
 # ============================================================================
 
+@pytest.mark.integration
 def test_workflow_with_mock_article():
     """Test workflow processing with a mock article.
 
@@ -312,6 +315,7 @@ async def _test_workflow_mock():
         assert isinstance(claim.get("who", []), list), "Who should be a list"
 
 
+@pytest.mark.integration
 def test_workflow_structure():
     """Test that workflow has correct structure and configuration."""
     config_path = Path(__file__).parent.parent.parent / "config.toml"

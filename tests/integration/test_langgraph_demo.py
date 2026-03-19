@@ -406,6 +406,7 @@ async def test_langgraph_workflow() -> dict[str, Any]:
 # TEST FUNCTIONS (for pytest)
 # ============================================================================
 
+@pytest.mark.integration
 def test_current_workflow_implementation():
     """Test the current AIWorkflow implementation.
 
@@ -432,6 +433,7 @@ async def _test_current():
     ], "Should have valid verification status"
 
 
+@pytest.mark.integration
 def test_langgraph_workflow_implementation():
     """Test the LangGraph StateGraph implementation.
 
@@ -454,6 +456,7 @@ async def _test_langgraph():
     assert result["narratives_count"] >= 0, "Should have narratives count"
 
 
+@pytest.mark.integration
 def test_agent_chain_integration():
     """Test that the agent chain works end-to-end.
 

@@ -19,6 +19,8 @@ import os
 import sys
 from pathlib import Path
 
+import pytest
+
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
@@ -92,6 +94,7 @@ async def run_party_investigation_workflow():
     return final_state
 
 
+@pytest.mark.integration
 def test_party_investigation_workflow():
     """Test the party investigation workflow with mock data.
 
@@ -163,6 +166,7 @@ async def _test_async():
             assert isinstance(reasoning, dict), "Arbiter reasoning should be a dictionary"
 
 
+@pytest.mark.integration
 def test_party_investigation_formatted_output():
     """Test that formatted output is generated correctly."""
     asyncio.run(_test_formatted_output())
