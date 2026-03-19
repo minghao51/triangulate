@@ -1,29 +1,33 @@
 import React, { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
 import type { Exception } from '../../types/backend-models';
 import { getExceptionsForCase, updateCaseException } from '../../services/api';
 import { AlertOctagon, AlertTriangle, Info, CheckCircle2, MoreHorizontal } from 'lucide-react';
 import './ExceptionsTab.css';
 
-const ExceptionsTab: React.FC<{ onCaseMutated?: () => void; refreshToken?: number }> = ({ onCaseMutated, refreshToken = 0 }) => {
-    const { id } = useParams();
+interface ExceptionsTabProps {
+  caseId: string;
+  onCaseMutated?: () => void;
+  refreshToken?: number;
+}
+
+const ExceptionsTab: React.FC<ExceptionsTabProps> = ({ caseId, onCaseMutated, refreshToken = 0 }) => {
     const [exceptions, setExceptions] = useState<Exception[]>([]);
     const [error, setError] = useState<string | null>(null);
     const [pendingId, setPendingId] = useState<string | null>(null);
 
     const loadExceptions = async () => {
-        if (!id) {
+        if (!caseId) {
             return;
         }
-        const next = await getExceptionsForCase(id);
+        const next = await getExceptionsForCase(caseId);
         setExceptions(next);
     };
 
     useEffect(() => {
-        if (id) {
-            getExceptionsForCase(id).then(setExceptions).catch((err: Error) => setError(err.message));
+        if (caseId) {
+            getExceptionsForCase(caseId).then(setExceptions).catch((err: Error) => setError(err.message));
         }
-    }, [id, refreshToken]);
+    }, [caseId, refreshToken]);
 
     const getSeverityIcon = (severity: Exception['severity']) => {
         switch (severity) {
@@ -34,13 +38,13 @@ const ExceptionsTab: React.FC<{ onCaseMutated?: () => void; refreshToken?: numbe
     };
 
     const handleExceptionAction = async (exceptionId: string, action: 'resolve' | 'defer' | 'reopen') => {
-        if (!id) {
+        if (!caseId) {
             return;
         }
         setPendingId(exceptionId);
         setError(null);
         try {
-            await updateCaseException(id, exceptionId, action);
+            await updateCaseException(caseId, exceptionId, action);
             await loadExceptions();
             onCaseMutated?.();
         } catch (err) {

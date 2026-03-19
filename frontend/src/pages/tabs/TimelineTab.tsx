@@ -1,21 +1,24 @@
 import React, { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
 import type { TimelineEvent } from '../../types/backend-models';
 import { getTimelineForCase } from '../../services/api';
 import { ShieldCheck, ShieldAlert, FileText } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import './TimelineTab.css';
 
-const TimelineTab: React.FC<{ refreshToken?: number }> = ({ refreshToken = 0 }) => {
-    const { id } = useParams();
+interface TimelineTabProps {
+  caseId: string;
+  refreshToken?: number;
+}
+
+const TimelineTab: React.FC<TimelineTabProps> = ({ caseId, refreshToken = 0 }) => {
     const [events, setEvents] = useState<TimelineEvent[]>([]);
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
-        if (id) {
-            getTimelineForCase(id).then(setEvents).catch((err: Error) => setError(err.message));
+        if (caseId) {
+            getTimelineForCase(caseId).then(setEvents).catch((err: Error) => setError(err.message));
         }
-    }, [id, refreshToken]);
+    }, [caseId, refreshToken]);
 
     return (
         <div className="timeline-container p-base">

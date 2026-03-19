@@ -1,33 +1,36 @@
 import React, { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
 import type { ReportData } from '../../types/backend-models';
 import { downloadManifestReport, downloadMarkdownReport, getReportForCase } from '../../services/api';
 import { Download, FileJson, CheckCircle2 } from 'lucide-react';
 import './ReportTab.css';
 
-const ReportTab: React.FC<{ refreshToken?: number }> = ({ refreshToken = 0 }) => {
-    const { id } = useParams();
+interface ReportTabProps {
+  caseId: string;
+  refreshToken?: number;
+}
+
+const ReportTab: React.FC<ReportTabProps> = ({ caseId, refreshToken = 0 }) => {
     const [report, setReport] = useState<ReportData | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [downloading, setDownloading] = useState<'markdown' | 'manifest' | null>(null);
 
     useEffect(() => {
-        if (id) {
-            getReportForCase(id).then(setReport).catch((err: Error) => setError(err.message));
+        if (caseId) {
+            getReportForCase(caseId).then(setReport).catch((err: Error) => setError(err.message));
         }
-    }, [id, refreshToken]);
+    }, [caseId, refreshToken]);
 
     const handleDownload = async (kind: 'markdown' | 'manifest') => {
-        if (!id) {
+        if (!caseId) {
             return;
         }
         setDownloading(kind);
         setError(null);
         try {
             if (kind === 'markdown') {
-                await downloadMarkdownReport(id);
+                await downloadMarkdownReport(caseId);
             } else {
-                await downloadManifestReport(id);
+                await downloadManifestReport(caseId);
             }
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Failed to download report');

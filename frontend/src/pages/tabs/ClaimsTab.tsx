@@ -1,21 +1,25 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import type { Claim } from '../../types/backend-models';
 import { getClaimsForCase } from '../../services/api';
 import { ShieldAlert, ThumbsUp, ThumbsDown, GitCommit } from 'lucide-react';
 import './ClaimsTab.css';
 
-const ClaimsTab: React.FC<{ refreshToken?: number }> = ({ refreshToken = 0 }) => {
-    const { id } = useParams();
+interface ClaimsTabProps {
+  caseId: string;
+  refreshToken?: number;
+}
+
+const ClaimsTab: React.FC<ClaimsTabProps> = ({ caseId, refreshToken = 0 }) => {
     const navigate = useNavigate();
     const [claims, setClaims] = useState<Claim[]>([]);
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
-        if (id) {
-            getClaimsForCase(id).then(setClaims).catch((err: Error) => setError(err.message));
+        if (caseId) {
+            getClaimsForCase(caseId).then(setClaims).catch((err: Error) => setError(err.message));
         }
-    }, [id, refreshToken]);
+    }, [caseId, refreshToken]);
 
     return (
         <div className="claims-container p-base">
@@ -61,7 +65,7 @@ const ClaimsTab: React.FC<{ refreshToken?: number }> = ({ refreshToken = 0 }) =>
                         </div>
 
                         <div className="claim-actions">
-                            <button className="btn btn-secondary" onClick={() => navigate(`/cases/${id}/evidence?claim=${claim.id}`)}>
+                            <button className="btn btn-secondary" onClick={() => navigate(`/cases/${caseId}/evidence?claim=${claim.id}`)}>
                                 Inspect Evidence
                             </button>
                         </div>

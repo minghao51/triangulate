@@ -1,22 +1,26 @@
 import React, { useEffect, useState } from 'react';
-import { useParams, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import type { Evidence } from '../../types/backend-models';
 import { getEvidenceForCase } from '../../services/api';
 import { ShieldCheck, ShieldAlert, FileSearch, Link } from 'lucide-react';
 import './EvidenceTab.css';
 
-const EvidenceTab: React.FC<{ refreshToken?: number }> = ({ refreshToken = 0 }) => {
-    const { id } = useParams();
+interface EvidenceTabProps {
+  caseId: string;
+  refreshToken?: number;
+}
+
+const EvidenceTab: React.FC<EvidenceTabProps> = ({ caseId, refreshToken = 0 }) => {
     const [searchParams] = useSearchParams();
     const [evidence, setEvidence] = useState<Evidence[]>([]);
     const [error, setError] = useState<string | null>(null);
     const claimFilter = searchParams.get('claim');
 
     useEffect(() => {
-        if (id) {
-            getEvidenceForCase(id).then(setEvidence).catch((err: Error) => setError(err.message));
+        if (caseId) {
+            getEvidenceForCase(caseId).then(setEvidence).catch((err: Error) => setError(err.message));
         }
-    }, [id, refreshToken]);
+    }, [caseId, refreshToken]);
 
     const renderVerificationBadge = (status: Evidence['verificationStatus']) => {
         switch (status) {

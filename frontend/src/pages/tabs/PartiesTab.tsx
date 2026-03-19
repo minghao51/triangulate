@@ -1,20 +1,23 @@
 import React, { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
 import type { Party } from '../../types/backend-models';
 import { getPartiesForCase } from '../../services/api';
 import { GitMerge, Check, AlertCircle } from 'lucide-react';
 import './PartiesTab.css';
 
-const PartiesTab: React.FC<{ refreshToken?: number }> = ({ refreshToken = 0 }) => {
-    const { id } = useParams();
+interface PartiesTabProps {
+  caseId: string;
+  refreshToken?: number;
+}
+
+const PartiesTab: React.FC<PartiesTabProps> = ({ caseId, refreshToken = 0 }) => {
     const [parties, setParties] = useState<Party[]>([]);
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
-        if (id) {
-            getPartiesForCase(id).then(setParties).catch((err: Error) => setError(err.message));
+        if (caseId) {
+            getPartiesForCase(caseId).then(setParties).catch((err: Error) => setError(err.message));
         }
-    }, [id, refreshToken]);
+    }, [caseId, refreshToken]);
 
     return (
         <div className="parties-container p-base">

@@ -257,6 +257,17 @@ def case_rerun(
     cmd_rerun_case(case_id=case_id, from_stage=from_stage, output=output)
 
 
+@app.command()
+def serve(
+    host: str = typer.Option("127.0.0.1", "--host", help="Host to bind to"),
+    port: int = typer.Option(8000, "--port", help="Port to bind to"),
+    reload: bool = typer.Option(False, "--reload", help="Enable auto-reload"),
+) -> None:
+    """Start the FastAPI HTTP server."""
+    import uvicorn
+    uvicorn.run("src.http.app:app", host=host, port=port, reload=reload)
+
+
 def main() -> None:
     """Main entry point."""
     app()

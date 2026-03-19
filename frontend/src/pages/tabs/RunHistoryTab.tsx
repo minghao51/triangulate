@@ -1,21 +1,24 @@
 import React, { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
 import type { RunHistoryItem } from '../../types/backend-models';
 import { getRunHistoryForCase } from '../../services/api';
 import { Activity, Code2, AlertCircle, Clock } from 'lucide-react';
 import { formatDistanceStrict, parseISO } from 'date-fns';
 import './RunHistoryTab.css';
 
-const RunHistoryTab: React.FC<{ refreshToken?: number }> = ({ refreshToken = 0 }) => {
-    const { id } = useParams();
+interface RunHistoryTabProps {
+  caseId: string;
+  refreshToken?: number;
+}
+
+const RunHistoryTab: React.FC<RunHistoryTabProps> = ({ caseId, refreshToken = 0 }) => {
     const [runs, setRuns] = useState<RunHistoryItem[]>([]);
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
-        if (id) {
-            getRunHistoryForCase(id).then(setRuns).catch((err: Error) => setError(err.message));
+        if (caseId) {
+            getRunHistoryForCase(caseId).then(setRuns).catch((err: Error) => setError(err.message));
         }
-    }, [id, refreshToken]);
+    }, [caseId, refreshToken]);
 
     return (
         <div className="run-history-container p-base">
