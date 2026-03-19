@@ -184,6 +184,27 @@ def cmd_rerun_case(
     )
 
 
+def cmd_case_exception_action(
+    case_id: str,
+    *,
+    exception_id: str,
+    action: str,
+    notes: str | None = None,
+    output: Path = Path("./output"),
+) -> None:
+    """Update a persisted case exception."""
+    service = build_case_service(output)
+    updated = service.update_exception_status(
+        case_id,
+        exception_id,
+        action=action,
+        notes=notes,
+    )
+    console.print(
+        f"[green]Exception {exception_id} updated for case {updated.id}[/green]"
+    )
+
+
 def cmd_fetch_topic_case(
     query: str,
     output: Path = Path("./output"),

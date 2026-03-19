@@ -35,6 +35,14 @@ The current case-oriented flow is:
 4. A report bundle is written to `output/`.
 5. The CLI and HTTP API read from the same persisted case state.
 
+## Boundary Note
+
+- `src/cases/` is the orchestration boundary.
+- `src/cli/` and future worker processes are the trigger surfaces for ingestion and execution.
+- GitHub Actions is an acceptable trigger surface when it invokes the same CLI or service-layer workflows.
+- `src/http/` is a read-model projection layer only.
+- `frontend/` must not initiate pipeline mutations.
+
 ## HTTP Boundary
 
 The frontend-facing API exposes:
@@ -43,7 +51,9 @@ The frontend-facing API exposes:
 - `GET /api/cases`
 - `GET /api/cases/{case_id}`
 - Tab-oriented case detail endpoints under `/api/cases/{case_id}/...`
-- `POST /api/cases` to create a case through the same service layer
+
+The HTTP boundary is intentionally read-only. Case creation, reruns, reviews, exception handling,
+ingestion, and monitoring are triggered outside the website via CLI or background operators.
 
 These endpoints are defined in `src/http/app.py` and use DTOs from `src/http/schemas.py`.
 
@@ -52,7 +62,7 @@ These endpoints are defined in `src/http/app.py` and use DTOs from `src/http/sch
 The frontend calls the HTTP API via `frontend/src/services/api.ts` and reads its base URL from `VITE_API_BASE_URL`. The current UI supports:
 
 - case index
-- new investigation flow
+- CLI launch guidance
 - case detail tabs
 
 ## Non-Goals for This Doc

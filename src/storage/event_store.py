@@ -114,6 +114,9 @@ def store_event_in_db(
             event.verification_status = _to_verification_status(
                 event_data["verification_status"]
             )
+            event.location_country_code = event_data.get("location_country_code")
+            event.location_lat = event_data.get("location_lat")
+            event.location_lon = event_data.get("location_lon")
             event.case_id = case_id
             event.case_run_id = case_run_id
         else:
@@ -125,6 +128,9 @@ def store_event_in_db(
                 verification_status=_to_verification_status(
                     event_data["verification_status"]
                 ),
+                location_country_code=event_data.get("location_country_code"),
+                location_lat=event_data.get("location_lat"),
+                location_lon=event_data.get("location_lon"),
                 case_id=case_id,
                 case_run_id=case_run_id,
             )
@@ -317,7 +323,9 @@ def store_event_in_db(
                 id=str(uuid.uuid4()),
                 cluster_id=stored_cluster_id,
                 stance_summary=narrative_data["stance_summary"],
-                source_count=narrative_data.get("claim_count", 0),
+                source_count=narrative_data.get(
+                    "source_count", narrative_data.get("claim_count", 0)
+                ),
             )
             session.add(narrative)
 

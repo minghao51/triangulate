@@ -14,6 +14,7 @@ from src.cli.commands.pipeline import cmd_run_pipeline
 from src.cli.commands.process_url import cmd_process_url
 from src.cli.commands.topic import cmd_fetch_topic, cmd_interactive, cmd_monitor_start
 from src.cli.commands.cases import (
+    cmd_case_exception_action,
     cmd_list_cases,
     cmd_show_case,
     cmd_review_case,
@@ -78,9 +79,12 @@ def process_url(
         False, "--json", "-j", help="Output JSON instead of pretty print"
     ),
     save: bool = typer.Option(False, "--save", "-s", help="Save result to database"),
+    case_id: str | None = typer.Option(
+        None, "--case-id", "-c", help="Attach saved capture to an existing case"
+    ),
 ) -> None:
     """Process a single article URL through the AI pipeline."""
-    cmd_process_url(url, json_output=json_output, save=save)
+    cmd_process_url(url, json_output=json_output, save=save, case_id=case_id)
 
 
 @app.command()
@@ -255,6 +259,26 @@ def case_rerun(
 ) -> None:
     """Rerun a case from a specific stage."""
     cmd_rerun_case(case_id=case_id, from_stage=from_stage, output=output)
+
+
+@case_app.command("exception")
+def case_exception(
+    case_id: str = typer.Argument(..., help="Case ID"),
+    exception_id: str = typer.Argument(..., help="Exception ID"),
+    action: str = typer.Option(..., "--action", "-a", help="resolve, defer, or reopen"),
+    notes: str | None = typer.Option(None, "--notes", "-n", help="Operator notes"),
+    output: Path = typer.Option(
+        Path("./output"), "--output", "-o", help="Output directory root"
+    ),
+) -> None:
+    """Update a case exception from the CLI."""
+    cmd_case_exception_action(
+        case_id=case_id,
+        exception_id=exception_id,
+        action=action,
+        notes=notes,
+        output=output,
+    )
 
 
 @app.command()

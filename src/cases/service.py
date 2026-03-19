@@ -21,7 +21,9 @@ from src.ai.workflows.party_investigation_workflow import (
     create_party_investigation_workflow,
 )
 from src.exporter import JSONExporter, MarkdownExporter
+from src.ingester.fetcher import ContentFetcher
 from src.ingester.topic_fetcher import TopicFetcher
+from src.ingester.url_capture import fetch_article_content
 from src.storage import (
     Claim,
     ClaimEvidenceLink,
@@ -33,6 +35,7 @@ from src.storage import (
     EvidenceItem,
     EvidenceVerificationCheck,
     Event,
+    IntakeItem,
     MonitorCheckpoint,
     Narrative,
     Party,
@@ -163,6 +166,169 @@ class TopicCaseService:
             return self._build_case_detail_payload(session, case)
         finally:
             session.close()
+
+    def fetch_and_intake_articles(
+        self,
+        *,
+        source: str | None = None,
+        limit: int | None = None,
+        case_id: str | None = None,
+    ) -> list[IntakeItem]:
+        """Fetch source content and persist it to the durable intake queue."""
+        fetcher = ContentFetcher(self.config)
+        if source:
+            articles = fetcher.fetch_from_source(source, limit=limit or 50)
+        else:
+            articles = fetcher.fetch_all(limit=limit)
+        return self.ingest_articles(
+            articles,
+            capture_type="source_ingest",
+            case_id=case_id,
+        )
+
+    def ingest_articles(
+        self,
+        articles: list[dict[str, Any]],
+        *,
+        capture_type: str,
+        case_id: str | None = None,
+    ) -> list[IntakeItem]:
+        """Persist captured articles to the intake queue."""
+        session = get_database().get_session_sync()
+        try:
+            if case_id is not None:
+                case = session.query(TopicCase).filter(TopicCase.id == case_id).first()
+                if case is None:
+                    raise ValueError(f"Case {case_id} not found")
+
+            queued: list[IntakeItem] = []
+            now = _utcnow()
+            for article in articles:
+                normalized_url = (
+                    article.get("url")
+                    or article.get("link")
+                    or article.get("origin_url")
+                )
+                fingerprint = _fingerprint_article(
+                    {
+                        "url": normalized_url or "",
+                        "title": article.get("title", ""),
+                        "source": article.get("source") or article.get("source_name", ""),
+                    }
+                )
+                existing = (
+                    session.query(IntakeItem)
+                    .filter(
+                        IntakeItem.case_id == case_id,
+                        IntakeItem.fingerprint == fingerprint,
+                    )
+                    .order_by(IntakeItem.created_at.desc())
+                    .first()
+                )
+
+                payload = {
+                    **article,
+                    "url": normalized_url,
+                    "link": normalized_url,
+                }
+                if existing is None:
+                    existing = IntakeItem(
+                        id=str(uuid.uuid4()),
+                        case_id=case_id,
+                        url=normalized_url,
+                        title=article.get("title") or "Untitled Article",
+                        source_name=article.get("source") or article.get("source_name"),
+                        published_at=str(
+                            article.get("published_at") or article.get("timestamp") or ""
+                        ),
+                        fingerprint=fingerprint,
+                        content=article.get("content"),
+                        capture_type=capture_type,
+                        source_type=article.get("source_type", "rss"),
+                        raw_payload=payload,
+                        intake_status="PENDING",
+                        first_seen_at=now,
+                        last_seen_at=now,
+                    )
+                    session.add(existing)
+                else:
+                    existing.url = normalized_url or existing.url
+                    existing.title = article.get("title") or existing.title
+                    existing.source_name = (
+                        article.get("source") or article.get("source_name") or existing.source_name
+                    )
+                    existing.published_at = str(
+                        article.get("published_at")
+                        or article.get("timestamp")
+                        or existing.published_at
+                        or ""
+                    )
+                    existing.content = article.get("content", existing.content)
+                    existing.capture_type = capture_type
+                    existing.source_type = article.get("source_type", existing.source_type)
+                    existing.raw_payload = payload
+                    existing.last_seen_at = now
+                    if existing.intake_status == "FAILED":
+                        existing.intake_status = "PENDING"
+                        existing.error_message = None
+                        existing.processed_at = None
+                        existing.processed_event_id = None
+                queued.append(existing)
+
+            session.commit()
+            return queued
+        finally:
+            session.close()
+
+    async def capture_url_to_intake(
+        self, url: str, *, case_id: str | None = None
+    ) -> list[IntakeItem]:
+        """Fetch a single URL and persist it to the intake queue."""
+        article = await fetch_article_content(url)
+        return self.ingest_articles(
+            [article],
+            capture_type="manual_url",
+            case_id=case_id,
+        )
+
+    async def process_intake_queue(
+        self,
+        *,
+        limit: int | None = None,
+        case_id: str | None = None,
+        intake_ids: list[str] | None = None,
+    ) -> dict[str, int]:
+        """Process pending intake records through the AI pipeline."""
+        session = get_database().get_session_sync()
+        try:
+            query = session.query(IntakeItem)
+            if intake_ids:
+                query = query.filter(IntakeItem.id.in_(intake_ids))
+            else:
+                query = query.filter(IntakeItem.intake_status == "PENDING")
+            if case_id is not None:
+                query = query.filter(IntakeItem.case_id == case_id)
+            items = query.order_by(IntakeItem.created_at.asc()).all()
+            if limit is not None:
+                items = items[:limit]
+            item_ids = [item.id for item in items]
+        finally:
+            session.close()
+
+        processed = 0
+        failed = 0
+        for item_id in item_ids:
+            ok = await self._process_intake_item(item_id)
+            if ok:
+                processed += 1
+            else:
+                failed += 1
+
+        return {
+            "processed": processed,
+            "failed": failed,
+            "selected": len(item_ids),
+        }
 
     async def run_case(
         self,
@@ -537,6 +703,172 @@ class TopicCaseService:
         metadata = context.case.metadata_json or {}
         context.bootstrap_result = dict(metadata.get("bootstrap") or {}) or None
         context.exception_queue = list(metadata.get("exception_queue") or [])
+
+    async def _process_intake_item(self, intake_id: str) -> bool:
+        session = get_database().get_session_sync()
+        try:
+            item = session.query(IntakeItem).filter(IntakeItem.id == intake_id).first()
+            if item is None:
+                return False
+            item.intake_status = "PROCESSING"
+            item.error_message = None
+            session.commit()
+
+            article_payload = dict(item.raw_payload or {})
+            article_payload.setdefault("title", item.title)
+            article_payload.setdefault("content", item.content or "")
+            article_payload.setdefault("link", item.url)
+            article_payload.setdefault("url", item.url)
+            article_payload.setdefault("source_name", item.source_name or "")
+            article_payload.setdefault("published_at", item.published_at)
+            article_payload.setdefault("timestamp", item.published_at or _utcnow().isoformat())
+            article_payload.setdefault("source_type", item.source_type)
+
+            if item.case_id:
+                case = session.query(TopicCase).filter(TopicCase.id == item.case_id).first()
+                if case is None:
+                    item.intake_status = "FAILED"
+                    item.error_message = f"Case {item.case_id} not found"
+                    session.commit()
+                    return False
+                case_article = self._ensure_case_article_from_intake(session, item)
+                session.commit()
+                event = await self._process_case_article(case, case_article)
+                create_review = True
+                confirmed_parties = (
+                    (case.metadata_json or {}).get("bootstrap", {}).get(
+                        "confirmed_parties", []
+                    )
+                )
+            else:
+                event = await self.ai_workflow.process_article(article_payload)
+                create_review = True
+                confirmed_parties = None
+
+            if event is None:
+                item.intake_status = "FAILED"
+                item.error_message = "No claims extracted from intake item"
+                session.commit()
+                return False
+
+            stored = store_event_in_db(
+                event,
+                case_id=item.case_id,
+                create_review=create_review,
+                confirmed_parties=confirmed_parties,
+            )
+            if not stored:
+                item.intake_status = "FAILED"
+                item.error_message = "Failed to persist processed event"
+                session.commit()
+                return False
+
+            item.intake_status = "PROCESSED"
+            item.processed_event_id = event["id"]
+            item.processed_at = _utcnow()
+            item.error_message = None
+            item.last_seen_at = _utcnow()
+
+            if item.case_id:
+                self._refresh_case_metrics(session, item.case_id)
+
+            session.commit()
+            return True
+        except Exception as exc:
+            logger.exception("Failed to process intake item %s", intake_id)
+            failing = session.query(IntakeItem).filter(IntakeItem.id == intake_id).first()
+            if failing is not None:
+                failing.intake_status = "FAILED"
+                failing.error_message = str(exc)
+                session.commit()
+            return False
+        finally:
+            session.close()
+
+    def _ensure_case_article_from_intake(
+        self, session, intake_item: IntakeItem
+    ) -> CaseArticle:
+        existing = (
+            session.query(CaseArticle)
+            .filter(
+                CaseArticle.case_id == intake_item.case_id,
+                CaseArticle.url == (intake_item.url or f"urn:intake:{intake_item.id}"),
+            )
+            .first()
+        )
+        payload = dict(intake_item.raw_payload or {})
+        if existing is None:
+            existing = CaseArticle(
+                id=str(uuid.uuid4()),
+                case_id=intake_item.case_id,
+                url=intake_item.url or f"urn:intake:{intake_item.id}",
+                title=intake_item.title,
+                source=intake_item.source_name,
+                published_at=intake_item.published_at or "",
+                relevance_score=float(payload.get("relevance_score", 0.0) or 0.0),
+                fingerprint=intake_item.fingerprint,
+                content=intake_item.content,
+                raw_payload=payload,
+                first_seen_at=intake_item.first_seen_at or _utcnow(),
+                last_seen_at=_utcnow(),
+                is_new=1,
+                source_type=intake_item.source_type,
+                source_metadata={
+                    "capture_type": intake_item.capture_type,
+                    "intake_id": intake_item.id,
+                    **(payload.get("source_metadata", {}) or {}),
+                },
+            )
+            session.add(existing)
+        else:
+            existing.title = intake_item.title or existing.title
+            existing.source = intake_item.source_name or existing.source
+            existing.published_at = intake_item.published_at or existing.published_at
+            existing.content = intake_item.content or existing.content
+            existing.raw_payload = payload
+            existing.last_seen_at = _utcnow()
+            existing.source_type = intake_item.source_type or existing.source_type
+            existing.source_metadata = {
+                **(existing.source_metadata or {}),
+                "capture_type": intake_item.capture_type,
+                "intake_id": intake_item.id,
+                **(payload.get("source_metadata", {}) or {}),
+            }
+        return existing
+
+    def _refresh_case_metrics(self, session, case_id: str) -> None:
+        case = session.query(TopicCase).filter(TopicCase.id == case_id).first()
+        if case is None:
+            return
+        case.article_count = (
+            session.query(CaseArticle).filter(CaseArticle.case_id == case_id).count()
+        )
+        case.event_count = session.query(Event).filter(Event.case_id == case_id).count()
+        reviews = (
+            session.query(Review)
+            .join(Event, Review.event_id == Event.id)
+            .filter(Event.case_id == case_id)
+            .all()
+        )
+        metadata_json = dict(case.metadata_json or {})
+        metadata_json["last_intake_processed_at"] = _utcnow().isoformat()
+        metadata_json["intake_summary"] = {
+            "processed_items": session.query(IntakeItem)
+            .filter(
+                IntakeItem.case_id == case_id,
+                IntakeItem.intake_status == "PROCESSED",
+            )
+            .count(),
+            "pending_items": session.query(IntakeItem)
+            .filter(
+                IntakeItem.case_id == case_id,
+                IntakeItem.intake_status == "PENDING",
+            )
+            .count(),
+        }
+        case.metadata_json = metadata_json
+        self._recompute_case_claim_aggregates(session, case_id)
+        case.open_review_items = self._compute_open_review_items(metadata_json, reviews)
 
     async def _stage_retrieve(
         self,
@@ -1849,6 +2181,7 @@ class TopicCaseService:
                 "id": claim.id,
                 "event_id": claim.event_id,
                 "claim_text": claim.claim_text,
+                "narrative_cluster_id": claim.narrative_cluster_id,
                 "verification_status": claim.verification_status.value,
                 "fact_allegation_type": claim.fact_allegation_type.value
                 if claim.fact_allegation_type

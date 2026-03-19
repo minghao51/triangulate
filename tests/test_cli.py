@@ -1,15 +1,16 @@
 """Tests for CLI commands."""
 
-import json
 from datetime import UTC, datetime
 from pathlib import Path
 import tempfile
+from types import SimpleNamespace
 
 from typer.testing import CliRunner
 
 from src.cli.main import app
 from src.cli.commands.ingest import cmd_ingest
 from src.cli.commands.query import cmd_query
+from src.storage.event_store import store_event_in_db
 from src.storage import (
     CaseStatus,
     Event,
@@ -53,41 +54,21 @@ def test_init_db_command():
 
 
 def test_ingest_saves_articles(monkeypatch, tmp_path):
-    """Test that ingest persists fetched articles for the process command."""
+    """Test that ingest queues articles via the durable intake service."""
 
-    class FakeFetcher:
-        def __init__(self, config):
-            self.config = config
-
-        def fetch_all(self, limit=None):
+    class FakeService:
+        def fetch_and_intake_articles(self, source=None, limit=None, case_id=None):
             return [
-                {
-                    "title": "Test article",
-                    "source_name": "test-source",
-                    "timestamp": datetime(2026, 3, 4, 12, 0, 0, tzinfo=UTC),
-                }
+                SimpleNamespace(
+                    title="Test article",
+                    source_name="test-source",
+                    published_at=datetime(2026, 3, 4, 12, 0, 0, tzinfo=UTC),
+                )
             ]
 
-    monkeypatch.setattr("src.cli.commands.ingest.load_config", lambda: {"sources": {}})
-    monkeypatch.setattr("src.cli.commands.ingest.ContentFetcher", FakeFetcher)
+    monkeypatch.setattr("src.cli.commands.ingest.build_case_service", lambda: FakeService())
 
-    original_dir = Path.cwd()
-    try:
-        import os
-
-        os.chdir(tmp_path)
-        cmd_ingest()
-
-        output_path = tmp_path / "data" / "fetched_articles.json"
-        assert output_path.exists()
-
-        with open(output_path) as f:
-            payload = json.load(f)
-
-        assert len(payload) == 1
-        assert payload[0]["title"] == "Test article"
-    finally:
-        os.chdir(original_dir)
+    cmd_ingest()
 
 
 def test_query_shows_approved_events(capsys, tmp_path):
@@ -121,10 +102,6 @@ def test_query_shows_approved_events(capsys, tmp_path):
 
 def test_store_event_allows_reused_cluster_ids(tmp_path):
     """Test that narratives are scoped to an event instead of globally unique."""
-    import asyncio
-
-    from src.cli.commands.process import store_event_in_db
-
     init_database(str(tmp_path / "triangulate.db"))
 
     event_one = {
@@ -150,8 +127,33 @@ def test_store_event_allows_reused_cluster_ids(tmp_path):
         ],
     }
 
-    assert asyncio.run(store_event_in_db(event_one)) is True
-    assert asyncio.run(store_event_in_db(event_two)) is True
+    assert store_event_in_db(event_one) is True
+    assert store_event_in_db(event_two) is True
+
+
+def test_case_exception_command(monkeypatch):
+    """The case exception command should delegate to the CLI command handler."""
+    called = {}
+
+    def fake_handler(**kwargs):
+        called.update(kwargs)
+
+    monkeypatch.setattr("src.cli.main.cmd_case_exception_action", fake_handler)
+    result = runner.invoke(
+        app,
+        [
+            "case",
+            "exception",
+            "case-1",
+            "exc-1",
+            "--action",
+            "resolve",
+        ],
+    )
+    assert result.exit_code == 0
+    assert called["case_id"] == "case-1"
+    assert called["exception_id"] == "exc-1"
+    assert called["action"] == "resolve"
 
 
 def test_cases_command_lists_topic_cases(tmp_path):

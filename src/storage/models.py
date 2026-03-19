@@ -119,6 +119,9 @@ class Event(Base):
     verification_status = Column(
         SQLEnum(VerificationStatus), nullable=False, index=True
     )
+    location_country_code = Column(String, nullable=True)
+    location_lat = Column(Float, nullable=True)
+    location_lon = Column(Float, nullable=True)
     created_at = Column(DateTime(timezone=True), default=utc_now, index=True)
     case_id = Column(String, ForeignKey("topic_cases.id"), index=True)
     case_run_id = Column(String, ForeignKey("case_stage_runs.id"))
@@ -310,6 +313,31 @@ class CaseArticle(Base):
     is_new = Column(Integer, nullable=False, default=1)
     source_type = Column(String, nullable=False, default="rss")
     source_metadata = Column(JSON, nullable=False, default=dict)
+
+
+class IntakeItem(Base):
+    """Durable intake queue for non-website capture and ingestion workflows."""
+
+    __tablename__ = "intake_items"
+
+    id = Column(String, primary_key=True)
+    case_id = Column(String, ForeignKey("topic_cases.id"), index=True)
+    url = Column(String)
+    title = Column(String, nullable=False)
+    source_name = Column(String)
+    published_at = Column(String)
+    fingerprint = Column(String, nullable=False, index=True)
+    content = Column(Text)
+    capture_type = Column(String, nullable=False, default="source_ingest")
+    source_type = Column(String, nullable=False, default="rss")
+    raw_payload = Column(JSON, nullable=False, default=dict)
+    intake_status = Column(String, nullable=False, default="PENDING", index=True)
+    error_message = Column(Text)
+    processed_event_id = Column(String, ForeignKey("events.id"), index=True)
+    first_seen_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+    last_seen_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+    processed_at = Column(DateTime(timezone=True))
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
 
 
 class MonitorCheckpoint(Base):

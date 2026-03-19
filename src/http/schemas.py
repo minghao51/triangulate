@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field
 
 
 AutomationMode = Literal["autonomous", "blocked", "safe"]
@@ -93,6 +93,7 @@ class ClaimDTO(BaseModel):
     opposeCount: int
     sourceDiversityCount: int
     claimSignature: str
+    narrativeClusterId: str | None = None
     evidence: list[ClaimEvidenceLinkDTO] = Field(default_factory=list)
 
 
@@ -147,6 +148,9 @@ class TimelineEventDTO(BaseModel):
     summary: str | None = None
     verificationStatus: VerificationStatus
     linkedEvidenceCount: int
+    locationCountryCode: str | None = None
+    locationLat: float | None = None
+    locationLon: float | None = None
 
 
 class RunHistoryItemDTO(BaseModel):
@@ -159,6 +163,14 @@ class RunHistoryItemDTO(BaseModel):
     parseFailureCount: int
     timestamp: str | None = None
     message: str | None = None
+
+
+class NarrativeDTO(BaseModel):
+    id: str
+    clusterId: str
+    stanceSummary: str
+    sourceCount: int
+    claimCount: int = 0
 
 
 class ReportDTO(BaseModel):
@@ -175,6 +187,7 @@ class CaseTabs(BaseModel):
     parties: list[PartyDTO] = Field(default_factory=list)
     timeline: list[TimelineEventDTO] = Field(default_factory=list)
     runHistory: list[RunHistoryItemDTO] = Field(default_factory=list)
+    narratives: list[NarrativeDTO] = Field(default_factory=list)
     report: ReportDTO
 
 
@@ -183,42 +196,9 @@ class CaseDetailResponse(BaseModel):
     tabs: CaseTabs
 
 
-class CreateCaseRequest(BaseModel):
-    query: str
-    conflictDomain: str | None = None
-    confirmedParties: list[str] = Field(default_factory=list)
-    manualLinks: list[str] = Field(default_factory=list)
-    automationMode: AutomationMode = "safe"
-    maxArticles: int = 50
-    relevanceThreshold: float = 0.3
-
-    @field_validator("query")
-    @classmethod
-    def validate_query(cls, value: str) -> str:
-        normalized = value.strip()
-        if not normalized:
-            raise ValueError("query must not be empty")
-        return normalized
-
-
-class CreateCaseResponse(BaseModel):
-    id: str
-    status: CaseStatus
-    stage: CaseStage
-
-
-class ReviewCaseRequest(BaseModel):
-    decision: Literal["approve", "reject", "defer", "action_required"]
-    notes: str | None = None
-
-
-class RerunCaseRequest(BaseModel):
-    fromStage: CaseStage | None = None
-
-
-class UpdateExceptionRequest(BaseModel):
-    action: Literal["resolve", "defer", "reopen"]
-    notes: str | None = None
+class ClaimsOverviewResponse(BaseModel):
+    claims: list[ClaimDTO] = Field(default_factory=list)
+    narratives: list[NarrativeDTO] = Field(default_factory=list)
 
 
 class HealthResponse(BaseModel):

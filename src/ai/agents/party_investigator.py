@@ -57,7 +57,7 @@ Output format (JSON):
     {{
       "claim_text": "A claim from our perspective not mentioned in the article",
       "confidence": "HIGH" | "MEDIUM" | "LOW",
-      "sources": ["Official statement", "Press release", etc.]
+      "sources": ["Official statement", "Press release", "Government report"]
     }}
   ],
   "party_stance": {{

@@ -20,12 +20,23 @@ logger = logging.getLogger(__name__)
 # Load local .env early so LLM settings are available in scripts/CLI runs.
 load_dotenv()
 
-
 # Status codes that should trigger retry
 RETRY_STATUS_CODES = {408, 429, 500, 502, 503, 504}
 
 # Status codes that should fail immediately (no retry)
 FAIL_FAST_STATUS_CODES = {401, 403}
+
+# Retryable error phrases
+RETRYABLE_PHRASES = {
+    "rate limit",
+    "timeout",
+    "server error",
+    "service unavailable",
+    "too many requests",
+    "request failed",
+    "connection error",
+    "empty response",
+}
 
 
 async def call_with_retry(
@@ -65,10 +76,12 @@ async def call_with_retry(
             error_str = str(e).lower()
 
             # Check for fail-fast errors (authentication)
-            if any(
-                code in error_str
-                for code in ["401", "403", "unauthorized", "forbidden"]
-            ):
+            fail_fast_markers = [
+                *(str(code) for code in FAIL_FAST_STATUS_CODES),
+                "unauthorized",
+                "forbidden",
+            ]
+            if any(code in error_str for code in fail_fast_markers):
                 logger.error(f"Authentication error - failing fast: {e}")
                 raise
 
@@ -77,12 +90,7 @@ async def call_with_retry(
                 str(code) in error_str for code in RETRY_STATUS_CODES
             ) or any(
                 phrase in error_str
-                for phrase in [
-                    "rate limit",
-                    "timeout",
-                    "server error",
-                    "service unavailable",
-                ]
+                for phrase in RETRYABLE_PHRASES
             )
 
             if is_retryable and attempt < max_retries - 1:

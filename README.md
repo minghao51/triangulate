@@ -2,17 +2,17 @@
 
 Triangulate is a Python-first investigation workflow for building topic-oriented cases from news coverage, AI analysis, and linked evidence. The current product surface is:
 
-- A CLI for retrieval, case generation, review, and monitor loops
-- A FastAPI layer that exposes case data to clients
-- A React frontend for browsing and creating investigations
+- A CLI for retrieval, case generation, review, exception handling, and monitor loops
+- A FastAPI layer that exposes persisted case data to clients
+- A React frontend for browsing investigations and operator output as a presentation layer
 
 ## Current Architecture
 
 - `src/cli/`: operator-facing commands for ingest, fetch-topic, case review, and monitor runs
-- `src/cases/`: case orchestration and read models
-- `src/http/`: frontend-facing FastAPI endpoints
+- `src/cases/`: orchestration boundary and read model construction
+- `src/http/`: read-only frontend-facing FastAPI endpoints
 - `src/storage/`: SQLite-backed persistence and migrations
-- `frontend/`: React app consuming the `/api/cases*` endpoints
+- `frontend/`: React app consuming the read-only `/api/cases*` endpoints
 
 The codebase currently runs as a local Python application backed by SQLite. Older design material for Node/NestJS, Postgres, ArchiveBox, and other aspirational architecture has been moved under [`docs/archive/`](docs/archive/README.md).
 
@@ -22,6 +22,7 @@ The codebase currently runs as a local Python application backed by SQLite. Olde
 - Documentation index: [`docs/README.md`](docs/README.md)
 - Architecture as built: [`docs/architecture/system-overview.md`](docs/architecture/system-overview.md)
 - CLI reference: [`docs/reference/cli.md`](docs/reference/cli.md)
+- CLI operations guide: [`docs/reference/cli-operations.md`](docs/reference/cli-operations.md)
 - HTTP API reference: [`docs/reference/http-api.md`](docs/reference/http-api.md)
 - Topic retrieval details: [`docs/features/topic-based-retrieval.md`](docs/features/topic-based-retrieval.md)
 - Frontend setup: [`frontend/README.md`](frontend/README.md)
@@ -62,6 +63,8 @@ Start the FastAPI server for the frontend:
 ```bash
 uv run triangulate serve
 ```
+
+The website is presentation-only. Use the CLI, GitHub Actions, or background operators to trigger ingestion, case creation, reruns, reviews, and exception handling.
 
 ## Repository Layout
 

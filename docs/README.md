@@ -8,6 +8,10 @@ The active documentation tree is organized by purpose instead of by date.
 - [`architecture/`](architecture/system-overview.md): current system layout and runtime boundaries
 - [`features/`](features/topic-based-retrieval.md): feature-specific behavior and operator notes
 - [`reference/`](reference/cli.md): CLI and HTTP interface reference
+  Key operator docs:
+  [`reference/cli.md`](reference/cli.md),
+  [`reference/cli-operations.md`](reference/cli-operations.md),
+  [`reference/http-api.md`](reference/http-api.md)
 
 ## Historical Material
 

@@ -9,6 +9,7 @@ from src.ai.agents.clusterer import cluster_claims
 from src.ai.agents.narrator import narrate_cluster
 from src.ai.agents.classifier import classify_verification, classify_event_verification
 from src.ai.agents.party_classifier import classify_parties
+from src.ai.geocoder import geocode_with_retry
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +32,31 @@ def _normalize_agent_result(
         "fallback_used": False,
         "raw_response_excerpt": "",
     }
+
+
+def _extract_location(event_data: dict[str, Any], article: dict[str, Any]) -> dict[str, Any]:
+    where_text = ""
+    for claim in event_data.get("claims", []):
+        claim_where = claim.get("where", "").strip()
+        if claim_where and len(claim_where) > 2:
+            where_text = claim_where
+            break
+    if not where_text:
+        source_metadata = article.get("source_metadata", {})
+        country = source_metadata.get("country", "").strip()
+        if country:
+            where_text = country
+    if where_text:
+        geo_result = geocode_with_retry(where_text)
+        if geo_result:
+            event_data["location_country_code"] = geo_result.country_code
+            event_data["location_lat"] = geo_result.lat
+            event_data["location_lon"] = geo_result.lon
+    if "location_country_code" not in event_data:
+        event_data["location_country_code"] = None
+        event_data["location_lat"] = None
+        event_data["location_lon"] = None
+    return event_data
 
 
 class AIWorkflow:
@@ -132,6 +158,7 @@ class AIWorkflow:
             narrative = narrative_result.get("output", {})
             narrative["cluster_id"] = cluster_id
             narrative["claim_count"] = len(claims_in_cluster)
+            narrative["source_count"] = 1 if claims_in_cluster else 0
             narrative["llm_metadata"] = {
                 key: narrative_result.get(key)
                 for key in (
@@ -191,6 +218,8 @@ class AIWorkflow:
                 ],
             },
         }
+
+        event_data = _extract_location(event_data, article)
 
         logger.info(
             f"Processed article into event with {len(claims)} claims, "

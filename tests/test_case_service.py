@@ -15,6 +15,7 @@ from src.storage import (
     CaseStatus,
     EvidenceItem,
     Event,
+    IntakeItem,
     Party,
     Review,
     ReviewStatus,
@@ -777,3 +778,97 @@ async def test_case_persists_bootstrap_confirmed_party_provenance(monkeypatch, t
     detail = service.get_case_details(case.id)
     assert detail is not None
     assert detail["parties"][0]["is_bootstrap_confirmed"] is True
+
+
+def test_ingest_articles_persists_to_durable_intake_queue(tmp_path):
+    service = make_service(tmp_path)
+
+    queued = service.ingest_articles(
+        [
+            {
+                "url": "https://example.com/a",
+                "title": "Article A",
+                "source_name": "Example",
+                "content": "Alpha update",
+                "source_type": "rss",
+            }
+        ],
+        capture_type="source_ingest",
+    )
+
+    assert len(queued) == 1
+
+    session = init_database(str(tmp_path / "triangulate.db")).get_session_sync()
+    try:
+        stored = session.query(IntakeItem).all()
+        assert len(stored) == 1
+        assert stored[0].intake_status == "PENDING"
+        assert stored[0].title == "Article A"
+    finally:
+        session.close()
+
+
+@pytest.mark.asyncio
+async def test_process_intake_queue_can_attach_saved_capture_to_case(monkeypatch, tmp_path):
+    service = make_service(tmp_path)
+
+    case = TopicCase(
+        id="case-1",
+        query="Example topic",
+        slug="example-topic",
+        status=CaseStatus.PROCESSING,
+        metadata_json={"bootstrap": {"confirmed_parties": ["Alpha"]}},
+    )
+    session = init_database(str(tmp_path / "triangulate.db")).get_session_sync()
+    try:
+        session.add(case)
+        session.commit()
+    finally:
+        session.close()
+
+    async def fake_process(article):
+        return {
+            "id": "event-1",
+            "timestamp": datetime(2026, 3, 8, 12, 0, tzinfo=UTC),
+            "title": article["title"],
+            "summary": article["content"][:500],
+            "verification_status": "PROBABLE",
+            "claims": [
+                {
+                    "claim": "Alpha happened",
+                    "who": ["Alpha"],
+                    "verification_status": "PROBABLE",
+                }
+            ],
+            "narratives": [
+                {"cluster_id": "0", "stance_summary": "Narrative", "claim_count": 1}
+            ],
+            "parties": [{"canonical_name": "Alpha", "aliases": ["Alpha"]}],
+        }
+
+    monkeypatch.setattr(service.ai_workflow, "process_article", fake_process)
+    queued = service.ingest_articles(
+        [
+            {
+                "url": "https://example.com/manual",
+                "title": "Manual capture",
+                "source_name": "Manual",
+                "content": "Alpha happened",
+                "source_type": "manual",
+            }
+        ],
+        capture_type="manual_url",
+        case_id="case-1",
+    )
+    summary = await service.process_intake_queue(intake_ids=[queued[0].id])
+    assert summary["processed"] == 1
+
+    session = init_database(str(tmp_path / "triangulate.db")).get_session_sync()
+    try:
+        stored_intake = session.query(IntakeItem).filter(IntakeItem.id == queued[0].id).first()
+        assert stored_intake is not None
+        assert stored_intake.intake_status == "PROCESSED"
+        assert session.query(Event).filter(Event.case_id == "case-1").count() == 1
+        assert session.query(CaseArticle).filter(CaseArticle.case_id == "case-1").count() == 1
+    finally:
+        session.close()

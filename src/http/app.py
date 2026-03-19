@@ -9,19 +9,17 @@ from fastapi import APIRouter, Depends, FastAPI, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
 
 from src.cases import TopicCaseService
-from src.storage import CaseStageName
-
 from .dependencies import get_case_service
-from .mappers import map_case_detail, map_case_list_item, map_create_case_response
+from .mappers import (
+    map_case_detail,
+    map_case_list_item,
+    map_claims_overview,
+)
 from .schemas import (
     CaseDetailResponse,
     CaseListItem,
-    CreateCaseRequest,
-    CreateCaseResponse,
+    ClaimsOverviewResponse,
     HealthResponse,
-    RerunCaseRequest,
-    ReviewCaseRequest,
-    UpdateExceptionRequest,
 )
 
 
@@ -62,6 +60,14 @@ def get_case_claims(case_id: str, service: TopicCaseService = Depends(get_case_s
     return _load_case_detail_or_404(service, case_id).tabs.claims
 
 
+@router.get("/api/cases/{case_id}/claims/overview", response_model=ClaimsOverviewResponse)
+def get_case_claims_overview(
+    case_id: str, service: TopicCaseService = Depends(get_case_service)
+) -> ClaimsOverviewResponse:
+    detail = _load_raw_case_detail_or_404(service, case_id)
+    return map_claims_overview(detail)
+
+
 @router.get("/api/cases/{case_id}/evidence")
 def get_case_evidence(case_id: str, service: TopicCaseService = Depends(get_case_service)):
     return _load_case_detail_or_404(service, case_id).tabs.evidence
@@ -90,75 +96,6 @@ def get_case_run_history(case_id: str, service: TopicCaseService = Depends(get_c
 @router.get("/api/cases/{case_id}/report")
 def get_case_report(case_id: str, service: TopicCaseService = Depends(get_case_service)):
     return _load_case_detail_or_404(service, case_id).tabs.report
-
-
-@router.post("/api/cases", response_model=CreateCaseResponse)
-async def create_case(
-    payload: CreateCaseRequest,
-    service: TopicCaseService = Depends(get_case_service),
-) -> CreateCaseResponse:
-    case = await service.run_case(
-        query=payload.query,
-        conflict=payload.conflictDomain,
-        confirmed_parties=payload.confirmedParties,
-        manual_links=payload.manualLinks,
-        max_articles=payload.maxArticles,
-        relevance_threshold=payload.relevanceThreshold,
-        automation_mode=payload.automationMode,
-    )
-    return map_create_case_response(case)
-
-
-@router.post("/api/cases/{case_id}/review", response_model=CaseDetailResponse)
-def review_case(
-    case_id: str,
-    payload: ReviewCaseRequest,
-    service: TopicCaseService = Depends(get_case_service),
-) -> CaseDetailResponse:
-    try:
-        service.review_case(case_id, payload.decision, payload.notes)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return _load_case_detail_or_404(service, case_id)
-
-
-@router.post("/api/cases/{case_id}/rerun", response_model=CaseDetailResponse)
-async def rerun_case(
-    case_id: str,
-    payload: RerunCaseRequest,
-    service: TopicCaseService = Depends(get_case_service),
-) -> CaseDetailResponse:
-    try:
-        start_stage = (
-            CaseStageName[payload.fromStage]
-            if payload.fromStage is not None
-            else None
-        )
-        await service.rerun_case(case_id, start_stage=start_stage)
-    except KeyError as exc:
-        raise HTTPException(status_code=400, detail="Invalid stage name") from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return _load_case_detail_or_404(service, case_id)
-
-
-@router.post("/api/cases/{case_id}/exceptions/{exception_id}", response_model=CaseDetailResponse)
-def update_exception(
-    case_id: str,
-    exception_id: str,
-    payload: UpdateExceptionRequest,
-    service: TopicCaseService = Depends(get_case_service),
-) -> CaseDetailResponse:
-    try:
-        service.update_exception_status(
-            case_id,
-            exception_id,
-            action=payload.action,
-            notes=payload.notes,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return _load_case_detail_or_404(service, case_id)
 
 
 @router.get("/api/cases/{case_id}/report/markdown")

@@ -278,6 +278,7 @@ def test_tab_endpoints_return_frontend_slices(client):
     test_client, _service = client
 
     claims = test_client.get("/api/cases/case-1/claims")
+    claims_overview = test_client.get("/api/cases/case-1/claims/overview")
     evidence = test_client.get("/api/cases/case-1/evidence")
     exceptions = test_client.get("/api/cases/case-1/exceptions")
     parties = test_client.get("/api/cases/case-1/parties")
@@ -286,6 +287,7 @@ def test_tab_endpoints_return_frontend_slices(client):
     report = test_client.get("/api/cases/case-1/report")
 
     assert claims.json()[0]["text"] == "Claim text"
+    assert claims_overview.json()["claims"][0]["text"] == "Claim text"
     assert evidence.json()[0]["linkedClaims"] == ["claim-1"]
     assert exceptions.json()[0]["recommendedAction"] == "Provide more links"
     assert exceptions.json()[0]["status"] == "open"
@@ -297,85 +299,22 @@ def test_tab_endpoints_return_frontend_slices(client):
     assert exceptions.json()[1]["isOpen"] is False
 
 
-def test_create_case_validates_and_calls_service(client):
-    test_client, service = client
+def test_mutation_routes_are_not_exposed(client):
+    test_client, _service = client
 
-    invalid = test_client.post("/api/cases", json={"query": "   "})
-    assert invalid.status_code == 422
-
-    response = test_client.post(
-        "/api/cases",
-        json={
-            "query": "New case",
-            "conflictDomain": "Energy Security",
-            "confirmedParties": ["Alpha"],
-            "manualLinks": ["https://example.com/a"],
-            "automationMode": "blocked",
-            "maxArticles": 12,
-            "relevanceThreshold": 0.5,
-        },
-    )
-    assert response.status_code == 200
-    assert response.json() == {
-        "id": "new-case",
-        "status": "review ready",
-        "stage": "BOOTSTRAP",
-    }
-    assert service.created_payload == {
-        "query": "New case",
-        "conflict": "Energy Security",
-        "confirmed_parties": ["Alpha"],
-        "manual_links": ["https://example.com/a"],
-        "max_articles": 12,
-        "relevance_threshold": 0.5,
-        "automation_mode": "blocked",
-    }
-
-
-def test_review_endpoint_calls_service(client):
-    test_client, service = client
-    response = test_client.post(
+    assert test_client.post("/api/cases", json={"query": "New case"}).status_code == 405
+    assert test_client.post(
         "/api/cases/case-1/review",
-        json={"decision": "action_required", "notes": "Needs analyst review"},
-    )
-    assert response.status_code == 200
-    assert response.json()["case"]["id"] == "case-1"
-    assert service.review_payload == {
-        "case_id": "case-1",
-        "decision": "action_required",
-        "notes": "Needs analyst review",
-    }
-
-
-def test_rerun_endpoint_calls_service(client):
-    test_client, service = client
-    response = test_client.post(
+        json={"decision": "action_required"},
+    ).status_code == 404
+    assert test_client.post(
         "/api/cases/case-1/rerun",
         json={"fromStage": "RETRIEVE"},
-    )
-    assert response.status_code == 200
-    assert response.json()["case"]["id"] == "case-1"
-    assert service.rerun_payload == {
-        "case_id": "case-1",
-        "start_stage": "RETRIEVE",
-        "output_dir": None,
-    }
-
-
-def test_exception_endpoint_calls_service(client):
-    test_client, service = client
-    response = test_client.post(
+    ).status_code == 404
+    assert test_client.post(
         "/api/cases/case-1/exceptions/exc-1",
-        json={"action": "resolve", "notes": "Handled"},
-    )
-    assert response.status_code == 200
-    assert response.json()["case"]["id"] == "case-1"
-    assert service.exception_payload == {
-        "case_id": "case-1",
-        "exception_id": "exc-1",
-        "action": "resolve",
-        "notes": "Handled",
-    }
+        json={"action": "resolve"},
+    ).status_code == 404
 
 
 class FakePartyWorkflow:

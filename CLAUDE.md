@@ -12,4 +12,5 @@
     - uv run <command> (e.g., uv run pytest, uv run ruff check .) to execute commands within the managed environment.
     - uv add <package> to add a dependency to your pyproject.toml file.
 8. When creating or generating Markdown (.md) files, you must strict adhere to the following naming convention: YYYYMMDD-filename.md
+9. Frontend verification: After any frontend changes, always run `npm run check` (lint + typecheck + build) and `npm test` to verify correctness before considering the task complete.
 ---

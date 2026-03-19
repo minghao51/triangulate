@@ -84,6 +84,10 @@ class MigrationManager:
                 self._apply_evidence_and_bootstrap_schema(session)
             elif migration.version == 4:
                 self._apply_party_provenance_schema(session)
+            elif migration.version == 5:
+                self._apply_intake_queue_schema(session)
+            elif migration.version == 6:
+                self._apply_event_location_schema(session)
             else:
                 # Apply migration SQL
                 session.execute(text(migration.up_sql))
@@ -295,6 +299,87 @@ class MigrationManager:
                 """
             )
         )
+
+    def _apply_intake_queue_schema(self, session) -> None:
+        """Apply durable intake queue schema idempotently."""
+        session.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS intake_items (
+                    id TEXT PRIMARY KEY,
+                    case_id TEXT,
+                    url TEXT,
+                    title TEXT NOT NULL,
+                    source_name TEXT,
+                    published_at TEXT,
+                    fingerprint TEXT NOT NULL,
+                    content TEXT,
+                    capture_type TEXT NOT NULL DEFAULT 'source_ingest',
+                    source_type TEXT NOT NULL DEFAULT 'rss',
+                    raw_payload JSON,
+                    intake_status TEXT NOT NULL DEFAULT 'PENDING',
+                    error_message TEXT,
+                    processed_event_id TEXT,
+                    first_seen_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    last_seen_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    processed_at TIMESTAMP,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY(case_id) REFERENCES topic_cases(id),
+                    FOREIGN KEY(processed_event_id) REFERENCES events(id)
+                )
+                """
+            )
+        )
+        session.execute(
+            text(
+                """
+                CREATE INDEX IF NOT EXISTS ix_intake_items_case_id
+                    ON intake_items (case_id)
+                """
+            )
+        )
+        session.execute(
+            text(
+                """
+                CREATE INDEX IF NOT EXISTS ix_intake_items_fingerprint
+                    ON intake_items (fingerprint)
+                """
+            )
+        )
+        session.execute(
+            text(
+                """
+                CREATE INDEX IF NOT EXISTS ix_intake_items_intake_status
+                    ON intake_items (intake_status)
+                """
+            )
+        )
+        session.execute(
+            text(
+                """
+                CREATE INDEX IF NOT EXISTS ix_intake_items_processed_event_id
+                    ON intake_items (processed_event_id)
+                """
+            )
+        )
+
+    def _apply_event_location_schema(self, session) -> None:
+        """Add event location columns if they are missing."""
+        inspector = inspect(session.bind)
+        existing_tables = set(inspector.get_table_names())
+        if "events" not in existing_tables:
+            return
+        existing_columns = {column["name"] for column in inspector.get_columns("events")}
+        missing_columns = {
+            "location_country_code": "TEXT",
+            "location_lat": "REAL",
+            "location_lon": "REAL",
+        }
+        for column_name, column_type in missing_columns.items():
+            if column_name not in existing_columns:
+                session.execute(
+                    text(f"ALTER TABLE events ADD COLUMN {column_name} {column_type}")
+                )
         session.execute(
             text(
                 """
@@ -606,6 +691,56 @@ MIGRATIONS: list[Migration] = [
         name="Persist party provenance metadata",
         up="""
         ALTER TABLE parties ADD COLUMN is_bootstrap_confirmed INTEGER NOT NULL DEFAULT 0;
+        """,
+        down="""
+        """,
+    ),
+    Migration(
+        version=5,
+        name="Add durable intake queue",
+        up="""
+        CREATE TABLE IF NOT EXISTS intake_items (
+            id TEXT PRIMARY KEY,
+            case_id TEXT,
+            url TEXT,
+            title TEXT NOT NULL,
+            source_name TEXT,
+            published_at TEXT,
+            fingerprint TEXT NOT NULL,
+            content TEXT,
+            capture_type TEXT NOT NULL DEFAULT 'source_ingest',
+            source_type TEXT NOT NULL DEFAULT 'rss',
+            raw_payload JSON,
+            intake_status TEXT NOT NULL DEFAULT 'PENDING',
+            error_message TEXT,
+            processed_event_id TEXT,
+            first_seen_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            last_seen_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            processed_at TIMESTAMP,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(case_id) REFERENCES topic_cases(id),
+            FOREIGN KEY(processed_event_id) REFERENCES events(id)
+        );
+        CREATE INDEX IF NOT EXISTS ix_intake_items_case_id ON intake_items (case_id);
+        CREATE INDEX IF NOT EXISTS ix_intake_items_fingerprint ON intake_items (fingerprint);
+        CREATE INDEX IF NOT EXISTS ix_intake_items_intake_status ON intake_items (intake_status);
+        CREATE INDEX IF NOT EXISTS ix_intake_items_processed_event_id ON intake_items (processed_event_id);
+        """,
+        down="""
+        DROP INDEX IF EXISTS ix_intake_items_processed_event_id;
+        DROP INDEX IF EXISTS ix_intake_items_intake_status;
+        DROP INDEX IF EXISTS ix_intake_items_fingerprint;
+        DROP INDEX IF EXISTS ix_intake_items_case_id;
+        DROP TABLE IF EXISTS intake_items;
+        """,
+    ),
+    Migration(
+        version=6,
+        name="Add location columns to events",
+        up="""
+        ALTER TABLE events ADD COLUMN location_country_code TEXT;
+        ALTER TABLE events ADD COLUMN location_lat REAL;
+        ALTER TABLE events ADD COLUMN location_lon REAL;
         """,
         down="""
         """,

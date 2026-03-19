@@ -40,4 +40,4 @@ def test_build_case_service_runs_migrations(tmp_path, monkeypatch):
             text("SELECT MAX(version) FROM _migrations")
         ).scalar()
 
-    assert current_version == 4
+    assert current_version == 6

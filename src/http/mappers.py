@@ -12,14 +12,15 @@ from .schemas import (
     CaseBanner,
     CaseCounts,
     CaseDetailResponse,
+    ClaimsOverviewResponse,
     CaseListItem,
     CaseTabs,
     ClaimDTO,
     ClaimEvidenceLinkDTO,
-    CreateCaseResponse,
     EvidenceDTO,
     EvidenceVerificationCheckDTO,
     ExceptionDTO,
+    NarrativeDTO,
     PartyDTO,
     ReportDTO,
     RunHistoryItemDTO,
@@ -169,6 +170,7 @@ def _map_claim(claim: dict[str, Any]) -> ClaimDTO:
         opposeCount=claim.get("oppose_count", 0),
         sourceDiversityCount=claim.get("source_diversity_count", 0),
         claimSignature=claim.get("claim_signature") or claim["id"],
+        narrativeClusterId=claim.get("narrative_cluster_id"),
         evidence=[
             ClaimEvidenceLinkDTO(
                 id=item["id"],
@@ -183,6 +185,14 @@ def _map_claim(claim: dict[str, Any]) -> ClaimDTO:
             for item in claim.get("evidence", [])
         ],
     )
+
+
+def _collect_claim_ids_by_evidence(claims: list[dict[str, Any]]) -> dict[str, list[str]]:
+    claim_ids_by_evidence: dict[str, list[str]] = {}
+    for claim in claims:
+        for evidence in claim.get("evidence", []):
+            claim_ids_by_evidence.setdefault(evidence["id"], []).append(claim["id"])
+    return claim_ids_by_evidence
 
 
 def _map_evidence(evidence: dict[str, Any], claim_ids_by_evidence: dict[str, list[str]]) -> EvidenceDTO:
@@ -256,6 +266,9 @@ def _map_timeline_event(event: dict[str, Any], claims: list[dict[str, Any]]) -> 
         summary=event.get("summary"),
         verificationStatus=_map_verification_status(event.get("verification_status")),
         linkedEvidenceCount=len(linked_evidence_ids),
+        locationCountryCode=event.get("location_country_code"),
+        locationLat=event.get("location_lat"),
+        locationLon=event.get("location_lon"),
     )
 
 
@@ -273,6 +286,36 @@ def _map_run_history(run: dict[str, Any]) -> RunHistoryItemDTO:
     )
 
 
+def _map_narrative(narrative: dict[str, Any]) -> NarrativeDTO:
+    return _map_narrative_with_claims(narrative, [])
+
+
+def _map_narrative_with_claims(
+    narrative: dict[str, Any], claims: list[dict[str, Any]]
+) -> NarrativeDTO:
+    cluster_id = narrative.get("cluster_id", "")
+    claims_in_cluster = [
+        claim for claim in claims if claim.get("narrative_cluster_id") == cluster_id
+    ]
+    source_keys = {
+        item.get("origin_url") or item.get("publisher") or item.get("id")
+        for claim in claims_in_cluster
+        for item in claim.get("evidence", [])
+        if item.get("origin_url") or item.get("publisher") or item.get("id")
+    }
+    source_count = len(source_keys)
+    if source_count == 0 and claims_in_cluster:
+        source_count = max(narrative.get("source_count", 0), 1)
+
+    return NarrativeDTO(
+        id=narrative["id"],
+        clusterId=cluster_id,
+        stanceSummary=narrative.get("stance_summary", ""),
+        sourceCount=source_count,
+        claimCount=len(claims_in_cluster),
+    )
+
+
 def _load_report_content(path: str | None) -> str | None:
     if not path:
         return None
@@ -284,10 +327,7 @@ def _load_report_content(path: str | None) -> str | None:
 
 def map_case_detail(detail: dict[str, Any]) -> CaseDetailResponse:
     claims = detail.get("claims", [])
-    claim_ids_by_evidence: dict[str, list[str]] = {}
-    for claim in claims:
-        for evidence in claim.get("evidence", []):
-            claim_ids_by_evidence.setdefault(evidence["id"], []).append(claim["id"])
+    claim_ids_by_evidence = _collect_claim_ids_by_evidence(claims)
 
     return CaseDetailResponse(
         case=_map_case_banner(detail),
@@ -310,6 +350,10 @@ def map_case_detail(detail: dict[str, Any]) -> CaseDetailResponse:
                 _map_run_history(item)
                 for item in detail.get("stage_runs", [])
             ],
+            narratives=[
+                _map_narrative_with_claims(item, claims)
+                for item in detail.get("narratives", [])
+            ],
             report=ReportDTO(
                 status="generated" if detail["case"].get("report_path") else "pending",
                 markdownPath=detail["case"].get("report_path"),
@@ -320,9 +364,12 @@ def map_case_detail(detail: dict[str, Any]) -> CaseDetailResponse:
     )
 
 
-def map_create_case_response(case: TopicCase) -> CreateCaseResponse:
-    return CreateCaseResponse(
-        id=case.id,
-        status=_map_status(case.status.value if case.status else None),
-        stage=(case.current_stage.value if case.current_stage else "BOOTSTRAP"),
+def map_claims_overview(detail: dict[str, Any]) -> ClaimsOverviewResponse:
+    claims = detail.get("claims", [])
+    return ClaimsOverviewResponse(
+        claims=[_map_claim(claim) for claim in claims],
+        narratives=[
+            _map_narrative_with_claims(item, claims)
+            for item in detail.get("narratives", [])
+        ],
     )

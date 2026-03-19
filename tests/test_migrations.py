@@ -25,6 +25,7 @@ def test_run_migrations_is_idempotent_on_fresh_database(tmp_path):
     assert "case_stage_runs" in inspector.get_table_names()
     assert "case_artifacts" in inspector.get_table_names()
     assert "case_articles" in inspector.get_table_names()
+    assert "intake_items" in inspector.get_table_names()
     assert "monitor_checkpoints" in inspector.get_table_names()
 
     with db.get_session_sync() as session:
@@ -32,4 +33,4 @@ def test_run_migrations_is_idempotent_on_fresh_database(tmp_path):
             text("SELECT MAX(version) FROM _migrations")
         ).scalar()
 
-    assert current_version == 4
+    assert current_version == 6

@@ -14,6 +14,7 @@ from src.ai.agents.collector import collect_claims
 from src.ai.agents.party_classifier import classify_parties
 from src.ai.agents.party_investigator import investigate_from_party_perspective
 from src.ai.agents.arbiter import arbitrate_findings
+from src.ai.tracing import is_tracing_enabled
 
 logger = logging.getLogger(__name__)
 
@@ -271,7 +272,10 @@ def create_party_investigation_workflow() -> StateGraph:
     # Compile the graph
     app = workflow.compile()
 
-    logger.info("Party investigation workflow created successfully")
+    tracing_status = "enabled" if is_tracing_enabled() else "disabled"
+    logger.info(
+        f"Party investigation workflow created successfully (tracing: {tracing_status})"
+    )
 
     return app
 
