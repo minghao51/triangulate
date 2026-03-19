@@ -29,7 +29,7 @@ const PartiesTab: React.FC<PartiesTabProps> = ({ caseId, refreshToken = 0 }) => 
             <div className="parties-grid">
                 {error && <div>Failed to load parties: {error}</div>}
                 {parties.map(party => (
-                    <div key={party.id} className="party-card">
+                    <div key={party.id} className="party-card glass-panel">
                         <div className={`party-stance-bar stance-${party.overallStance}`} />
                         <div className="party-card-inner">
                             <div className="party-card-header">

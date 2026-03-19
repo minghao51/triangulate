@@ -114,7 +114,7 @@ const Dashboard: React.FC = () => {
         <div className="dashboard-content">
           {/* Metrics Grid */}
           <div className="dashboard-metrics">
-            <Card className="metric-card">
+            <Card className="metric-card glass-panel">
               <CardBody className="metric-card-body">
                 <div className="metric-icon metric-icon-primary">
                   <FileText size={20} />
@@ -126,7 +126,7 @@ const Dashboard: React.FC = () => {
               </CardBody>
             </Card>
 
-            <Card className="metric-card">
+            <Card className="metric-card glass-panel">
               <CardBody className="metric-card-body">
                 <div className="metric-icon metric-icon-success">
                   <Activity size={20} />
@@ -138,7 +138,7 @@ const Dashboard: React.FC = () => {
               </CardBody>
             </Card>
 
-            <Card className="metric-card">
+            <Card className="metric-card glass-panel">
               <CardBody className="metric-card-body">
                 <div className="metric-icon metric-icon-warning">
                   <CheckCircle size={20} />
@@ -150,7 +150,7 @@ const Dashboard: React.FC = () => {
               </CardBody>
             </Card>
 
-            <Card className="metric-card">
+            <Card className="metric-card glass-panel">
               <CardBody className="metric-card-body">
                 <div className="metric-icon metric-icon-danger">
                   <AlertTriangle size={20} />
@@ -166,7 +166,7 @@ const Dashboard: React.FC = () => {
           {/* Main Grid */}
           <div className="dashboard-grid">
             {/* Pipeline Stage Distribution */}
-            <Card className="dashboard-card dashboard-card-stages">
+            <Card className="dashboard-card dashboard-card-stages glass-panel">
               <CardHeader>
                 <CardTitle>Pipeline Stage Distribution</CardTitle>
               </CardHeader>
@@ -192,7 +192,7 @@ const Dashboard: React.FC = () => {
             </Card>
 
             {/* Cases Requiring Attention */}
-            <Card className="dashboard-card dashboard-card-attention">
+            <Card className="dashboard-card dashboard-card-attention glass-panel">
               <CardHeader>
                 <CardTitle>Requires Attention</CardTitle>
               </CardHeader>
@@ -235,7 +235,7 @@ const Dashboard: React.FC = () => {
             </Card>
 
             {/* Recent Cases */}
-            <Card className="dashboard-card dashboard-card-recent">
+            <Card className="dashboard-card dashboard-card-recent glass-panel">
               <CardHeader>
                 <CardTitle>Recent Cases</CardTitle>
               </CardHeader>
@@ -274,7 +274,7 @@ const Dashboard: React.FC = () => {
             </Card>
 
             {/* System Health */}
-            <Card className="dashboard-card dashboard-card-health">
+            <Card className="dashboard-card dashboard-card-health glass-panel">
               <CardHeader>
                 <CardTitle>System Health</CardTitle>
               </CardHeader>
@@ -309,7 +309,7 @@ const Dashboard: React.FC = () => {
           </div>
 
           {/* Quick Actions */}
-          <Card className="dashboard-card dashboard-card-actions">
+          <Card className="dashboard-card dashboard-card-actions glass-panel">
             <CardHeader>
               <CardTitle>Quick Actions</CardTitle>
             </CardHeader>
