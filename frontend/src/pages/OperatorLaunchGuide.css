@@ -1,0 +1,51 @@
+.operator-guide {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.operator-guide-header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.operator-guide-header h1 {
+  margin: 0;
+  font-size: 2rem;
+}
+
+.operator-guide-header p {
+  margin: 0;
+  max-width: 58rem;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.operator-guide-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+  gap: 1rem;
+}
+
+.operator-guide-list {
+  margin: 0;
+  padding-left: 1.25rem;
+  color: var(--text-secondary);
+  line-height: 1.7;
+}
+
+.operator-guide-commands {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.operator-command {
+  margin: 0;
+  padding: 0.875rem 1rem;
+  border-radius: var(--radius-md);
+  background: rgba(0, 0, 0, 0.24);
+  color: var(--text-primary);
+  overflow-x: auto;
+}

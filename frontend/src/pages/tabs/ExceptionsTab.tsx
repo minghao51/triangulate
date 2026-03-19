@@ -1,27 +1,17 @@
 import React, { useEffect, useState } from 'react';
 import type { Exception } from '../../types/backend-models';
-import { getExceptionsForCase, updateCaseException } from '../../services/api';
-import { AlertOctagon, AlertTriangle, Info, CheckCircle2, MoreHorizontal } from 'lucide-react';
+import { getExceptionsForCase } from '../../services/api';
+import { AlertOctagon, AlertTriangle, Info, CheckCircle2, TerminalSquare } from 'lucide-react';
 import './ExceptionsTab.css';
 
 interface ExceptionsTabProps {
   caseId: string;
-  onCaseMutated?: () => void;
   refreshToken?: number;
 }
 
-const ExceptionsTab: React.FC<ExceptionsTabProps> = ({ caseId, onCaseMutated, refreshToken = 0 }) => {
+const ExceptionsTab: React.FC<ExceptionsTabProps> = ({ caseId, refreshToken = 0 }) => {
     const [exceptions, setExceptions] = useState<Exception[]>([]);
     const [error, setError] = useState<string | null>(null);
-    const [pendingId, setPendingId] = useState<string | null>(null);
-
-    const loadExceptions = async () => {
-        if (!caseId) {
-            return;
-        }
-        const next = await getExceptionsForCase(caseId);
-        setExceptions(next);
-    };
 
     useEffect(() => {
         if (caseId) {
@@ -37,23 +27,6 @@ const ExceptionsTab: React.FC<ExceptionsTabProps> = ({ caseId, onCaseMutated, re
         }
     };
 
-    const handleExceptionAction = async (exceptionId: string, action: 'resolve' | 'defer' | 'reopen') => {
-        if (!caseId) {
-            return;
-        }
-        setPendingId(exceptionId);
-        setError(null);
-        try {
-            await updateCaseException(caseId, exceptionId, action);
-            await loadExceptions();
-            onCaseMutated?.();
-        } catch (err) {
-            setError(err instanceof Error ? err.message : 'Failed to update exception');
-        } finally {
-            setPendingId(null);
-        }
-    };
-
     return (
         <div className="exceptions-container p-base">
             <div className="exceptions-header">
@@ -64,7 +37,7 @@ const ExceptionsTab: React.FC<ExceptionsTabProps> = ({ caseId, onCaseMutated, re
             <div className="exceptions-list">
                 {error && <div>Failed to load exceptions: {error}</div>}
                 {exceptions.map(exc => (
-                    <div key={exc.id} className={`exception-card severity-${exc.severity}`}>
+                    <div key={exc.id} className={`exception-card glass-panel severity-${exc.severity}`}>
                         <div className="exc-main">
                             <div className="exc-icon">{getSeverityIcon(exc.severity)}</div>
                             <div className="exc-content">
@@ -75,20 +48,12 @@ const ExceptionsTab: React.FC<ExceptionsTabProps> = ({ caseId, onCaseMutated, re
                             </div>
                         </div>
                         <div className="exc-actions">
-                            {exc.isOpen ? (
-                                <>
-                                    <button className="btn btn-primary" disabled={pendingId === exc.id} onClick={() => handleExceptionAction(exc.id, 'resolve')}>
-                                        <CheckCircle2 size={16} /> Resolve
-                                    </button>
-                                    <button className="btn btn-secondary" disabled={pendingId === exc.id} onClick={() => handleExceptionAction(exc.id, 'defer')}>
-                                        <MoreHorizontal size={16} /> Defer
-                                    </button>
-                                </>
-                            ) : (
-                                <button className="btn btn-secondary" disabled={pendingId === exc.id} onClick={() => handleExceptionAction(exc.id, 'reopen')}>
-                                    <MoreHorizontal size={16} /> Reopen
-                                </button>
-                            )}
+                            <div className="exc-recommendation">
+                                <TerminalSquare size={14} /> CLI Only
+                            </div>
+                            <code className="exc-recommendation">
+                                {`uv run triangulate case exception ${caseId} ${exc.id} --action ${exc.isOpen ? 'resolve' : 'reopen'}`}
+                            </code>
                         </div>
                     </div>
                 ))}

@@ -10,12 +10,12 @@ import {
   Users,
   Clock,
   AlertTriangle,
-  CheckCircle2,
   X,
   RefreshCw,
+  TerminalSquare,
 } from 'lucide-react';
 import type { TopicCase } from '../types/backend-models';
-import { getCaseDetail, rerunCase, reviewCase } from '../services/api';
+import { getCaseDetail } from '../services/api';
 import { useCaseStore } from '../stores/case-store';
 import Button from '../components/design-system/Button';
 import Card from '../components/design-system/Card';
@@ -30,6 +30,7 @@ import ClaimsTab from './tabs/ClaimsTab';
 import ExceptionsTab from './tabs/ExceptionsTab';
 import PartiesTab from './tabs/PartiesTab';
 import TimelineTab from './tabs/TimelineTab';
+import MapTab from './tabs/MapTab';
 import ReportTab from './tabs/ReportTab';
 import RunHistoryTab from './tabs/RunHistoryTab';
 import { Map } from 'lucide-react';
@@ -47,7 +48,6 @@ const CaseIntelligenceCenter: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const currentPath = location.pathname.split('/').pop() || '';
-  const [actionPending, setActionPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const { setActiveCase, setCaseDetail } = useCaseStore();
@@ -69,40 +69,6 @@ const CaseIntelligenceCenter: React.FC = () => {
       setCaseDetail(detailData!);
     }
   }, [activeCase, detailData, setActiveCase, setCaseDetail]);
-
-  const handleRerun = async () => {
-    if (!id) return;
-    setActionPending(true);
-    setError(null);
-    try {
-      const detail = await rerunCase(id);
-      setActiveCase(detail.case);
-      setCaseDetail(detail);
-      refetch();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to rerun case');
-    } finally {
-      setActionPending(false);
-    }
-  };
-
-  const handleReviewAction = async (
-    decision: 'approve' | 'reject' | 'action_required'
-  ) => {
-    if (!id) return;
-    setActionPending(true);
-    setError(null);
-    try {
-      const detail = await reviewCase(id, decision);
-      setActiveCase(detail.case);
-      setCaseDetail(detail);
-      refetch();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to review case');
-    } finally {
-      setActionPending(false);
-    }
-  };
 
   const tabs: TabConfig[] = [
     { id: 'overview', label: 'Overview', icon: <FileText size={16} />, path: '' },
@@ -187,22 +153,9 @@ const CaseIntelligenceCenter: React.FC = () => {
                 size="sm"
                 icon={<RefreshCw size={14} />}
                 onClick={() => refetch()}
-                disabled={actionPending}
               >
                 Refresh
               </Button>
-              {activeCase.stage !== 'REVIEW' && activeCase.status !== 'approved' && (
-                <Button
-                  variant="primary"
-                  size="sm"
-                  icon={<Play size={14} />}
-                  onClick={handleRerun}
-                  disabled={actionPending}
-                  loading={actionPending}
-                >
-                  Run Next Stage
-                </Button>
-              )}
             </div>
           </div>
         </div>
@@ -287,8 +240,6 @@ const CaseIntelligenceCenter: React.FC = () => {
             element={
               <OverviewTab
                 activeCase={activeCase}
-                actionPending={actionPending}
-                onReviewAction={handleReviewAction}
               />
             }
           />
@@ -305,13 +256,16 @@ const CaseIntelligenceCenter: React.FC = () => {
             element={
               <ExceptionsTab
                 caseId={id!}
-                onCaseMutated={() => refetch()}
               />
             }
           />
           <Route
             path="parties"
             element={<PartiesTab caseId={id!} />}
+          />
+          <Route
+            path="map"
+            element={<MapTab caseId={id!} />}
           />
           <Route
             path="timeline"
@@ -335,9 +289,9 @@ const CaseIntelligenceCenter: React.FC = () => {
 // Overview Tab Component
 const OverviewTab: React.FC<{
   activeCase: TopicCase;
-  actionPending: boolean;
-  onReviewAction: (decision: 'approve' | 'reject' | 'action_required') => Promise<void>;
-}> = ({ activeCase, actionPending, onReviewAction }) => {
+}> = ({ activeCase }) => {
+  const operatorCommands = buildOperatorCommands(activeCase);
+
   return (
     <div className="overview-tab">
       <div className="overview-grid">
@@ -378,59 +332,70 @@ const OverviewTab: React.FC<{
           </CardBody>
         </Card>
 
-        {/* Review Actions */}
-        {activeCase.status === 'review ready' && (
-          <Card className="overview-card">
-            <CardHeader>
-              <CardTitle>Review Actions</CardTitle>
-            </CardHeader>
-            <CardBody>
-              <div className="review-actions">
-                <p className="review-description">
-                  This case is ready for review. Approve to mark as complete, or request
-                  additional action if needed.
-                </p>
-                <div className="action-buttons">
-                  <Button
-                    variant="primary"
-                    icon={<CheckCircle2 size={16} />}
-                    onClick={() => onReviewAction('approve')}
-                    disabled={actionPending || activeCase.openExceptionsCount > 0}
-                    loading={actionPending}
-                  >
-                    Approve Case
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    onClick={() => onReviewAction('action_required')}
-                    disabled={actionPending}
-                  >
-                    Mark Action Required
-                  </Button>
-                  <Button
-                    variant="danger"
-                    onClick={() => onReviewAction('reject')}
-                    disabled={actionPending}
-                  >
-                    Reject Case
-                  </Button>
-                </div>
-                {activeCase.openExceptionsCount > 0 && (
-                  <div className="review-warning">
-                    <AlertTriangle size={14} />
-                    <span>
-                      Resolve {activeCase.openExceptionsCount} open exception
-                      {activeCase.openExceptionsCount > 1 ? 's' : ''} before approving
-                    </span>
+        <Card className="overview-card">
+          <CardHeader>
+            <CardTitle>Operator Commands</CardTitle>
+          </CardHeader>
+          <CardBody>
+            <div className="review-actions">
+              <p className="review-description">
+                This website does not trigger pipeline execution. Use the CLI or a background
+                operator to advance, review, or resolve exceptions for this case.
+              </p>
+              <div className="action-buttons" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
+                {operatorCommands.map((command) => (
+                  <div key={command.label}>
+                    <div className="review-label" style={{ marginBottom: '0.375rem' }}>
+                      <TerminalSquare size={14} /> {command.label}
+                    </div>
+                    <code className="review-value" style={{ display: 'block' }}>{command.command}</code>
                   </div>
-                )}
+                ))}
               </div>
-            </CardBody>
-          </Card>
-        )}
+              {activeCase.openExceptionsCount > 0 && (
+                <div className="review-warning">
+                  <AlertTriangle size={14} />
+                  <span>
+                    {activeCase.openExceptionsCount} open exception
+                    {activeCase.openExceptionsCount > 1 ? 's remain' : ' remains'} in the operator queue.
+                  </span>
+                </div>
+              )}
+            </div>
+          </CardBody>
+        </Card>
       </div>
     </div>
   );
 };
+
+function buildOperatorCommands(activeCase: TopicCase): Array<{ label: string; command: string }> {
+  const commands = [
+    {
+      label: 'Inspect Case State',
+      command: `uv run triangulate case show ${activeCase.id}`,
+    },
+  ];
+
+  if (activeCase.status === 'review ready') {
+    commands.push({
+      label: 'Approve Case',
+      command: `uv run triangulate case review ${activeCase.id} --decision approve`,
+    });
+    commands.push({
+      label: 'Mark Action Required',
+      command: `uv run triangulate case review ${activeCase.id} --decision action_required`,
+    });
+  }
+
+  if (activeCase.status !== 'approved') {
+    commands.push({
+      label: 'Rerun From Retrieve',
+      command: `uv run triangulate case rerun ${activeCase.id} --from retrieve`,
+    });
+  }
+
+  return commands;
+}
 
 export default CaseIntelligenceCenter;

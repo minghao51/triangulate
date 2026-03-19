@@ -56,7 +56,7 @@ const ReportTab: React.FC<ReportTabProps> = ({ caseId, refreshToken = 0 }) => {
                 </div>
             </div>
 
-            <div className="report-canvas card">
+            <div className="report-canvas glass-panel">
                 <div className="markdown-body">
                     {error && <p>Failed to load report: {error}</p>}
                     {!error && !report?.markdownContent && <p>No report has been generated yet.</p>}

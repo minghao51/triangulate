@@ -1,0 +1,135 @@
+.map-tab-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.map-tab-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.map-summary {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.map-summary-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.55rem 0.8rem;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: rgba(15, 23, 42, 0.58);
+  color: #dbe4f0;
+  font-size: 0.82rem;
+}
+
+.map-layout {
+  display: grid;
+  grid-template-columns: 1.4fr 0.9fr;
+  gap: 1rem;
+}
+
+.map-canvas {
+  position: relative;
+  min-height: 420px;
+  overflow: hidden;
+  border-radius: 24px;
+  background:
+    radial-gradient(circle at 20% 20%, rgba(56, 189, 248, 0.15), transparent 35%),
+    radial-gradient(circle at 80% 30%, rgba(250, 204, 21, 0.12), transparent 30%),
+    linear-gradient(180deg, rgba(8, 47, 73, 0.92), rgba(15, 23, 42, 0.96));
+}
+
+.map-grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(148, 163, 184, 0.12) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.12) 1px, transparent 1px);
+  background-size: 12.5% 25%;
+  opacity: 0.7;
+}
+
+.map-marker {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  background: transparent;
+  border: 0;
+  padding: 0;
+  cursor: default;
+}
+
+.map-marker-dot {
+  display: block;
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  border: 2px solid rgba(15, 23, 42, 0.95);
+  background: #f97316;
+  box-shadow: 0 0 0 6px rgba(249, 115, 22, 0.18);
+}
+
+.map-event-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  max-height: 420px;
+  overflow: auto;
+}
+
+.map-event-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.map-event-title-row {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.map-event-card h4 {
+  margin: 0;
+}
+
+.map-event-card p {
+  margin: 0;
+  color: var(--text-secondary);
+}
+
+.map-event-card code {
+  font-size: 0.85rem;
+  color: #cbd5e1;
+}
+
+.map-empty-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-height: 120px;
+  justify-content: center;
+  color: var(--text-secondary);
+}
+
+@media (max-width: 960px) {
+  .map-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .map-canvas,
+  .map-event-list {
+    min-height: 320px;
+    max-height: none;
+  }
+
+  .map-tab-header {
+    flex-direction: column;
+  }
+}

@@ -1,6 +1,6 @@
 # Frontend
 
-This directory contains the React frontend for browsing cases and creating new investigations against the Triangulate HTTP API.
+This directory contains the React frontend for browsing persisted cases and operator outputs against the read-only Triangulate HTTP API.
 
 ## Stack
 
@@ -24,11 +24,12 @@ npm run preview
 - The client reads `VITE_API_BASE_URL` to locate the backend.
 - API helpers live in `src/services/api.ts`.
 - Shared backend-facing types live in `src/types/backend-models.ts`.
+- The frontend must not initiate pipeline mutations; operators use the CLI or background workers for that.
 
 ## Current Routes
 
 - `/`: case index
-- `/cases/new`: create a new investigation
+- `/cases/new`: CLI launch guidance
 - `/cases/:id/*`: case detail views
 
 ## Notes

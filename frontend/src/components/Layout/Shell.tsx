@@ -91,7 +91,7 @@ const Shell: React.FC = () => {
             className={({ isActive }) => clsx("shell-nav-item", isActive && "active")}
           >
             <Search size={16} className="nav-icon" />
-            <span>New Investigation</span>
+            <span>CLI Launch Guide</span>
           </NavLink>
         </div>
 

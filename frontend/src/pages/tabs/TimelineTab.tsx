@@ -36,7 +36,7 @@ const TimelineTab: React.FC<TimelineTabProps> = ({ caseId, refreshToken = 0 }) =
                             {index < events.length - 1 && <div className="timeline-line"></div>}
                         </div>
 
-                        <div className="timeline-content card">
+                        <div className="timeline-content glass-panel">
                             <div className="timeline-date">{evt.timestamp ? format(parseISO(evt.timestamp), 'yyyy-MM-dd HH:mm') : 'Unknown date'}</div>
                             <h4 className="timeline-title">{evt.title}</h4>
                             <p className="timeline-summary">{evt.summary}</p>

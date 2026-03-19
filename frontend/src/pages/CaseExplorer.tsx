@@ -91,7 +91,7 @@ const CaseExplorer: React.FC = () => {
       <div className="explorer-header">
         <div className="explorer-header-left">
           <h1 className="explorer-title">Case Explorer</h1>
-          <p className="explorer-subtitle">Browse and manage all investigations</p>
+          <p className="explorer-subtitle">Browse persisted investigations and operator outputs</p>
         </div>
         <div className="explorer-header-right">
           <Button
@@ -108,7 +108,7 @@ const CaseExplorer: React.FC = () => {
             icon={<Plus size={14} />}
             onClick={() => navigate('/cases/new')}
           >
-            New Case
+            CLI Guide
           </Button>
         </div>
       </div>
@@ -178,7 +178,7 @@ const CaseExplorer: React.FC = () => {
                 {selectedCases.size > 0 && (
                   <>
                     <Button variant="ghost" size="sm" icon={<RefreshCw size={14} />}>
-                      Rerun ({selectedCases.size})
+                      CLI Only ({selectedCases.size})
                     </Button>
                     <Button variant="ghost" size="sm" icon={<Download size={14} />}>
                       Export

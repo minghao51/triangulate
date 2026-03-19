@@ -96,7 +96,7 @@ const Dashboard: React.FC = () => {
             icon={<Plus size={16} />}
             onClick={() => navigate('/cases/new')}
           >
-            New Investigation
+            CLI Launch Guide
           </Button>
         </div>
       </div>
@@ -320,7 +320,7 @@ const Dashboard: React.FC = () => {
                   icon={<Plus size={16} />}
                   onClick={() => navigate('/cases/new')}
                 >
-                  Create New Case
+                  Open CLI Guide
                 </Button>
                 <Button
                   variant="secondary"

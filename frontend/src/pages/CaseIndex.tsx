@@ -51,7 +51,7 @@ const CaseIndex: React.FC = () => {
                     <p className="index-subtitle">Monitor and review automated case pipelines.</p>
                 </div>
                 <button className="btn btn-primary" onClick={() => navigate('/cases/new')}>
-                    <Plus size={16} /> New Case
+                    <Plus size={16} /> CLI Guide
                 </button>
             </div>
 

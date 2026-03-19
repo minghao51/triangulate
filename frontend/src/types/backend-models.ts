@@ -66,6 +66,7 @@ export interface Claim {
   opposeCount: number;
   sourceDiversityCount: number;
   claimSignature: string;
+  narrativeClusterId: string | null;
   evidence: ClaimEvidenceLink[];
 }
 
@@ -120,6 +121,9 @@ export interface TimelineEvent {
   summary: string | null;
   verificationStatus: VerificationStatus;
   linkedEvidenceCount: number;
+  locationCountryCode?: string | null;
+  locationLat?: number | null;
+  locationLon?: number | null;
 }
 
 export interface RunHistoryItem {
@@ -141,24 +145,31 @@ export interface ReportData {
   manifestPath: string | null;
 }
 
+export interface NarrativeCluster {
+  id: string;
+  clusterId: string;
+  stanceSummary: string;
+  sourceCount: number;
+  claimCount: number;
+}
+
+export interface ClaimsOverview {
+  claims: Claim[];
+  narratives: NarrativeCluster[];
+}
+
 export interface CaseDetail {
   case: TopicCase & {
     reviewNotes?: string | null;
   };
-}
-
-export interface CreateCaseRequest {
-  query: string;
-  conflictDomain?: string;
-  confirmedParties: string[];
-  manualLinks: string[];
-  automationMode: 'autonomous' | 'blocked' | 'safe';
-  maxArticles?: number;
-  relevanceThreshold?: number;
-}
-
-export interface CreateCaseResponse {
-  id: string;
-  status: CaseStatus;
-  stage: CaseStage;
+  tabs: {
+    claims: Claim[];
+    evidence: Evidence[];
+    exceptions: Exception[];
+    parties: Party[];
+    timeline: TimelineEvent[];
+    runHistory: RunHistoryItem[];
+    narratives: NarrativeCluster[];
+    report: ReportData;
+  };
 }

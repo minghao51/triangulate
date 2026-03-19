@@ -1,8 +1,7 @@
 import type {
   CaseDetail,
   Claim,
-  CreateCaseRequest,
-  CreateCaseResponse,
+  ClaimsOverview,
   Evidence,
   Exception,
   Party,
@@ -36,8 +35,11 @@ export const getCases = async (): Promise<TopicCase[]> => request('/api/cases');
 export const getCaseDetail = async (caseId: string): Promise<CaseDetail> =>
   request(`/api/cases/${caseId}`);
 
+export const getClaimsOverviewForCase = async (caseId: string): Promise<ClaimsOverview> =>
+  request(`/api/cases/${caseId}/claims/overview`);
+
 export const getClaimsForCase = async (caseId: string): Promise<Claim[]> =>
-  request(`/api/cases/${caseId}/claims`);
+  (await getClaimsOverviewForCase(caseId)).claims;
 
 export const getEvidenceForCase = async (caseId: string): Promise<Evidence[]> =>
   request(`/api/cases/${caseId}/evidence`);
@@ -56,44 +58,6 @@ export const getRunHistoryForCase = async (caseId: string): Promise<RunHistoryIt
 
 export const getReportForCase = async (caseId: string): Promise<ReportData> =>
   request(`/api/cases/${caseId}/report`);
-
-export const createCase = async (
-  payload: CreateCaseRequest,
-): Promise<CreateCaseResponse> =>
-  request('/api/cases', {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  });
-
-export const reviewCase = async (
-  caseId: string,
-  decision: 'approve' | 'reject' | 'defer' | 'action_required',
-  notes?: string,
-): Promise<CaseDetail> =>
-  request(`/api/cases/${caseId}/review`, {
-    method: 'POST',
-    body: JSON.stringify({ decision, notes }),
-  });
-
-export const rerunCase = async (
-  caseId: string,
-  fromStage?: string,
-): Promise<CaseDetail> =>
-  request(`/api/cases/${caseId}/rerun`, {
-    method: 'POST',
-    body: JSON.stringify({ fromStage }),
-  });
-
-export const updateCaseException = async (
-  caseId: string,
-  exceptionId: string,
-  action: 'resolve' | 'defer' | 'reopen',
-  notes?: string,
-): Promise<CaseDetail> =>
-  request(`/api/cases/${caseId}/exceptions/${exceptionId}`, {
-    method: 'POST',
-    body: JSON.stringify({ action, notes }),
-  });
 
 async function downloadBlob(path: string, fallbackName: string): Promise<void> {
   const response = await fetch(`${API_BASE_URL}${path}`);

@@ -106,3 +106,123 @@
     padding: 0.25rem 0.625rem;
     font-size: 0.75rem;
 }
+
+.toolbar-filters {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+}
+
+.credibility-filter {
+    display: flex;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+}
+
+.credibility-filter button {
+    padding: 0.375rem 0.75rem;
+    background: transparent;
+    color: var(--text-secondary);
+    border: none;
+    border-right: 1px solid var(--border-subtle);
+    cursor: pointer;
+    font-size: 0.75rem;
+    font-weight: 500;
+    transition: all var(--transition-fast);
+}
+
+.credibility-filter button:last-child {
+    border-right: none;
+}
+
+.credibility-filter button:hover {
+    background: var(--bg-surface-hover);
+    color: var(--text-primary);
+}
+
+.credibility-filter button.active {
+    background: var(--accent-primary);
+    color: black;
+}
+
+.verification-section {
+    border-top: 1px dashed var(--border-subtle);
+    padding-top: 0.75rem;
+    margin-top: 0.25rem;
+}
+
+.verification-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.375rem 0.5rem;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    color: var(--text-secondary);
+    font-size: 0.75rem;
+    border-radius: var(--radius-sm);
+    transition: all var(--transition-fast);
+}
+
+.verification-toggle:hover {
+    background: var(--bg-surface-hover);
+    color: var(--accent-primary);
+}
+
+.verification-checks {
+    margin-top: 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.check-row {
+    padding: 0.625rem;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: var(--radius-sm);
+    font-size: 0.75rem;
+}
+
+.check-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.check-type {
+    font-weight: 600;
+    color: var(--accent-primary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.check-result {
+    font-size: 0.625rem;
+}
+
+.check-method {
+    color: var(--text-tertiary);
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+}
+
+.check-notes {
+    margin: 0.5rem 0 0;
+    color: var(--text-secondary);
+    line-height: 1.5;
+}
+
+.check-meta {
+    display: block;
+    margin-top: 0.375rem;
+    color: var(--text-tertiary);
+    font-size: 0.6875rem;
+}
+
+.tier-unknown,
+.tier-user_supplied {
+    color: var(--text-tertiary);
+}

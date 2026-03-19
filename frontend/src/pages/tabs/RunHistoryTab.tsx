@@ -27,7 +27,7 @@ const RunHistoryTab: React.FC<RunHistoryTabProps> = ({ caseId, refreshToken = 0 
                 <p className="subtitle">Audit log of system actions, model interventions, and parse fallbacks.</p>
             </div>
 
-            <div className="history-table-container card">
+            <div className="history-table-container glass-panel">
                 {error && <div style={{ padding: '1rem' }}>Failed to load run history: {error}</div>}
                 <table className="history-table">
                     <thead>
