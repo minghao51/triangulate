@@ -57,6 +57,12 @@ uv run triangulate run-pipeline
 uv run triangulate monitor --start --topics ./topics.yaml --interval 30
 ```
 
+Start the FastAPI server for the frontend:
+
+```bash
+uv run triangulate serve
+```
+
 ## Repository Layout
 
 ```text

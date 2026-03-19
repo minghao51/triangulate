@@ -115,6 +115,24 @@ Run the recurring monitor:
 uv run triangulate monitor --start --topics ./topics.yaml --interval 30
 ```
 
+## Run the Frontend
+
+Start the FastAPI backend:
+
+```bash
+uv run triangulate serve
+```
+
+In a separate terminal, start the React frontend:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+The frontend runs on `http://localhost:5173` and proxies `/api/*` requests to the backend at `http://localhost:8000`.
+
 ## Legacy Event Commands
 
 The older event-oriented commands still exist:

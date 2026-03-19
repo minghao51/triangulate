@@ -9,6 +9,13 @@ uv run triangulate init-db
 uv run triangulate version
 ```
 
+## Server Commands
+
+```bash
+uv run triangulate serve                    # Start FastAPI server on 127.0.0.1:8000
+uv run triangulate serve --host 0.0.0.0 --port 8000 --reload
+```
+
 ## Case-Oriented Commands
 
 ```bash
