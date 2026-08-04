@@ -107,6 +107,11 @@
     font-size: 0.75rem;
 }
 
+.source-unavailable {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
 .toolbar-filters {
     display: flex;
     gap: 1rem;

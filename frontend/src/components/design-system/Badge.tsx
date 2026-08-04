@@ -28,6 +28,17 @@ const Badge: React.FC<BadgeProps> = ({
     debunked: 'bg-[#ff4757]/10 text-[#ff4757] border-[#ff4757]/20',
   };
 
+  const dotColors: Record<string, string> = {
+    success: '#00ff9d',
+    confirmed: '#00ff9d',
+    probable: '#00ff9d',
+    warning: '#ffb800',
+    alleged: '#ffb800',
+    danger: '#ff4757',
+    debunked: '#ff4757',
+    info: '#00d4ff',
+  };
+
   const sizes = {
     sm: 'px-2 py-0.5 text-xs font-semibold tracking-wide',
     md: 'px-2.5 py-1 text-xs font-semibold tracking-wide',
@@ -45,14 +56,8 @@ const Badge: React.FC<BadgeProps> = ({
     >
       {dot && (
         <span
-          className={clsx(
-            'w-1.5 h-1.5 rounded-full animate-pulse',
-            variant === 'success' || variant === 'confirmed' || variant === 'probable' ? 'bg-[#00ff9d]' :
-            variant === 'warning' || variant === 'alleged' ? 'bg-[#ffb800]' :
-            variant === 'danger' || variant === 'debunked' ? 'bg-[#ff4757]' :
-            variant === 'info' ? 'bg-[#00d4ff]' :
-            'bg-[#6c7385]'
-          )}
+          className="w-1.5 h-1.5 rounded-full animate-pulse"
+          style={{ backgroundColor: dotColors[variant] || '#6c7385' }}
         />
       )}
       {children}

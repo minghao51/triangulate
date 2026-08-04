@@ -88,6 +88,10 @@ class MigrationManager:
                 self._apply_intake_queue_schema(session)
             elif migration.version == 6:
                 self._apply_event_location_schema(session)
+            elif migration.version == 7:
+                self._apply_phase_foundation_schema(session)
+            elif migration.version == 8:
+                self._apply_review_and_evaluation_schema(session)
             else:
                 # Apply migration SQL
                 session.execute(text(migration.up_sql))
@@ -385,6 +389,210 @@ class MigrationManager:
                 """
                 CREATE UNIQUE INDEX IF NOT EXISTS uq_monitor_checkpoint
                     ON monitor_checkpoints (case_id, monitor_key)
+                """
+            )
+        )
+
+    def _apply_phase_foundation_schema(self, session) -> None:
+        """Add additive Phase 1-3 storage for provenance and workflow diagnostics."""
+        inspector = inspect(session.bind)
+
+        session.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS osint_artifacts (
+                    id TEXT PRIMARY KEY,
+                    case_id TEXT NOT NULL,
+                    tool TEXT NOT NULL,
+                    artifact_type TEXT NOT NULL,
+                    source_path TEXT NOT NULL,
+                    fingerprint TEXT NOT NULL,
+                    raw_text TEXT,
+                    raw_payload JSON,
+                    import_metadata JSON,
+                    imported_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY(case_id) REFERENCES topic_cases(id)
+                )
+                """
+            )
+        )
+        session.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS evidence_artifact_links (
+                    id TEXT PRIMARY KEY,
+                    evidence_id TEXT NOT NULL,
+                    osint_artifact_id TEXT NOT NULL,
+                    relation TEXT NOT NULL DEFAULT 'derived_from',
+                    confidence_score FLOAT,
+                    provenance_metadata JSON,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY(evidence_id) REFERENCES evidence_items(id),
+                    FOREIGN KEY(osint_artifact_id) REFERENCES osint_artifacts(id)
+                )
+                """
+            )
+        )
+        session.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS workflow_checkpoints (
+                    id TEXT PRIMARY KEY,
+                    case_id TEXT NOT NULL,
+                    stage_run_id TEXT,
+                    stage_name TEXT NOT NULL,
+                    checkpoint_key TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    summary TEXT,
+                    retry_count INTEGER NOT NULL DEFAULT 0,
+                    payload_json JSON,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY(case_id) REFERENCES topic_cases(id),
+                    FOREIGN KEY(stage_run_id) REFERENCES case_stage_runs(id)
+                )
+                """
+            )
+        )
+        session.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS taxonomy_versions (
+                    id TEXT PRIMARY KEY,
+                    taxonomy_kind TEXT NOT NULL,
+                    version TEXT NOT NULL,
+                    path TEXT,
+                    checksum TEXT NOT NULL,
+                    taxonomy_json JSON,
+                    is_active INTEGER NOT NULL DEFAULT 1,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(taxonomy_kind, version)
+                )
+                """
+            )
+        )
+        session.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS agent_outputs (
+                    id TEXT PRIMARY KEY,
+                    case_id TEXT NOT NULL,
+                    stage_run_id TEXT,
+                    stage_name TEXT NOT NULL,
+                    agent_name TEXT NOT NULL,
+                    output_type TEXT NOT NULL,
+                    summary TEXT,
+                    output_json JSON,
+                    taxonomy_version_id TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY(case_id) REFERENCES topic_cases(id),
+                    FOREIGN KEY(stage_run_id) REFERENCES case_stage_runs(id),
+                    FOREIGN KEY(taxonomy_version_id) REFERENCES taxonomy_versions(id)
+                )
+                """
+            )
+        )
+        existing_event_columns = {column["name"] for column in inspector.get_columns("events")}
+        if "workflow_route" not in existing_event_columns:
+            session.execute(text("ALTER TABLE events ADD COLUMN workflow_route TEXT"))
+        if "source_url" not in existing_event_columns:
+            session.execute(text("ALTER TABLE events ADD COLUMN source_url TEXT"))
+
+        existing_narrative_columns = {
+            column["name"] for column in inspector.get_columns("narratives")
+        }
+        if "key_themes" not in existing_narrative_columns:
+            session.execute(text("ALTER TABLE narratives ADD COLUMN key_themes JSON"))
+        if "main_entities" not in existing_narrative_columns:
+            session.execute(text("ALTER TABLE narratives ADD COLUMN main_entities JSON"))
+
+        existing_investigation_columns = {
+            column["name"] for column in inspector.get_columns("party_investigations")
+        }
+        if "party_name" not in existing_investigation_columns:
+            session.execute(
+                text("ALTER TABLE party_investigations ADD COLUMN party_name TEXT")
+            )
+
+    def _apply_review_and_evaluation_schema(self, session) -> None:
+        """Add additive Phase 4-5 storage for HITL auditability and evaluation."""
+        session.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS review_annotations (
+                    id TEXT PRIMARY KEY,
+                    case_id TEXT NOT NULL,
+                    target_type TEXT NOT NULL,
+                    target_id TEXT NOT NULL,
+                    annotation_type TEXT NOT NULL,
+                    author TEXT NOT NULL DEFAULT 'operator',
+                    content TEXT NOT NULL,
+                    metadata_json JSON,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY(case_id) REFERENCES topic_cases(id)
+                )
+                """
+            )
+        )
+        session.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS review_audit_entries (
+                    id TEXT PRIMARY KEY,
+                    case_id TEXT NOT NULL,
+                    action_type TEXT NOT NULL,
+                    target_type TEXT NOT NULL,
+                    target_id TEXT NOT NULL,
+                    actor TEXT NOT NULL DEFAULT 'operator',
+                    rationale TEXT,
+                    metadata_json JSON,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY(case_id) REFERENCES topic_cases(id)
+                )
+                """
+            )
+        )
+        session.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS evaluation_runs (
+                    id TEXT PRIMARY KEY,
+                    case_id TEXT NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'completed',
+                    evaluation_kind TEXT NOT NULL DEFAULT 'case_quality',
+                    summary_json JSON,
+                    metrics_json JSON,
+                    model_config_json JSON,
+                    workflow_version TEXT,
+                    output_version TEXT,
+                    taxonomy_version_id TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY(case_id) REFERENCES topic_cases(id),
+                    FOREIGN KEY(taxonomy_version_id) REFERENCES taxonomy_versions(id)
+                )
+                """
+            )
+        )
+        session.execute(
+            text(
+                """
+                CREATE INDEX IF NOT EXISTS ix_review_annotations_case_id
+                    ON review_annotations (case_id)
+                """
+            )
+        )
+        session.execute(
+            text(
+                """
+                CREATE INDEX IF NOT EXISTS ix_review_audit_entries_case_id
+                    ON review_audit_entries (case_id)
+                """
+            )
+        )
+        session.execute(
+            text(
+                """
+                CREATE INDEX IF NOT EXISTS ix_evaluation_runs_case_id
+                    ON evaluation_runs (case_id)
                 """
             )
         )
@@ -743,6 +951,135 @@ MIGRATIONS: list[Migration] = [
         ALTER TABLE events ADD COLUMN location_lon REAL;
         """,
         down="""
+        """,
+    ),
+    Migration(
+        version=7,
+        name="Add OSINT provenance and workflow diagnostics schema",
+        up="""
+        CREATE TABLE IF NOT EXISTS osint_artifacts (
+            id TEXT PRIMARY KEY,
+            case_id TEXT NOT NULL,
+            tool TEXT NOT NULL,
+            artifact_type TEXT NOT NULL,
+            source_path TEXT NOT NULL,
+            fingerprint TEXT NOT NULL,
+            raw_text TEXT,
+            raw_payload JSON,
+            import_metadata JSON,
+            imported_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(case_id) REFERENCES topic_cases(id)
+        );
+        CREATE TABLE IF NOT EXISTS evidence_artifact_links (
+            id TEXT PRIMARY KEY,
+            evidence_id TEXT NOT NULL,
+            osint_artifact_id TEXT NOT NULL,
+            relation TEXT NOT NULL DEFAULT 'derived_from',
+            confidence_score FLOAT,
+            provenance_metadata JSON,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(evidence_id) REFERENCES evidence_items(id),
+            FOREIGN KEY(osint_artifact_id) REFERENCES osint_artifacts(id)
+        );
+        CREATE TABLE IF NOT EXISTS workflow_checkpoints (
+            id TEXT PRIMARY KEY,
+            case_id TEXT NOT NULL,
+            stage_run_id TEXT,
+            stage_name TEXT NOT NULL,
+            checkpoint_key TEXT NOT NULL,
+            status TEXT NOT NULL,
+            summary TEXT,
+            retry_count INTEGER NOT NULL DEFAULT 0,
+            payload_json JSON,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(case_id) REFERENCES topic_cases(id),
+            FOREIGN KEY(stage_run_id) REFERENCES case_stage_runs(id)
+        );
+        CREATE TABLE IF NOT EXISTS taxonomy_versions (
+            id TEXT PRIMARY KEY,
+            taxonomy_kind TEXT NOT NULL,
+            version TEXT NOT NULL,
+            path TEXT,
+            checksum TEXT NOT NULL,
+            taxonomy_json JSON,
+            is_active INTEGER NOT NULL DEFAULT 1,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(taxonomy_kind, version)
+        );
+        CREATE TABLE IF NOT EXISTS agent_outputs (
+            id TEXT PRIMARY KEY,
+            case_id TEXT NOT NULL,
+            stage_run_id TEXT,
+            stage_name TEXT NOT NULL,
+            agent_name TEXT NOT NULL,
+            output_type TEXT NOT NULL,
+            summary TEXT,
+            output_json JSON,
+            taxonomy_version_id TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(case_id) REFERENCES topic_cases(id),
+            FOREIGN KEY(stage_run_id) REFERENCES case_stage_runs(id),
+            FOREIGN KEY(taxonomy_version_id) REFERENCES taxonomy_versions(id)
+        );
+        """,
+        down="""
+        DROP TABLE IF EXISTS agent_outputs;
+        DROP TABLE IF EXISTS taxonomy_versions;
+        DROP TABLE IF EXISTS workflow_checkpoints;
+        DROP TABLE IF EXISTS evidence_artifact_links;
+        DROP TABLE IF EXISTS osint_artifacts;
+        """,
+    ),
+    Migration(
+        version=8,
+        name="Add review audit trail and evaluation schema",
+        up="""
+        CREATE TABLE IF NOT EXISTS review_annotations (
+            id TEXT PRIMARY KEY,
+            case_id TEXT NOT NULL,
+            target_type TEXT NOT NULL,
+            target_id TEXT NOT NULL,
+            annotation_type TEXT NOT NULL,
+            author TEXT NOT NULL DEFAULT 'operator',
+            content TEXT NOT NULL,
+            metadata_json JSON,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE TABLE IF NOT EXISTS review_audit_entries (
+            id TEXT PRIMARY KEY,
+            case_id TEXT NOT NULL,
+            action_type TEXT NOT NULL,
+            target_type TEXT NOT NULL,
+            target_id TEXT NOT NULL,
+            actor TEXT NOT NULL DEFAULT 'operator',
+            rationale TEXT,
+            metadata_json JSON,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE TABLE IF NOT EXISTS evaluation_runs (
+            id TEXT PRIMARY KEY,
+            case_id TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'completed',
+            evaluation_kind TEXT NOT NULL DEFAULT 'case_quality',
+            summary_json JSON,
+            metrics_json JSON,
+            model_config_json JSON,
+            workflow_version TEXT,
+            output_version TEXT,
+            taxonomy_version_id TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS ix_review_annotations_case_id ON review_annotations (case_id);
+        CREATE INDEX IF NOT EXISTS ix_review_audit_entries_case_id ON review_audit_entries (case_id);
+        CREATE INDEX IF NOT EXISTS ix_evaluation_runs_case_id ON evaluation_runs (case_id);
+        """,
+        down="""
+        DROP INDEX IF EXISTS ix_evaluation_runs_case_id;
+        DROP INDEX IF EXISTS ix_review_audit_entries_case_id;
+        DROP INDEX IF EXISTS ix_review_annotations_case_id;
+        DROP TABLE IF EXISTS evaluation_runs;
+        DROP TABLE IF EXISTS review_audit_entries;
+        DROP TABLE IF EXISTS review_annotations;
         """,
     ),
 ]

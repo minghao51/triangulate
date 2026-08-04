@@ -8,6 +8,8 @@ import {
   BarChart3,
   ChevronRight,
   Bell,
+  Github,
+  Info,
 } from 'lucide-react';
 import clsx from 'clsx';
 import './Shell.css';
@@ -46,6 +48,10 @@ const Shell: React.FC = () => {
 
     if (path.startsWith('/monitoring')) {
       breadcrumbs.push({ label: 'Monitoring Center', path: '/monitoring' });
+    }
+
+    if (path.startsWith('/ai-info')) {
+      breadcrumbs.push({ label: 'AI Integration', path: '/ai-info' });
     }
 
     return breadcrumbs;
@@ -103,6 +109,14 @@ const Shell: React.FC = () => {
           </NavLink>
         </div>
 
+        <div className="shell-nav-section">
+          <div className="shell-nav-title">SYSTEM</div>
+          <NavLink to="/ai-info" className={({ isActive }) => clsx("shell-nav-item", isActive && "active")}>
+            <Info size={16} className="nav-icon" />
+            <span>AI Integration</span>
+          </NavLink>
+        </div>
+
         {/* System Status */}
         <div className="shell-status">
           <div className="status-indicator">
@@ -144,6 +158,16 @@ const Shell: React.FC = () => {
               <Bell size={18} />
               <span className="notification-badge">3</span>
             </button>
+
+            <a
+              href="https://github.com/minghao51/triangulate"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="header-action-btn"
+              aria-label="GitHub Repository"
+            >
+              <Github size={18} />
+            </a>
 
             {/* User Profile */}
             <div className="header-profile">

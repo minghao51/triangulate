@@ -7,6 +7,7 @@ The active documentation tree is organized by purpose instead of by date.
 - [`getting-started/`](getting-started/quickstart.md): setup, local environment, and first run
 - [`architecture/`](architecture/system-overview.md): current system layout and runtime boundaries
 - [`features/`](features/topic-based-retrieval.md): feature-specific behavior and operator notes
+- [`technical_roadmap.md`](technical_roadmap.md): canonical technical roadmap from the current implementation forward
 - [`reference/`](reference/cli.md): CLI and HTTP interface reference
   Key operator docs:
   [`reference/cli.md`](reference/cli.md),
@@ -15,7 +16,7 @@ The active documentation tree is organized by purpose instead of by date.
 
 ## Historical Material
 
-- [`archive/`](archive/README.md): dated reports, superseded designs, and implementation notes retained for context
+- [`archive/`](archive/README.md): dated reports, superseded designs, implementation notes, and archived plans retained for context
 
 ## Future Planning
 

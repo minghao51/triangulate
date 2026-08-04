@@ -21,6 +21,7 @@ The codebase currently runs as a local Python application backed by SQLite. Olde
 - Setup and local workflow: [`docs/getting-started/quickstart.md`](docs/getting-started/quickstart.md)
 - Documentation index: [`docs/README.md`](docs/README.md)
 - Architecture as built: [`docs/architecture/system-overview.md`](docs/architecture/system-overview.md)
+- Technical roadmap: [`docs/technical_roadmap.md`](docs/technical_roadmap.md)
 - CLI reference: [`docs/reference/cli.md`](docs/reference/cli.md)
 - CLI operations guide: [`docs/reference/cli-operations.md`](docs/reference/cli-operations.md)
 - HTTP API reference: [`docs/reference/http-api.md`](docs/reference/http-api.md)

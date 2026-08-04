@@ -137,7 +137,7 @@ async def party_classifier_node(state: PartyInvestigationState) -> dict[str, Any
 
 
 async def party_investigators_node(state: PartyInvestigationState) -> dict[str, Any]:
-    """Run all party investigations in parallel."""
+    """Run all party investigations in parallel with concurrency limit."""
     parties = state["parties"].get("parties", [])
     claims = state.get("claims", [])
     article = state.get("article", {})
@@ -146,18 +146,21 @@ async def party_investigators_node(state: PartyInvestigationState) -> dict[str, 
         logger.info("No parties identified; skipping party investigations")
         return {"party_investigations": []}
 
-    logger.info(f"Running {len(parties)} party investigations in parallel...")
+    logger.info(f"Running {len(parties)} party investigations with concurrency limit...")
 
-    # Run all investigations concurrently
     import asyncio
 
-    raw_results = await asyncio.gather(
-        *[
-            investigate_from_party_perspective(
+    semaphore = asyncio.Semaphore(3)
+
+    async def bounded_investigate(party: dict[str, Any]) -> dict[str, Any]:
+        async with semaphore:
+            await asyncio.sleep(0.5)
+            return await investigate_from_party_perspective(
                 party, claims, article, include_metadata=True
             )
-            for party in parties
-        ],
+
+    raw_results = await asyncio.gather(
+        *[bounded_investigate(party) for party in parties],
         return_exceptions=True,
     )
 

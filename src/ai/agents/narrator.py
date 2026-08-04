@@ -5,31 +5,14 @@ from typing import Any
 import os
 from litellm import acompletion
 
+from src.ai.prompts import get_prompt
 from src.ai.schemas import NarrativeSchema
 from src.ai.utils import call_structured_llm, make_agent_envelope
+from src.ai.agents._fallback import FallbackEngine
 
 logger = logging.getLogger(__name__)
 
-NARRATOR_PROMPT = """You are an expert analyst who summarizes the stance and perspective of groups of related claims.
-
-Below are {count} factual claims that have been grouped together because they express a similar narrative perspective:
-
-{claims}
-
-Your task:
-1. Identify the common theme or perspective these claims share
-2. Summarize what this narrative stance is asserting
-3. Note key entities, events, or positions involved
-4. Keep your summary concise (2-3 sentences)
-
-Output format (JSON):
-{{
-  "stance_summary": "Brief summary of this narrative's perspective",
-  "key_themes": ["theme1", "theme2"],
-  "main_entities": ["entity1", "entity2"]
-}}
-
-Provide the narrative summary:"""
+_fallback_narrative = FallbackEngine.narrative_strategy
 
 
 async def narrate_cluster(
@@ -73,7 +56,7 @@ async def narrate_cluster(
             ]
         )
 
-        prompt = NARRATOR_PROMPT.format(count=len(claims), claims=claims_text)
+        prompt = get_prompt("NARRATOR", count=len(claims), claims=claims_text)
 
         logger.info(
             f"Generating narrative for cluster {cluster_id} with {len(claims)} claims"
@@ -99,25 +82,3 @@ async def narrate_cluster(
             fallback_used=True,
         )
         return result if include_metadata else result["output"]
-
-
-def _fallback_narrative(claims: list[dict[str, Any]]) -> dict[str, Any]:
-    """Generate a simple summary without LLM.
-
-    Args:
-        claims: List of claim dictionaries
-
-    Returns:
-        Simple narrative summary
-    """
-    # Extract entities and themes from claims
-    entities = set()
-    for claim in claims:
-        for entity in claim.get("who", []):
-            entities.add(entity)
-
-    return {
-        "stance_summary": f"Group of {len(claims)} related claims about {', '.join(list(entities)[:3])}",
-        "key_themes": [],
-        "main_entities": list(entities)[:5],
-    }

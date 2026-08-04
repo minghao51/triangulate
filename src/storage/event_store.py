@@ -119,6 +119,8 @@ def store_event_in_db(
             event.location_lon = event_data.get("location_lon")
             event.case_id = case_id
             event.case_run_id = case_run_id
+            event.workflow_route = event_data.get("workflow_route")
+            event.source_url = event_data.get("source_url")
         else:
             event = Event(
                 id=event_id,
@@ -133,6 +135,8 @@ def store_event_in_db(
                 location_lon=event_data.get("location_lon"),
                 case_id=case_id,
                 case_run_id=case_run_id,
+                workflow_route=event_data.get("workflow_route"),
+                source_url=event_data.get("source_url"),
             )
             session.add(event)
 
@@ -326,6 +330,8 @@ def store_event_in_db(
                 source_count=narrative_data.get(
                     "source_count", narrative_data.get("claim_count", 0)
                 ),
+                key_themes=narrative_data.get("key_themes", []),
+                main_entities=narrative_data.get("main_entities", []),
             )
             session.add(narrative)
 
@@ -339,6 +345,7 @@ def store_event_in_db(
                     id=str(uuid.uuid4()),
                     event_id=event_id,
                     party_id=party_id,
+                    party_name=party_name,
                     investigation_data=investigation.get("investigation", {}),
                     party_stance=investigation.get("party_stance", {}).get(
                         "overall_position"

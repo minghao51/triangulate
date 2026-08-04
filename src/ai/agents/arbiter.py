@@ -165,7 +165,7 @@ async def arbitrate_findings(
             prompt=prompt,
             schema=ArbiterResultSchema,
             temperature=0.5,
-            max_tokens=3000,
+            max_tokens=5000,
             fallback=lambda: {
                 "final_determinations": [],
                 "event_summary": {
@@ -374,19 +374,6 @@ def _normalize_arbiter_result(
     result: dict[str, Any], total_claims: int
 ) -> dict[str, Any]:
     """Ensure arbiter response has the expected keys and default structure."""
-
-    def _safe_int(value: Any, default: int) -> int:
-        try:
-            return int(value)
-        except (TypeError, ValueError):
-            return default
-
-    def _safe_float(value: Any, default: float) -> float:
-        try:
-            return float(value)
-        except (TypeError, ValueError):
-            return default
-
     final_determinations = result.get("final_determinations", [])
     if not isinstance(final_determinations, list):
         final_determinations = []
@@ -400,6 +387,18 @@ def _normalize_arbiter_result(
         verification_distribution = {}
     for status in ("CONFIRMED", "PROBABLE", "ALLEGED", "CONTESTED", "DEBUNKED"):
         verification_distribution.setdefault(status, 0)
+
+    def _safe_int(value: Any, default: int) -> int:
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return default
+
+    def _safe_float(value: Any, default: float) -> float:
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return default
 
     normalized_summary = {
         "total_claims": _safe_int(event_summary.get("total_claims"), total_claims),

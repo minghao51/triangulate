@@ -125,6 +125,8 @@ class Event(Base):
     created_at = Column(DateTime(timezone=True), default=utc_now, index=True)
     case_id = Column(String, ForeignKey("topic_cases.id"), index=True)
     case_run_id = Column(String, ForeignKey("case_stage_runs.id"))
+    workflow_route = Column(String, nullable=True)
+    source_url = Column(String, nullable=True)
 
 
 class Claim(Base):
@@ -163,6 +165,8 @@ class Narrative(Base):
     stance_summary = Column(Text, nullable=False)
     source_count = Column(Integer, default=0)
     created_at = Column(DateTime(timezone=True), default=utc_now)
+    key_themes = Column(JSON, default=list)
+    main_entities = Column(JSON, default=list)
 
 
 class Review(Base):
@@ -205,6 +209,7 @@ class PartyInvestigation(Base):
     id = Column(String, primary_key=True)
     event_id = Column(String, ForeignKey("events.id"), nullable=False)
     party_id = Column(String, ForeignKey("parties.id"), nullable=False)
+    party_name = Column(String, nullable=True)
 
     # Full investigation data
     investigation_data = Column(JSON, nullable=False)
@@ -287,6 +292,23 @@ class CaseArtifact(Base):
     payload_json = Column(JSON)
     checksum = Column(String)
     created_at = Column(DateTime(timezone=True), default=utc_now)
+
+
+class OsintArtifact(Base):
+    """Imported external OSINT artifact attached to a case."""
+
+    __tablename__ = "osint_artifacts"
+
+    id = Column(String, primary_key=True)
+    case_id = Column(String, ForeignKey("topic_cases.id"), nullable=False, index=True)
+    tool = Column(String, nullable=False, index=True)
+    artifact_type = Column(String, nullable=False, index=True)
+    source_path = Column(String, nullable=False)
+    fingerprint = Column(String, nullable=False, index=True)
+    raw_text = Column(Text)
+    raw_payload = Column(JSON, nullable=False, default=dict)
+    import_metadata = Column(JSON, nullable=False, default=dict)
+    imported_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
 
 
 class CaseArticle(Base):
@@ -414,3 +436,123 @@ class ClaimEvidenceLink(Base):
     confidence_score = Column(Float)
     notes = Column(Text)
     created_at = Column(DateTime(timezone=True), default=utc_now)
+
+
+class EvidenceArtifactLink(Base):
+    """Normalized provenance link between evidence and imported artifacts."""
+
+    __tablename__ = "evidence_artifact_links"
+
+    id = Column(String, primary_key=True)
+    evidence_id = Column(
+        String, ForeignKey("evidence_items.id"), nullable=False, index=True
+    )
+    osint_artifact_id = Column(
+        String, ForeignKey("osint_artifacts.id"), nullable=False, index=True
+    )
+    relation = Column(String, nullable=False, default="derived_from")
+    confidence_score = Column(Float)
+    provenance_metadata = Column(JSON, nullable=False, default=dict)
+    created_at = Column(DateTime(timezone=True), default=utc_now)
+
+
+class WorkflowCheckpoint(Base):
+    """Durable checkpoint for resumable case workflow stages."""
+
+    __tablename__ = "workflow_checkpoints"
+
+    id = Column(String, primary_key=True)
+    case_id = Column(String, ForeignKey("topic_cases.id"), nullable=False, index=True)
+    stage_run_id = Column(String, ForeignKey("case_stage_runs.id"), index=True)
+    stage_name = Column(String, nullable=False, index=True)
+    checkpoint_key = Column(String, nullable=False, index=True)
+    status = Column(String, nullable=False, index=True)
+    summary = Column(Text)
+    retry_count = Column(Integer, nullable=False, default=0)
+    payload_json = Column(JSON, nullable=False, default=dict)
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+
+
+class TaxonomyVersion(Base):
+    """Versioned taxonomy metadata used by workflow diagnostics and review logic."""
+
+    __tablename__ = "taxonomy_versions"
+    __table_args__ = (
+        UniqueConstraint("taxonomy_kind", "version", name="uq_taxonomy_kind_version"),
+    )
+
+    id = Column(String, primary_key=True)
+    taxonomy_kind = Column(String, nullable=False, index=True)
+    version = Column(String, nullable=False, index=True)
+    path = Column(String)
+    checksum = Column(String, nullable=False)
+    taxonomy_json = Column(JSON, nullable=False, default=dict)
+    is_active = Column(Integer, nullable=False, default=1)
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+
+
+class AgentOutput(Base):
+    """Persisted typed output for an AI or orchestration stage."""
+
+    __tablename__ = "agent_outputs"
+
+    id = Column(String, primary_key=True)
+    case_id = Column(String, ForeignKey("topic_cases.id"), nullable=False, index=True)
+    stage_run_id = Column(String, ForeignKey("case_stage_runs.id"), index=True)
+    stage_name = Column(String, nullable=False, index=True)
+    agent_name = Column(String, nullable=False, index=True)
+    output_type = Column(String, nullable=False, index=True)
+    summary = Column(Text)
+    output_json = Column(JSON, nullable=False, default=dict)
+    taxonomy_version_id = Column(String, ForeignKey("taxonomy_versions.id"), index=True)
+    created_at = Column(DateTime(timezone=True), default=utc_now)
+
+
+class ReviewAnnotation(Base):
+    """Human-authored annotation, comment, or flag against reviewable case entities."""
+
+    __tablename__ = "review_annotations"
+
+    id = Column(String, primary_key=True)
+    case_id = Column(String, ForeignKey("topic_cases.id"), nullable=False, index=True)
+    target_type = Column(String, nullable=False, index=True)
+    target_id = Column(String, nullable=False, index=True)
+    annotation_type = Column(String, nullable=False, index=True)
+    author = Column(String, nullable=False, default="operator")
+    content = Column(Text, nullable=False)
+    metadata_json = Column(JSON, nullable=False, default=dict)
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+
+
+class ReviewAuditEntry(Base):
+    """Immutable audit log for human review actions."""
+
+    __tablename__ = "review_audit_entries"
+
+    id = Column(String, primary_key=True)
+    case_id = Column(String, ForeignKey("topic_cases.id"), nullable=False, index=True)
+    action_type = Column(String, nullable=False, index=True)
+    target_type = Column(String, nullable=False, index=True)
+    target_id = Column(String, nullable=False, index=True)
+    actor = Column(String, nullable=False, default="operator")
+    rationale = Column(Text)
+    metadata_json = Column(JSON, nullable=False, default=dict)
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+
+
+class EvaluationRun(Base):
+    """Persisted evaluation result for a case and its current outputs."""
+
+    __tablename__ = "evaluation_runs"
+
+    id = Column(String, primary_key=True)
+    case_id = Column(String, ForeignKey("topic_cases.id"), nullable=False, index=True)
+    status = Column(String, nullable=False, default="completed", index=True)
+    evaluation_kind = Column(String, nullable=False, default="case_quality", index=True)
+    summary_json = Column(JSON, nullable=False, default=dict)
+    metrics_json = Column(JSON, nullable=False, default=dict)
+    model_config_json = Column(JSON, nullable=False, default=dict)
+    workflow_version = Column(String)
+    output_version = Column(String)
+    taxonomy_version_id = Column(String, ForeignKey("taxonomy_versions.id"), index=True)
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)

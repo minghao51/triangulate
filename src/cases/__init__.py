@@ -1,5 +1,50 @@
 """Case lifecycle services."""
 
+from src.cases._serializers import build_case_detail_payload, build_executive_summary_from_payload
+from src.cases._support import (
+    AUTOMATION_MODE_ALIASES,
+    CaseRunContext,
+    STAGE_ORDER,
+    _claim_signature,
+    _coerce_exception,
+    _compute_open_review_items,
+    _derive_confidence,
+    _derive_controversy,
+    _fingerprint_article,
+    _get_open_exceptions,
+    _make_exception,
+    _merge_exception_lists,
+    _normalize_automation_mode,
+    _parse_timestamp,
+    _payload_checksum,
+    _recompute_case_claim_aggregates,
+    _resolve_case_exceptions,
+    _slugify,
+    _utcnow,
+)
 from src.cases.service import TopicCaseService
 
-__all__ = ["TopicCaseService"]
+__all__ = [
+    "TopicCaseService",
+    "build_case_detail_payload",
+    "build_executive_summary_from_payload",
+    "CaseRunContext",
+    "STAGE_ORDER",
+    "AUTOMATION_MODE_ALIASES",
+    "_claim_signature",
+    "_coerce_exception",
+    "_compute_open_review_items",
+    "_derive_confidence",
+    "_derive_controversy",
+    "_fingerprint_article",
+    "_get_open_exceptions",
+    "_make_exception",
+    "_merge_exception_lists",
+    "_normalize_automation_mode",
+    "_parse_timestamp",
+    "_payload_checksum",
+    "_recompute_case_claim_aggregates",
+    "_resolve_case_exceptions",
+    "_slugify",
+    "_utcnow",
+]

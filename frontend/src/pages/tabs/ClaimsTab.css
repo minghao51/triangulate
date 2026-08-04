@@ -39,6 +39,41 @@
     gap: 0.75rem;
 }
 
+.claim-header-row {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.expand-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border-subtle);
+    border-radius: 4px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.expand-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-primary);
+}
+
+.claim-row.expanded {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+}
+
+.claim-row.expanded .claim-main {
+    gap: 0.5rem;
+}
+
 .claim-tags {
     display: flex;
     gap: 0.5rem;
@@ -185,4 +220,57 @@
 
 .narrative-claims .claim-row {
     background: rgba(0, 0, 0, 0.2);
+}
+
+.source-stance-breakdown {
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--border-subtle);
+}
+
+.stance-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+    margin-bottom: 0.5rem;
+}
+
+.stance-group:last-child {
+    margin-bottom: 0;
+}
+
+.stance-label {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-tertiary);
+}
+
+.stance-sources {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.375rem;
+}
+
+.stance-source {
+    font-size: 0.75rem;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    background: rgba(0, 0, 0, 0.2);
+}
+
+.stance-source.agreed {
+    color: var(--status-success);
+    border: 1px solid rgba(0, 255, 157, 0.3);
+}
+
+.stance-source.disagreed {
+    color: var(--status-danger);
+    border: 1px solid rgba(255, 71, 87, 0.3);
+}
+
+.stance-source.didnt-report {
+    color: var(--text-secondary);
+    border: 1px solid var(--border-subtle);
 }

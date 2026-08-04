@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { Claim, NarrativeCluster } from '../../types/backend-models';
+import type { Claim, NarrativeCluster, SourceStanceBreakdown as SourceStanceBreakdownType } from '../../types/backend-models';
 import { getClaimsOverviewForCase } from '../../services/api';
-import { ShieldAlert, ThumbsUp, ThumbsDown, GitCommit, ChevronDown, ChevronRight, Layers } from 'lucide-react';
+import { ShieldAlert, ThumbsUp, ThumbsDown, GitCommit, ChevronDown, ChevronRight, ChevronUp, Layers, Minus } from 'lucide-react';
+import { ClaimDetailPanel } from '../../components/claims/ClaimDetailPanel';
 import './ClaimsTab.css';
 
 interface ClaimsTabProps {
@@ -16,6 +17,7 @@ const ClaimsTab: React.FC<ClaimsTabProps> = ({ caseId, refreshToken = 0 }) => {
     const [narratives, setNarratives] = useState<NarrativeCluster[]>([]);
     const [error, setError] = useState<string | null>(null);
     const [expandedNarratives, setExpandedNarratives] = useState<Set<string>>(new Set());
+    const [expandedClaims, setExpandedClaims] = useState<Set<string>>(new Set());
 
     useEffect(() => {
         if (caseId) {
@@ -28,15 +30,18 @@ const ClaimsTab: React.FC<ClaimsTabProps> = ({ caseId, refreshToken = 0 }) => {
         }
     }, [caseId, refreshToken]);
 
-    const toggleNarrative = (id: string) => {
-        const newExpanded = new Set(expandedNarratives);
-        if (newExpanded.has(id)) {
-            newExpanded.delete(id);
+    const toggleSet = (set: Set<string>, setter: (s: Set<string>) => void, id: string) => {
+        const next = new Set(set);
+        if (next.has(id)) {
+            next.delete(id);
         } else {
-            newExpanded.add(id);
+            next.add(id);
         }
-        setExpandedNarratives(newExpanded);
+        setter(next);
     };
+
+    const toggleNarrative = (id: string) => toggleSet(expandedNarratives, setExpandedNarratives, id);
+    const toggleClaim = (id: string) => toggleSet(expandedClaims, setExpandedClaims, id);
 
     const claimsByNarrative = useMemo(
         () =>
@@ -96,7 +101,14 @@ const ClaimsTab: React.FC<ClaimsTabProps> = ({ caseId, refreshToken = 0 }) => {
                             {isExpanded && (
                                 <div className="narrative-claims">
                                     {narrativeClaims.map((claim) => (
-                                        <ClaimRow key={claim.id} claim={claim} caseId={caseId} navigate={navigate} />
+                                        <ClaimRow
+                                            key={claim.id}
+                                            claim={claim}
+                                            caseId={caseId}
+                                            navigate={navigate}
+                                            isExpanded={expandedClaims.has(claim.id)}
+                                            onToggle={() => toggleClaim(claim.id)}
+                                        />
                                     ))}
                                 </div>
                             )}
@@ -108,7 +120,14 @@ const ClaimsTab: React.FC<ClaimsTabProps> = ({ caseId, refreshToken = 0 }) => {
             <div className="claims-list">
                 {error && <div>Failed to load claims: {error}</div>}
                 {unclusteredClaims.map((claim) => (
-                    <ClaimRow key={claim.id} claim={claim} caseId={caseId} navigate={navigate} />
+                    <ClaimRow
+                        key={claim.id}
+                        claim={claim}
+                        caseId={caseId}
+                        navigate={navigate}
+                        isExpanded={expandedClaims.has(claim.id)}
+                        onToggle={() => toggleClaim(claim.id)}
+                    />
                 ))}
             </div>
         </div>
@@ -119,21 +138,78 @@ interface ClaimRowProps {
     claim: Claim;
     caseId: string;
     navigate: ReturnType<typeof useNavigate>;
+    isExpanded: boolean;
+    onToggle: () => void;
 }
 
-const ClaimRow: React.FC<ClaimRowProps> = ({ claim, caseId, navigate }) => (
-    <div key={claim.id} className="claim-row glass-panel">
+const SourceStanceBreakdown: React.FC<{ breakdown: SourceStanceBreakdownType }> = ({ breakdown }) => {
+    const hasSources = breakdown.agreedSources.length > 0 || breakdown.disagreedSources.length > 0 || breakdown.didntReportSources.length > 0;
+
+    if (!hasSources) {
+        return null;
+    }
+
+    return (
+        <div className="source-stance-breakdown">
+            {breakdown.agreedSources.length > 0 && (
+                <div className="stance-group">
+                    <span className="stance-label">Agreed</span>
+                    <div className="stance-sources">
+                        {breakdown.agreedSources.map((source) => (
+                            <span key={source} className="stance-source agreed" title="Reported supporting this claim">
+                                <ThumbsUp size={10} /> {source}
+                            </span>
+                        ))}
+                    </div>
+                </div>
+            )}
+            {breakdown.disagreedSources.length > 0 && (
+                <div className="stance-group">
+                    <span className="stance-label">Disagreed</span>
+                    <div className="stance-sources">
+                        {breakdown.disagreedSources.map((source) => (
+                            <span key={source} className="stance-source disagreed" title="Reported contradicting this claim">
+                                <ThumbsDown size={10} /> {source}
+                            </span>
+                        ))}
+                    </div>
+                </div>
+            )}
+            {breakdown.didntReportSources.length > 0 && (
+                <div className="stance-group">
+                    <span className="stance-label">Didn&apos;t Report</span>
+                    <div className="stance-sources">
+                        {breakdown.didntReportSources.map((source) => (
+                            <span key={source} className="stance-source didnt-report" title="Did not report on this claim">
+                                <Minus size={10} /> {source}
+                            </span>
+                        ))}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+};
+
+const ClaimRow: React.FC<ClaimRowProps> = ({ claim, caseId, navigate, isExpanded, onToggle }) => (
+    <div key={claim.id} className={`claim-row glass-panel ${isExpanded ? 'expanded' : ''}`}>
         <div className="claim-main">
-            <div className="claim-tags">
-                <span className={`badge ${claim.type === 'fact' ? 'badge-info' : 'badge-warning'}`}>
-                    {claim.type}
-                </span>
-                <span className={`badge ${claim.verificationStatus === 'confirmed' ? 'badge-success' : 'badge-danger'}`}>
-                    {claim.verificationStatus}
-                </span>
+            <div className="claim-header-row">
+                <button className="expand-btn" onClick={onToggle}>
+                    {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                </button>
+                <div className="claim-tags">
+                    <span className={`badge ${claim.type === 'fact' ? 'badge-info' : 'badge-warning'}`}>
+                        {claim.type}
+                    </span>
+                    <span className={`badge ${claim.verificationStatus === 'confirmed' ? 'badge-success' : 'badge-danger'}`}>
+                        {claim.verificationStatus}
+                    </span>
+                </div>
             </div>
             <p className="claim-text">{claim.text}</p>
             <div className="claim-signature"><GitCommit size={14} /> {claim.claimSignature}</div>
+            <SourceStanceBreakdown breakdown={claim.sourceStanceBreakdown} />
         </div>
 
         <div className="claim-metrics">
@@ -160,6 +236,8 @@ const ClaimRow: React.FC<ClaimRowProps> = ({ claim, caseId, navigate }) => (
                 Inspect Evidence
             </button>
         </div>
+
+        {isExpanded && <ClaimDetailPanel claim={claim} />}
     </div>
 );
 

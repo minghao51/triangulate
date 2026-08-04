@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate, Routes, Route, useLocation } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft,
   Play,
@@ -13,9 +13,18 @@ import {
   X,
   RefreshCw,
   TerminalSquare,
+  MessageSquare,
+  Flag,
+  CheckCheck,
 } from 'lucide-react';
 import type { TopicCase } from '../types/backend-models';
-import { getCaseDetail } from '../services/api';
+import {
+  createCaseAnnotation,
+  getCaseDetail,
+  getEvaluationForCase,
+  getReviewActivityForCase,
+  submitCaseReviewAction,
+} from '../services/api';
 import { useCaseStore } from '../stores/case-store';
 import Button from '../components/design-system/Button';
 import Card from '../components/design-system/Card';
@@ -290,7 +299,85 @@ const CaseIntelligenceCenter: React.FC = () => {
 const OverviewTab: React.FC<{
   activeCase: TopicCase;
 }> = ({ activeCase }) => {
+  const queryClient = useQueryClient();
+  const [reviewNotes, setReviewNotes] = useState('');
+  const [annotationType, setAnnotationType] = useState('comment');
+  const [annotationTargetType, setAnnotationTargetType] = useState('case');
+  const [annotationTargetId, setAnnotationTargetId] = useState('');
+  const [annotationContent, setAnnotationContent] = useState('');
+  const [localError, setLocalError] = useState<string | null>(null);
   const operatorCommands = buildOperatorCommands(activeCase);
+  const { data: reviewActivity } = useQuery({
+    queryKey: ['reviewActivity', activeCase.id],
+    queryFn: () => getReviewActivityForCase(activeCase.id),
+  });
+  const { data: evaluation } = useQuery({
+    queryKey: ['evaluationSummary', activeCase.id],
+    queryFn: () => getEvaluationForCase(activeCase.id),
+  });
+  const effectiveAnnotationTargetId =
+    annotationTargetType === 'case' ? activeCase.id : annotationTargetId.trim();
+
+  const refreshCaseQueries = async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['caseDetail', activeCase.id] }),
+      queryClient.invalidateQueries({ queryKey: ['cases'] }),
+      queryClient.invalidateQueries({ queryKey: ['reviewActivity', activeCase.id] }),
+      queryClient.invalidateQueries({ queryKey: ['evaluationSummary', activeCase.id] }),
+      queryClient.invalidateQueries({ queryKey: ['monitoringSummary'] }),
+    ]);
+  };
+
+  const reviewMutation = useMutation({
+    mutationFn: ({ decision, notes }: { decision: string; notes?: string }) =>
+      submitCaseReviewAction(activeCase.id, decision, notes),
+    onSuccess: async () => {
+      setReviewNotes('');
+      setLocalError(null);
+      await refreshCaseQueries();
+    },
+    onError: (err: Error) => setLocalError(err.message),
+  });
+
+  const annotationMutation = useMutation({
+    mutationFn: () =>
+      createCaseAnnotation(activeCase.id, {
+        targetType: annotationTargetType,
+        targetId: effectiveAnnotationTargetId || activeCase.id,
+        annotationType,
+        content: annotationContent,
+      }),
+    onSuccess: async () => {
+      setAnnotationContent('');
+      setLocalError(null);
+      await refreshCaseQueries();
+    },
+    onError: (err: Error) => setLocalError(err.message),
+  });
+
+  const latestEvaluation = evaluation?.latest;
+  const evaluationScore =
+    typeof latestEvaluation?.summary?.overall_score === 'number'
+      ? latestEvaluation.summary.overall_score
+      : null;
+  const activityItems = [
+    ...(reviewActivity?.auditEntries ?? []).map((item) => ({
+      id: `audit-${item.id}`,
+      title: item.actionType.replace(/[:_]/g, ' '),
+      subtitle: item.rationale || `${item.actor} updated ${item.targetType}`,
+      timestamp: item.createdAt,
+      icon: <CheckCheck size={14} />,
+    })),
+    ...(reviewActivity?.annotations ?? []).map((item) => ({
+      id: `annotation-${item.id}`,
+      title: `${item.annotationType} on ${item.targetType}`,
+      subtitle: item.content,
+      timestamp: item.createdAt,
+      icon: item.annotationType === 'flag' ? <Flag size={14} /> : <MessageSquare size={14} />,
+    })),
+  ]
+    .sort((a, b) => (b.timestamp || '').localeCompare(a.timestamp || ''))
+    .slice(0, 8);
 
   return (
     <div className="overview-tab">
@@ -338,10 +425,61 @@ const OverviewTab: React.FC<{
           </CardHeader>
           <CardBody>
             <div className="review-actions">
-              <p className="review-description">
-                This website does not trigger pipeline execution. Use the CLI or a background
-                operator to advance, review, or resolve exceptions for this case.
-              </p>
+              <p className="review-description">Use narrow in-app review controls for approvals and notes, with CLI commands still available for reruns and deeper operations.</p>
+              <textarea
+                value={reviewNotes}
+                onChange={(event) => setReviewNotes(event.target.value)}
+                placeholder="Decision rationale or handoff notes"
+                style={{
+                  width: '100%',
+                  minHeight: '84px',
+                  borderRadius: '12px',
+                  background: 'rgba(10, 19, 31, 0.68)',
+                  color: 'inherit',
+                  border: '1px solid rgba(133, 157, 186, 0.24)',
+                  padding: '0.85rem',
+                  marginBottom: '0.85rem',
+                }}
+              />
+              <div className="action-buttons">
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => reviewMutation.mutate({ decision: 'approve', notes: reviewNotes })}
+                  disabled={reviewMutation.isPending}
+                >
+                  Approve
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => reviewMutation.mutate({ decision: 'action_required', notes: reviewNotes })}
+                  disabled={reviewMutation.isPending}
+                >
+                  Action Required
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => reviewMutation.mutate({ decision: 'reject', notes: reviewNotes })}
+                  disabled={reviewMutation.isPending}
+                >
+                  Reject
+                </Button>
+              </div>
+              {localError && <div className="review-warning"><AlertTriangle size={14} /><span>{localError}</span></div>}
+              {activeCase.openExceptionsCount > 0 && (
+                <div className="review-warning">
+                  <AlertTriangle size={14} />
+                  <span>
+                    {activeCase.openExceptionsCount} open exception
+                    {activeCase.openExceptionsCount > 1 ? 's remain' : ' remains'} in the operator queue.
+                  </span>
+                </div>
+              )}
+              <div className="review-label" style={{ marginTop: '1rem', marginBottom: '0.375rem' }}>
+                <TerminalSquare size={14} /> CLI fallback
+              </div>
               <div className="action-buttons" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
                 {operatorCommands.map((command) => (
                   <div key={command.label}>
@@ -352,15 +490,126 @@ const OverviewTab: React.FC<{
                   </div>
                 ))}
               </div>
-              {activeCase.openExceptionsCount > 0 && (
-                <div className="review-warning">
-                  <AlertTriangle size={14} />
-                  <span>
-                    {activeCase.openExceptionsCount} open exception
-                    {activeCase.openExceptionsCount > 1 ? 's remain' : ' remains'} in the operator queue.
-                  </span>
+            </div>
+          </CardBody>
+        </Card>
+
+        <Card className="overview-card">
+          <CardHeader>
+            <CardTitle>Evaluation Snapshot</CardTitle>
+          </CardHeader>
+          <CardBody>
+            <div className="info-list">
+              <div className="info-item">
+                <span className="info-label">Overall score</span>
+                <span className="info-value">{evaluationScore ?? 'Pending'}</span>
+              </div>
+              <div className="info-item">
+                <span className="info-label">Evidence linkage</span>
+                <span className="info-value">{String(latestEvaluation?.metrics?.evidence_linkage ?? 'n/a')}</span>
+              </div>
+              <div className="info-item">
+                <span className="info-label">Review burden</span>
+                <span className="info-value">{String(latestEvaluation?.metrics?.review_burden ?? 'n/a')}</span>
+              </div>
+              <div className="info-item">
+                <span className="info-label">Pipeline resilience</span>
+                <span className="info-value">{String(latestEvaluation?.metrics?.pipeline_resilience ?? 'n/a')}</span>
+              </div>
+              <div className="info-item">
+                <span className="info-label">Last evaluated</span>
+                <span className="info-value">{latestEvaluation?.createdAt ?? 'Running on first view'}</span>
+              </div>
+            </div>
+          </CardBody>
+        </Card>
+
+        <Card className="overview-card">
+          <CardHeader>
+            <CardTitle>Annotations</CardTitle>
+          </CardHeader>
+          <CardBody>
+            <div className="review-actions">
+              <div className="action-buttons" style={{ marginBottom: '0.75rem' }}>
+                <select value={annotationType} onChange={(e) => setAnnotationType(e.target.value)}>
+                  <option value="comment">Comment</option>
+                  <option value="flag">Flag</option>
+                  <option value="context">Context</option>
+                </select>
+                <select
+                  value={annotationTargetType}
+                  onChange={(e) => setAnnotationTargetType(e.target.value)}
+                >
+                  <option value="case">Case</option>
+                  <option value="claim">Claim</option>
+                  <option value="evidence">Evidence</option>
+                  <option value="exception">Exception</option>
+                  <option value="narrative">Narrative</option>
+                </select>
+              </div>
+              <input
+                value={annotationTargetType === 'case' ? activeCase.id : annotationTargetId}
+                onChange={(event) => setAnnotationTargetId(event.target.value)}
+                placeholder="Target ID"
+                disabled={annotationTargetType === 'case'}
+                style={{
+                  width: '100%',
+                  borderRadius: '12px',
+                  background: 'rgba(10, 19, 31, 0.68)',
+                  color: 'inherit',
+                  border: '1px solid rgba(133, 157, 186, 0.24)',
+                  padding: '0.75rem',
+                  marginBottom: '0.75rem',
+                }}
+              />
+              <textarea
+                value={annotationContent}
+                onChange={(event) => setAnnotationContent(event.target.value)}
+                placeholder="Add comment, flag rationale, or injected context"
+                style={{
+                  width: '100%',
+                  minHeight: '90px',
+                  borderRadius: '12px',
+                  background: 'rgba(10, 19, 31, 0.68)',
+                  color: 'inherit',
+                  border: '1px solid rgba(133, 157, 186, 0.24)',
+                  padding: '0.85rem',
+                  marginBottom: '0.85rem',
+                }}
+              />
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => annotationMutation.mutate()}
+                disabled={annotationMutation.isPending || !annotationContent.trim()}
+              >
+                Save Annotation
+              </Button>
+            </div>
+          </CardBody>
+        </Card>
+
+        <Card className="overview-card">
+          <CardHeader>
+            <CardTitle>Review Activity</CardTitle>
+          </CardHeader>
+          <CardBody>
+            <div className="recent-list">
+              {activityItems.map((item) => (
+                <div key={item.id} className="recent-item">
+                  <div className="recent-content">
+                    <div className="recent-query" style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                      {item.icon}
+                      <span>{item.title}</span>
+                    </div>
+                    <div className="recent-domain">{item.subtitle}</div>
+                  </div>
+                  <div className="recent-status">
+                    <Badge variant="neutral" size="sm">{item.timestamp ? item.timestamp.slice(0, 16).replace('T', ' ') : 'n/a'}</Badge>
+                  </div>
                 </div>
-              )}
+              ))}
+              {activityItems.length === 0 && <div className="empty-state">No review actions recorded yet.</div>}
             </div>
           </CardBody>
         </Card>

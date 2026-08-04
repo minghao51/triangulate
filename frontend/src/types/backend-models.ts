@@ -56,6 +56,25 @@ export interface ClaimEvidenceLink {
   sourceType: string | null;
 }
 
+export interface PartyConsensus {
+  unanimous: boolean;
+  supportingParties: string[];
+  opposingParties: string[];
+  neutralParties: string[];
+}
+
+export interface ArbiterReasoning {
+  isFact: string;
+  verificationRationale: string;
+  partyConsensus: PartyConsensus;
+}
+
+export interface SourceStanceBreakdown {
+  agreedSources: string[];
+  disagreedSources: string[];
+  didntReportSources: string[];
+}
+
 export interface Claim {
   id: string;
   text: string;
@@ -67,7 +86,10 @@ export interface Claim {
   sourceDiversityCount: number;
   claimSignature: string;
   narrativeClusterId: string | null;
+  arbiterReasoning: ArbiterReasoning | null;
+  partyPositions: Record<string, 'for' | 'against' | 'neutral'>;
   evidence: ClaimEvidenceLink[];
+  sourceStanceBreakdown: SourceStanceBreakdown;
 }
 
 export interface EvidenceVerificationCheck {
@@ -91,6 +113,20 @@ export interface Evidence {
   credibilityTier: string | null;
   requiresHumanReview: boolean;
   linkedClaims: string[];
+  lineage: {
+    caseId: string;
+    eventId: string | null;
+    caseArticleId: string | null;
+    origin: string;
+  } | null;
+  artifacts: Array<{
+    id: string;
+    tool: string;
+    artifactType: string;
+    sourcePath: string;
+    relation: string;
+    importedAt: string | null;
+  }>;
   verificationChecks: EvidenceVerificationCheck[];
 }
 
@@ -104,6 +140,33 @@ export interface Exception {
   isOpen: boolean;
 }
 
+export interface ReviewAnnotation {
+  id: string;
+  targetType: string;
+  targetId: string;
+  annotationType: string;
+  author: string;
+  content: string;
+  metadata: Record<string, unknown>;
+  createdAt: string | null;
+}
+
+export interface ReviewAuditEntry {
+  id: string;
+  actionType: string;
+  targetType: string;
+  targetId: string;
+  actor: string;
+  rationale: string | null;
+  metadata: Record<string, unknown>;
+  createdAt: string | null;
+}
+
+export interface ReviewActivity {
+  annotations: ReviewAnnotation[];
+  auditEntries: ReviewAuditEntry[];
+}
+
 export interface Party {
   id: string;
   name: string;
@@ -112,6 +175,9 @@ export interface Party {
   overallStance: 'for' | 'against' | 'neutral' | 'mixed';
   isModelInferred: boolean;
   associatedClaimsCount: number;
+  investigationData: Record<string, unknown> | null;
+  claimsSupported: number;
+  claimsContested: number;
 }
 
 export interface TimelineEvent {
@@ -124,6 +190,8 @@ export interface TimelineEvent {
   locationCountryCode?: string | null;
   locationLat?: number | null;
   locationLon?: number | null;
+  workflowRoute?: string | null;
+  sourceUrl?: string | null;
 }
 
 export interface RunHistoryItem {
@@ -145,12 +213,79 @@ export interface ReportData {
   manifestPath: string | null;
 }
 
+export interface OsintArtifact {
+  id: string;
+  tool: string;
+  artifactType: string;
+  sourcePath: string;
+  importedAt: string | null;
+  importMetadata: Record<string, unknown>;
+}
+
+export interface WorkflowCheckpoint {
+  id: string;
+  stageName: string;
+  checkpointKey: string;
+  status: string;
+  summary: string | null;
+  retryCount: number;
+  payload: Record<string, unknown>;
+  createdAt: string | null;
+}
+
+export interface AgentOutput {
+  id: string;
+  stageName: string;
+  agentName: string;
+  outputType: string;
+  summary: string | null;
+  payload: Record<string, unknown>;
+  taxonomyVersionId: string | null;
+  createdAt: string | null;
+}
+
+export interface WorkflowDiagnostics {
+  taxonomy: {
+    id: string;
+    kind: string;
+    version: string;
+    path: string | null;
+    checksum: string;
+  } | null;
+  checkpoints: WorkflowCheckpoint[];
+  agentOutputs: AgentOutput[];
+}
+
+export interface EvaluationResult {
+  id: string;
+  status: string;
+  evaluationKind: string;
+  summary: Record<string, unknown>;
+  metrics: Record<string, unknown>;
+  createdAt: string | null;
+}
+
+export interface EvaluationSummary {
+  latest: EvaluationResult;
+  history: EvaluationResult[];
+}
+
+export interface MonitoringSummary {
+  cases: Record<string, number>;
+  review: Record<string, number>;
+  pipeline: Record<string, number>;
+  intake: Record<string, number>;
+  evaluation: Record<string, number | null>;
+}
+
 export interface NarrativeCluster {
   id: string;
   clusterId: string;
   stanceSummary: string;
   sourceCount: number;
   claimCount: number;
+  keyThemes: string[];
+  mainEntities: string[];
 }
 
 export interface ClaimsOverview {
@@ -170,6 +305,8 @@ export interface CaseDetail {
     timeline: TimelineEvent[];
     runHistory: RunHistoryItem[];
     narratives: NarrativeCluster[];
+    osintArtifacts: OsintArtifact[];
+    workflow: WorkflowDiagnostics;
     report: ReportData;
   };
 }
