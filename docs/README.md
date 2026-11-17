@@ -16,6 +16,7 @@ The active documentation tree is organized by purpose instead of by date.
 - [Delivered immutable evidence captures](architecture/20261115-immutable-evidence-captures.md): E01 source versions, normalization, transaction/FK ordering and explicit legacy materialization
 - [Delivered inspector read models](architecture/20261115-inspector-read-models.md): E03 citation/claim/evidence GET readers, code-point text windows, ownership and 404/422 rules, additive DTOs
 - [E02 pass B handoff](plans/20261115-e02-pass-b-handoff.md): self-contained continuation brief for quotation integration, fallback protection, aggregates and review hashes
+- [E04 handoff](plans/20261115-e04-handoff.md): self-contained brief for the evidence inspector and deep links (Release A gate) — what exists from E03, scope, acceptance, gates, safety rules
 - [Product comparison and enhancement roadmap](plans/20261114-product-enhancement-roadmap.md): comparable web apps and proposed priorities; not approved implementation
 - [Evidence workbench specification](plans/20261114-evidence-workbench-specification.md): proposed feature behavior, storage/API contracts, safety and acceptance criteria
 - [DeepSeek v4.1 worker plan](plans/20261114-evidence-workbench-worker-plan.md): dependency-ordered implementation tickets and review gates; B00/B01/B02/B03/E01 independently verified; E02 complete across passes A, B1, B2 and B3; E03 delivered and verified — both pending owner acceptance

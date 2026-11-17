@@ -1,8 +1,8 @@
 # E02 pass B: new-thread handoff
 
-Date: 2026-11-15. Status: **E02 passes A, B1, B2 and B3 are implemented and
-independently verified; every row of the E02 acceptance matrix below is met, so E02
-is complete pending owner acceptance.** This document is self-contained so a fresh
+Date: 2026-11-15. Status: **E02 passes A, B1, B2 and B3 and E03 are implemented,
+independently verified, and ACCEPTED: merged into `main` as PR #2 (merge commit
+`af870da`). Every row of the acceptance matrix below is met.** This document is self-contained so a fresh
 agent thread can continue without the previous conversation. It is a handoff, not a new contract: the
 authority remains [the specification](20261114-evidence-workbench-specification.md)
 §4 and the [E02 ticket card](20261114-evidence-workbench-worker-plan.md#e02--add-validated-quotations-and-correct-relationship-counts).
