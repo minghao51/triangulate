@@ -10,8 +10,48 @@ from src.ai.agents.narrator import narrate_cluster
 from src.ai.agents.classifier import classify_verification, classify_event_verification
 from src.ai.agents.party_classifier import classify_parties
 from src.ai.geocoder import geocode_with_retry
+from src.ai.schemas import ExtractionOutcomeSchema
 
 logger = logging.getLogger(__name__)
+
+# Envelope keys copied verbatim into ``llm_metadata`` entries.
+_AGENT_METADATA_KEYS = (
+    "parse_status",
+    "structured_output_used",
+    "fallback_used",
+    "raw_response_excerpt",
+)
+
+
+def _collector_metadata(collector_result: dict[str, Any]) -> dict[str, Any]:
+    """Return the legacy four-key collector metadata block."""
+    return {key: collector_result.get(key) for key in _AGENT_METADATA_KEYS}
+
+
+def _collector_outcome(
+    collector_result: dict[str, Any], claims: list[dict[str, Any]]
+) -> dict[str, Any]:
+    """Return the collector's honest extraction outcome for this article.
+
+    The collector records ``extraction_outcome`` on its envelope. When a caller
+    or test bypasses the collector and hands back a raw claim list
+    (``_normalize_agent_result`` compat path) nothing proves the collector ever
+    saw the article body, so the derived outcome is deliberately conservative:
+    no scope, no trusted quote proposals.
+    """
+    outcome = collector_result.get("extraction_outcome")
+    if isinstance(outcome, dict):
+        return dict(outcome)
+    return ExtractionOutcomeSchema(
+        status="valid" if claims else "unavailable",
+        quote_proposals_trusted=False,
+        scope_start=0,
+        scope_end=0,
+        body_char_count=0,
+        input_limit=0,
+        source_available=False,
+        reason="compat_collector_result",
+    ).model_dump()
 
 
 def _normalize_agent_result(
@@ -87,8 +127,40 @@ class AIWorkflow:
         )
         claims = collector_result.get("output", {}).get("claims", [])
         collector_meta = collector_result
+        extraction_outcome = _collector_outcome(collector_result, claims)
 
         if not claims:
+            # A validated explicit empty collection is a real result: report an
+            # honest zero-claim event instead of overloading ``None``. Fallback
+            # and unavailable extraction stay failures, exactly as before.
+            if extraction_outcome.get("status") == "empty":
+                logger.warning(
+                    "Collector returned a validated empty claim collection for "
+                    "article: %s",
+                    article.get("title", "")[:50],
+                )
+                return {
+                    "id": str(uuid.uuid4()),
+                    "timestamp": article.get("timestamp", datetime.now(UTC)),
+                    "title": article.get("title", ""),
+                    "summary": (article.get("content") or "")[:500],
+                    "verification_status": "ALLEGED",
+                    "claims": [],
+                    "narratives": [],
+                    "parties": [],
+                    "source_url": article.get("link", ""),
+                    "source_name": article.get("source_name", "unknown"),
+                    "location_country_code": None,
+                    "location_lat": None,
+                    "location_lon": None,
+                    "llm_metadata": {
+                        "collector": {
+                            **_collector_metadata(collector_meta),
+                            "extraction_outcome": extraction_outcome,
+                        },
+                    },
+                    "extraction_outcome": extraction_outcome,
+                }
             logger.warning("No claims extracted from article")
             return None
 
@@ -196,27 +268,18 @@ class AIWorkflow:
             "source_name": article.get("source_name", "unknown"),
             "llm_metadata": {
                 "collector": {
-                    key: collector_meta.get(key)
-                    for key in (
-                        "parse_status",
-                        "structured_output_used",
-                        "fallback_used",
-                        "raw_response_excerpt",
-                    )
+                    **_collector_metadata(collector_meta),
+                    "extraction_outcome": extraction_outcome,
                 },
                 "party_classifier": {
                     key: party_classifier_result.get(key)
-                    for key in (
-                        "parse_status",
-                        "structured_output_used",
-                        "fallback_used",
-                        "raw_response_excerpt",
-                    )
+                    for key in _AGENT_METADATA_KEYS
                 },
                 "narrator": [
                     narrative.get("llm_metadata", {}) for narrative in narratives
                 ],
             },
+            "extraction_outcome": extraction_outcome,
         }
 
         event_data = _extract_location(event_data, article)

@@ -22,7 +22,18 @@ from src.ai.workflows.party_investigation_workflow import (
 )
 from src.exporter import JSONExporter, MarkdownExporter
 from src.ingester.fetcher import ContentFetcher
-from src.ingester.topic_fetcher import TopicFetcher
+from src.ingester.topic_fetcher import (
+    COVERAGE_COMPLETE,
+    COVERAGE_FAILED,
+    COVERAGE_NOT_ATTEMPTED,
+    COVERAGE_UNKNOWN,
+    SUCCESS_ACQUISITION_STATUSES,
+    AcquisitionStatus,
+    TopicFetcher,
+    coerce_attempted,
+    describe_source_outcomes,
+    validated_outcome_kind,
+)
 from src.ingester.url_capture import fetch_article_content
 from src.storage import (
     Claim,
@@ -47,6 +58,22 @@ from src.storage import (
     get_database,
 )
 from src.storage.event_store import store_event_in_db
+from src.cases.evidence import (
+    link_contribution,
+    normalize_capture_text,
+    resolve_effective_relationship,
+)
+from src.cases.readers import (
+    link_read_model,
+    read_capture_window,
+    read_citation,
+    read_claim_detail,
+    read_evidence_detail,
+)
+from src.storage.review_state import (
+    bind_review_decision,
+    compute_event_analysis_hash,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -81,6 +108,92 @@ class CaseRunContext:
     report_bundle: dict[str, Any] | None = None
     exception_queue: list[dict[str, Any]] | None = None
     changed: bool = False
+    stage_failure: dict[str, Any] | None = None
+
+
+def retrieval_acquisition_observation(result: dict[str, Any]) -> dict[str, Any]:
+    """Derive the canonical acquisition observation for a retrieval result.
+
+    Coverage and counts are derived **only** from validated per-source outcomes.
+    A caller-supplied top-level ``acquisition_coverage``/``acquisition_counts`` is
+    untrusted and can never upgrade a failed/partial/not-attempted/unknown
+    observation to ``complete_requested_scope``. A result without structured
+    outcomes, or explicitly flagged ``acquisition_observed=False`` (legacy
+    TopicFetcher/caller output), stays ``unknown`` and unobserved - an empty
+    ``source_outcomes`` list is never retroactively treated as a fresh success.
+    """
+    total = result.get("source_plan_total")
+    if not isinstance(total, int) or isinstance(total, bool) or total <= 0:
+        total = 0
+    plan = result.get("source_plan")
+    visible_plan_length = len(plan) if isinstance(plan, list) else 0
+    # Conservative reconciliation: a reported total may never shrink the known
+    # requested scope below the visible plan; the summarizer then enforces at
+    # least the observed record count.
+    requested_hint = max(total, visible_plan_length)
+    known_requested = requested_hint if requested_hint > 0 else None
+
+    raw_outcomes = result.get("source_outcomes")
+    if raw_outcomes is None or result.get("acquisition_observed") is False:
+        return {
+            "coverage": COVERAGE_UNKNOWN,
+            "counts": describe_source_outcomes(
+                [], requested_count=known_requested
+            )["counts"],
+            "sources": [],
+            "observed": False,
+        }
+
+    sources = [dict(outcome) for outcome in raw_outcomes]
+    summary = describe_source_outcomes(sources, requested_count=known_requested)
+    return {
+        "coverage": summary["coverage"],
+        "counts": summary["counts"],
+        "sources": sources,
+        "observed": True,
+    }
+
+
+def _has_usable_seed_context(
+    acquisition_sources: list[dict[str, Any]], articles: list[dict[str, Any]]
+) -> bool:
+    """True when a never-attempted manual/social seed has a real sparse article.
+
+    A fabricated skip outcome, or a seed outcome with no matching usable article
+    in the retrieval result, is not seed context: it cannot soften a fatal
+    no-acquisition run. Matching is by URL plus seed kind (the fetch strategy
+    drives the seed kind, so a catalogue row that still reports ``source_type``
+    ``rss`` is fine), which avoids legitimate fallback-name differences.
+    """
+    articles_by_url: dict[str, list[dict[str, Any]]] = {}
+    for article in articles:
+        url = article.get("url")
+        if isinstance(url, str) and url:
+            articles_by_url.setdefault(url, []).append(article)
+
+    for source in acquisition_sources:
+        if validated_outcome_kind(source) != AcquisitionStatus.SKIPPED.value:
+            continue
+        if coerce_attempted(source.get("attempted")) is not False:
+            continue
+        strategy = source.get("fetch_strategy")
+        if strategy not in {"manual", "social"}:
+            continue
+        article_count = source.get("article_count")
+        if isinstance(article_count, bool) or not isinstance(article_count, int):
+            continue
+        if article_count <= 0:
+            continue
+        url = source.get("source_url")
+        if not isinstance(url, str) or not url:
+            continue
+        for article in articles_by_url.get(url, []):
+            if article.get("source_type") != strategy:
+                continue
+            content = article.get("content")
+            if isinstance(content, str) and content.strip():
+                return True
+    return False
 
 
 def _utcnow() -> datetime:
@@ -164,6 +277,71 @@ class TopicCaseService:
             if case is None:
                 return None
             return self._build_case_detail_payload(session, case)
+        finally:
+            session.close()
+
+    # -- Inspector readers (E03) -----------------------------------------
+    #
+    # Thin, GET-only delegation to ``src.cases.readers``. Each call opens and
+    # closes its own session exactly like ``get_case_details``; none of them
+    # commits, creates captures, materializes legacy rows or runs analysis.
+    # ``None`` means "not found for this case" (404); a malformed capture range
+    # raises ``CaptureRangeError`` (422).
+
+    def get_citation_detail(
+        self, case_id: str, citation_id: str
+    ) -> dict[str, Any] | None:
+        """Read one immutable citation owned by ``case_id``."""
+        session = get_database().get_session_sync()
+        try:
+            return read_citation(
+                session, case_id=case_id, citation_id=citation_id
+            )
+        finally:
+            session.close()
+
+    def get_claim_detail(
+        self, case_id: str, claim_id: str
+    ) -> dict[str, Any] | None:
+        """Read one case-owned claim with its evidence passages."""
+        session = get_database().get_session_sync()
+        try:
+            return read_claim_detail(session, case_id=case_id, claim_id=claim_id)
+        finally:
+            session.close()
+
+    def get_evidence_detail(
+        self, case_id: str, evidence_id: str
+    ) -> dict[str, Any] | None:
+        """Read one case-owned evidence item, its captures and its claims."""
+        session = get_database().get_session_sync()
+        try:
+            return read_evidence_detail(
+                session, case_id=case_id, evidence_id=evidence_id
+            )
+        finally:
+            session.close()
+
+    def get_capture_window(
+        self,
+        case_id: str,
+        evidence_id: str,
+        capture_id: str,
+        *,
+        start: int,
+        length: int,
+    ) -> dict[str, Any] | None:
+        """Read one bounded code-point window of an immutable capture."""
+        session = get_database().get_session_sync()
+        try:
+            return read_capture_window(
+                session,
+                case_id=case_id,
+                evidence_id=evidence_id,
+                capture_id=capture_id,
+                start=start,
+                length=length,
+            )
         finally:
             session.close()
 
@@ -503,6 +681,13 @@ class TopicCaseService:
                 for review in reviews:
                     review.status = target_status
                     review.reviewed_at = _utcnow()
+                    # Bind the decision to the analysis revision it reviewed so
+                    # a later rewrite only invalidates a materially changed one.
+                    review_event_id: Any = review.event_id
+                    bind_review_decision(
+                        review,
+                        compute_event_analysis_hash(session, review_event_id),
+                    )
 
             case.last_reviewed_at = _utcnow()
             case.review_notes = notes
@@ -958,6 +1143,77 @@ class TopicCaseService:
         article_count = (
             session.query(CaseArticle).filter(CaseArticle.case_id == context.case.id).count()
         )
+        acquisition = retrieval_acquisition_observation(result)
+        acquisition["fetch_exceptions"] = list(result.get("fetch_exceptions", []))
+        coverage = acquisition["coverage"]
+
+        # Canonicalize acquisition fields on every persisted surface (artifact
+        # payload, stage metrics built from this result, case metadata and the
+        # checkpoint). A caller-supplied top-level coverage/counts or
+        # ``sources_used`` claim is never trusted; when supplied it is kept
+        # separately and explicitly labelled as reported/untrusted.
+        reported_coverage = result.get("acquisition_coverage")
+        reported_counts = result.get("acquisition_counts")
+        reported_sources_used = result.get("sources_used")
+        canonical_sources_used = [
+            source.get("source_name")
+            for source in acquisition["sources"]
+            if validated_outcome_kind(source) in SUCCESS_ACQUISITION_STATUSES
+        ]
+        result["source_outcomes"] = acquisition["sources"]
+        result["acquisition_coverage"] = coverage
+        result["acquisition_counts"] = acquisition["counts"]
+        result["acquisition_observed"] = acquisition["observed"]
+        result["sources_used"] = canonical_sources_used
+        if reported_coverage is not None or reported_counts is not None:
+            result["reported_acquisition_summary"] = {
+                "coverage": reported_coverage,
+                "counts": reported_counts,
+                "trusted": False,
+            }
+        if reported_sources_used and list(reported_sources_used) != canonical_sources_used:
+            result["reported_sources_used"] = list(reported_sources_used)
+
+        # A never-attempted manual/social seed is reviewable context only when a
+        # real matching sparse article is present; it distinguishes a reviewable
+        # config gap from a fatal no-source retrieval.
+        usable_seed_present = _has_usable_seed_context(
+            acquisition["sources"], list(result.get("articles") or [])
+        )
+        stage_failure: dict[str, Any] | None = None
+        if coverage == COVERAGE_FAILED:
+            stage_failure = {
+                "reason": "all_sources_failed",
+                "coverage": coverage,
+                "counts": acquisition["counts"],
+                "message": (
+                    "All attempted source acquisitions failed; "
+                    "retrieval is not successful."
+                ),
+            }
+        elif (
+            acquisition["observed"]
+            and coverage in (COVERAGE_NOT_ATTEMPTED, COVERAGE_UNKNOWN)
+            and not usable_seed_present
+        ):
+            # No source, no acquisition and no usable seed (empty source pack or a
+            # cached-only response) is a fatal retrieval, while its distinct
+            # not_attempted/unknown coverage is retained verbatim.
+            stage_failure = {
+                "reason": "no_source_acquisition",
+                "coverage": coverage,
+                "counts": acquisition["counts"],
+                "message": (
+                    "No source was acquired and no usable seed source was "
+                    "supplied; retrieval is not successful."
+                ),
+            }
+        if stage_failure is not None:
+            # Recorded for the owning stage transaction (same commit): retrieved
+            # context and diagnostics stay durable, the stage/case is FAILED and
+            # later stages do not run.
+            context.stage_failure = stage_failure
+
         metadata_json = {
             **(context.case.metadata_json or {}),
             "bootstrap": context.bootstrap_result or {},
@@ -968,6 +1224,9 @@ class TopicCaseService:
             "articles_processed": result.get("articles_processed", 0),
             "last_retrieved_at": _utcnow().isoformat(),
             "last_retrieve_changed": context.changed,
+            "retrieval_acquisition": acquisition,
+            "retrieval_coverage": coverage,
+            "retrieval_stage_failure": stage_failure,
             "exception_queue": self._merge_exception_lists(
                 context.exception_queue or [],
                 [
@@ -1011,11 +1270,25 @@ class TopicCaseService:
             )
             session.add(checkpoint)
         checkpoint.last_checked_at = _utcnow()
-        checkpoint.last_successful_run_at = _utcnow()
+        prior_successful_run_at = checkpoint.last_successful_run_at
+        advanced_successful_checkpoint = coverage == COVERAGE_COMPLETE
+        if advanced_successful_checkpoint:
+            checkpoint.last_successful_run_at = _utcnow()
         checkpoint.metadata_json = {
+            "coverage": coverage,
+            "counts": acquisition["counts"],
+            "source_outcomes": acquisition["sources"],
+            "acquisition_observed": acquisition["observed"],
+            "fetch_exceptions": acquisition["fetch_exceptions"],
             "new_article_count": new_article_count,
             "articles_processed": result.get("articles_processed", 0),
-            "fetch_exceptions": len(result.get("fetch_exceptions", [])),
+            "advanced_successful_checkpoint": advanced_successful_checkpoint,
+            "fatal_reason": stage_failure["reason"] if stage_failure else None,
+            "retained_successful_run_at": (
+                prior_successful_run_at.isoformat()
+                if prior_successful_run_at is not None
+                else None
+            ),
         }
         return artifact_ids
 
@@ -1144,22 +1417,62 @@ class TopicCaseService:
     ) -> dict[str, Any]:
         bootstrap = (case.metadata_json or {}).get("bootstrap", {})
         article = dict(case_article.raw_payload or {})
+        # One canonical source body: prefer the raw payload body (the text the
+        # collector has always received) when it is known, otherwise the stored
+        # case-article projection. Normalize CRLF/CR -> LF once and use the same
+        # text for analysis, the evidence payload, the compatibility projection
+        # and the immutable capture. A generated summary/title is never used as
+        # a substitute source body.
+        raw_content = article.get("content")
+        source_body = (
+            raw_content if raw_content is not None else case_article.content
+        )
+        # ``None`` stays unknown: it only becomes a compatibility empty string
+        # for the AI call, never an invented empty capture. An explicit empty
+        # string remains a real empty body.
+        canonical_content = (
+            normalize_capture_text(source_body) if source_body is not None else None
+        )
         article_data = {
             "title": article.get("title", case_article.title),
-            "content": article.get("content", case_article.content or ""),
+            "content": canonical_content if canonical_content is not None else "",
             "timestamp": _parse_timestamp(article.get("published_at")),
             "link": article.get("url", case_article.url),
             "source_name": article.get("source", case_article.source or ""),
             "confirmed_parties": bootstrap.get("confirmed_parties", []),
         }
 
-        baseline = await self.ai_workflow.process_article(article_data)
-        if baseline is None:
-            return {
-                "id": str(uuid.uuid5(uuid.NAMESPACE_URL, f"{case.id}:{case_article.url}")),
+        baseline: dict[str, Any] | None = (
+            await self.ai_workflow.process_article(article_data)
+        )
+        is_fallback = baseline is None
+        if is_fallback:
+            # The workflow only returns ``None`` for fallback/unavailable
+            # extraction. Record that explicitly instead of leaving the event
+            # outcome absent: the event store derives replacement authority from
+            # this status and must not treat a failed rerun as a legacy caller
+            # that may overwrite valid stored analysis. The key set mirrors
+            # ``ExtractionOutcomeSchema``; scope numbers stay zero because this
+            # path never performed a scoped extraction.
+            outcome: Any = {
+                "status": "fallback",
+                "quote_proposals_trusted": False,
+                "scope_start": 0,
+                "scope_end": 0,
+                "body_char_count": 0,
+                "input_limit": 0,
+                "source_available": bool(canonical_content),
+                "reason": "no_claims_extracted",
+            }
+            baseline = {
+                "id": str(
+                    uuid.uuid5(
+                        uuid.NAMESPACE_URL, f"{case.id}:{case_article.url}"
+                    )
+                ),
                 "timestamp": article_data["timestamp"],
                 "title": article_data["title"],
-                "summary": article_data["content"][:500],
+                "summary": (canonical_content or "")[:500],
                 "verification_status": "ALLEGED",
                 "claims": [],
                 "narratives": [],
@@ -1167,24 +1480,46 @@ class TopicCaseService:
                 "party_investigations": [],
                 "workflow_route": "baseline_only",
                 "routing_reason": "no_claims_extracted",
-                "source_url": article_data["link"],
-                "source_name": article_data["source_name"],
+                "extraction_outcome": outcome,
             }
+        else:
+            # Capture the collector's own outcome before the merge/rewrite can
+            # change anything; ``None`` means a caller/fake did not supply one
+            # and therefore keeps legacy replacement semantics in the store.
+            outcome = baseline.get("extraction_outcome")
+            baseline["id"] = str(
+                uuid.uuid5(uuid.NAMESPACE_URL, f"{case.id}:{case_article.url}")
+            )
+            baseline["timestamp"] = _parse_timestamp(baseline.get("timestamp"))
+            baseline["extraction_outcome"] = outcome
 
-        baseline["id"] = str(uuid.uuid5(uuid.NAMESPACE_URL, f"{case.id}:{case_article.url}"))
-        baseline["timestamp"] = _parse_timestamp(baseline.get("timestamp"))
+        # Common finalization: a fallback zero-claim event is still a valid event
+        # with a supplied source, so it keeps the same source evidence/capture.
         baseline["source_url"] = article_data["link"]
         baseline["source_name"] = article_data["source_name"]
         baseline["source_type"] = getattr(case_article, "source_type", "rss")
         baseline["source_metadata"] = getattr(case_article, "source_metadata", {}) or {}
         baseline["case_article_id"] = case_article.id
-        baseline["evidence"] = self._build_event_evidence(case, case_article, baseline)
+        baseline["evidence"] = self._build_event_evidence(
+            case, case_article, baseline, content=canonical_content
+        )
         baseline["claims"] = self._augment_claims_with_evidence(
             baseline.get("claims", []),
             baseline["evidence"],
             bootstrap.get("confirmed_parties", []),
             baseline["id"],
         )
+
+        if is_fallback:
+            return baseline
+
+        # A validated empty collection is a real, authoritative result with no
+        # claims. Routing it through the party workflow would launch a second
+        # extraction attempt over zero claims, so short-circuit here.
+        if isinstance(outcome, dict) and outcome.get("status") == "empty":
+            baseline["workflow_route"] = "baseline_only"
+            baseline["routing_reason"] = "validated_empty_extraction"
+            return baseline
 
         should_investigate = self._should_route_to_party_workflow(case, baseline)
         if not should_investigate:
@@ -1221,22 +1556,62 @@ class TopicCaseService:
         self, baseline: dict[str, Any], party_state: dict[str, Any]
     ) -> dict[str, Any]:
         determinations = party_state.get("final_determinations", [])
-        normalized_claims = []
-        for index, determination in enumerate(determinations):
-            base_claim = (
-                baseline.get("claims", [])[index]
-                if index < len(baseline.get("claims", []))
-                else {}
+        baseline_claims = baseline.get("claims", []) or []
+        # Match determinations to baseline claims by real claim identity (the
+        # existing exact signature), never by list position. A quotation or any
+        # other assertion-specific field must never move onto different text.
+        claims_by_signature: dict[str, list[tuple[int, dict[str, Any]]]] = {}
+        for position, claim in enumerate(baseline_claims):
+            claim_text = claim.get("claim", claim.get("claim_text", ""))
+            claims_by_signature.setdefault(_claim_signature(claim_text), []).append(
+                (position, claim)
             )
-            normalized_claims.append(
+        consumed_positions: set[int] = set()
+
+        def take_baseline_claim(signature: str) -> dict[str, Any] | None:
+            """Return the first unconsumed baseline claim with this signature."""
+            for position, claim in claims_by_signature.get(signature, []):
+                if position not in consumed_positions:
+                    consumed_positions.add(position)
+                    return claim
+            return None
+
+        normalized_claims: list[dict[str, Any]] = []
+        # Event-level source attachment. Every baseline claim is linked to the
+        # same source document(s) for this event, so a claim whose text changed is
+        # still backed by that source even when no quotation may follow it.
+        source_evidence = list(baseline.get("evidence") or [])
+        for determination in determinations:
+            proposed_text = determination.get("claim_text")
+            base_claim = (
+                take_baseline_claim(_claim_signature(proposed_text))
+                if isinstance(proposed_text, str)
+                else None
+            )
+            final_text = proposed_text if isinstance(proposed_text, str) else ""
+            if not final_text.strip() and base_claim is not None:
+                # Defensive compatibility: keep the matched baseline assertion
+                # when a determination omits its own text.
+                final_text = base_claim.get(
+                    "claim", base_claim.get("claim_text", "")
+                )
+            if not isinstance(final_text, str) or not final_text.strip():
+                # Never store an empty assertion: with no text there is nothing
+                # to attach a source or a proposal to.
+                logger.warning(
+                    "Skipping party determination without claim text for event %s",
+                    baseline.get("id"),
+                )
+                continue
+            finalized: dict[str, Any] = (
+                {**base_claim} if base_claim is not None else {}
+            )
+            finalized.update(
                 {
-                    **base_claim,
-                    "claim": determination.get(
-                        "claim_text", base_claim.get("claim", base_claim.get("claim_text"))
-                    ),
+                    "claim": final_text,
                     "verification_status": determination.get(
                         "verification_status",
-                        base_claim.get("verification_status", "ALLEGED"),
+                        finalized.get("verification_status", "ALLEGED"),
                     ),
                     "fact_allegation_type": determination.get(
                         "fact_allegation_classification"
@@ -1246,6 +1621,26 @@ class TopicCaseService:
                     "controversy_score": determination.get("controversy_score"),
                 }
             )
+            if base_claim is None:
+                # No identity match: the claim is genuinely new text. Keep the
+                # event-level source attachment (and the attachment-derived
+                # counts/identity the shared helper recomputes from the final
+                # text) but nothing assertion-specific from a positional
+                # neighbour -- no quotation, offsets, citation or assessment.
+                finalized = self._augment_claims_with_evidence(
+                    [finalized], source_evidence, [], baseline["id"]
+                )[0]
+            else:
+                # Identity always describes the text that is actually stored.
+                final_signature = _claim_signature(final_text)
+                finalized["id"] = str(
+                    uuid.uuid5(
+                        uuid.NAMESPACE_URL,
+                        f"claim:{baseline['id']}:{final_signature}",
+                    )
+                )
+                finalized["claim_signature"] = final_signature
+            normalized_claims.append(finalized)
 
         summary = party_state.get("event_summary", {})
         llm_metadata = dict(baseline.get("llm_metadata", {}))
@@ -1267,7 +1662,12 @@ class TopicCaseService:
         return merged
 
     def _build_event_evidence(
-        self, case: TopicCase, case_article: CaseArticle, event: dict[str, Any]
+        self,
+        case: TopicCase,
+        case_article: CaseArticle,
+        event: dict[str, Any],
+        *,
+        content: str | None = None,
     ) -> list[dict[str, Any]]:
         source_type = getattr(case_article, "source_type", "rss")
         evidence_type = (
@@ -1289,16 +1689,18 @@ class TopicCaseService:
                 "canonical_url": case_article.url,
                 "publisher": event.get("source_name", case_article.source),
                 "published_at": getattr(case_article, "published_at", None),
-                "content": case_article.content,
+                # The same canonical body supplied to analysis; never a summary
+                # or title substitute.
+                "content": (
+                    content if content is not None else case_article.content
+                ),
                 "capture_metadata": getattr(case_article, "source_metadata", {}) or {},
                 "verification_status": "UNVERIFIED",
                 "credibility_tier": (
                     getattr(case_article, "source_metadata", {}) or {}
                 ).get("credibility_tier", "unknown"),
                 "requires_human_review": requires_human_review,
-                "relation": "supports",
                 "source_diversity_rank": 1,
-                "confidence_score": 0.5,
                 "verification_checks": [
                     {
                         "check_type": "ingestion",
@@ -1345,7 +1747,11 @@ class TopicCaseService:
                         )
                     ),
                     "claim_signature": claim_signature,
-                    "support_count": len(evidence),
+                    # Corroboration is never attachment-based: an attachment is
+                    # not evidence of support. Real support/opposition counts are
+                    # derived by ``_recompute_case_claim_aggregates`` from
+                    # eligible, policy-resolved stored links only.
+                    "support_count": 0,
                     "oppose_count": 0,
                     "source_diversity_count": len(seen_publishers),
                     "party_positions": party_positions,
@@ -1358,17 +1764,25 @@ class TopicCaseService:
         self, session, context: CaseRunContext, stage_run: CaseStageRun, result: dict[str, Any]
     ) -> list[str]:
         artifact_ids: list[str] = []
+        confirmed_parties = (
+            (context.bootstrap_result or {}).get("confirmed_parties")
+            or (context.case.metadata_json or {}).get("bootstrap", {}).get("confirmed_parties", [])
+        )
         for event in context.processed_events or []:
+            # Share the caller-owned session with the artifact/count writes below
+            # so one failed event write fails the whole investigation batch.
             store_event_in_db(
                 event,
                 case_id=context.case.id,
                 case_run_id=stage_run.id,
                 create_review=True,
-                confirmed_parties=(
-                    (context.bootstrap_result or {}).get("confirmed_parties")
-                    or (context.case.metadata_json or {}).get("bootstrap", {}).get("confirmed_parties", [])
-                ),
+                confirmed_parties=confirmed_parties,
+                session=session,
             )
+
+        # SessionLocal uses autoflush=False; make the rewritten events visible
+        # before counting events, recomputing aggregates and loading reviews.
+        session.flush()
 
         payload = {
             "event_ids": result.get("event_ids", []),
@@ -1665,6 +2079,7 @@ class TopicCaseService:
         )
 
         try:
+            context.stage_failure = None
             started_perf = time.perf_counter()
             if asyncio.iscoroutinefunction(runner):
                 result = await runner()
@@ -1680,8 +2095,18 @@ class TopicCaseService:
                     .filter(CaseStageRun.id == stage_run_id)
                     .first()
                 )
+                if case is None or stage_run is None:
+                    raise RuntimeError(
+                        f"Stage run {stage_run_id!r} or its case is missing before "
+                        "completion could be recorded"
+                    )
                 artifact_ids = persist_callback(session, context, stage_run, result)
-                stage_run.status = StageStatus.COMPLETED
+                # A persist callback may record a recorded-but-fatal outcome (for
+                # example: every attempted source acquisition failed). It must be
+                # honoured inside this same transaction so diagnostics persist and
+                # no fake COMPLETED stage is committed first.
+                stage_failure = context.stage_failure
+                context.stage_failure = None
                 stage_run.completed_at = _utcnow()
                 stage_run.duration_ms = duration_ms
                 stage_run.output_artifact_ids = artifact_ids
@@ -1694,12 +2119,24 @@ class TopicCaseService:
                     result, flag_name="fallback_used"
                 )
                 stage_run.parse_failure_count = self._count_parse_failures(result)
-                case.status = status_after_success
+                if stage_failure is not None:
+                    stage_run.status = StageStatus.FAILED
+                    stage_run.error_message = str(
+                        stage_failure.get("message")
+                        or f"Stage {stage_name.value} reported failure"
+                    )
+                    case.status = CaseStatus.FAILED
+                else:
+                    stage_run.status = StageStatus.COMPLETED
+                    case.status = status_after_success
                 case.current_stage = stage_name
                 case.latest_run_completed_at = _utcnow()
                 case.updated_at = _utcnow()
                 session.commit()
                 context.case = case
+            except Exception:
+                session.rollback()
+                raise
             finally:
                 session.close()
         except Exception as exc:
@@ -1712,6 +2149,12 @@ class TopicCaseService:
                     .filter(CaseStageRun.id == stage_run_id)
                     .first()
                 )
+                if case is None or stage_run is None:
+                    logger.error(
+                        "Cannot record failure for stage run %s: row or case missing",
+                        stage_run_id,
+                    )
+                    return
                 stage_run.status = StageStatus.FAILED
                 stage_run.completed_at = _utcnow()
                 stage_run.error_message = str(exc)
@@ -1756,6 +2199,8 @@ class TopicCaseService:
         session = get_database().get_session_sync()
         try:
             case = session.query(TopicCase).filter(TopicCase.id == case_id).first()
+            if case is None:
+                raise RuntimeError(f"Case {case_id!r} is missing")
             attempt = (
                 session.query(CaseStageRun)
                 .filter(
@@ -1919,6 +2364,8 @@ class TopicCaseService:
         session = get_database().get_session_sync()
         try:
             case = session.query(TopicCase).filter(TopicCase.id == case_id).first()
+            if case is None:
+                raise RuntimeError(f"Case {case_id!r} is missing")
             metadata_json = dict(case.metadata_json or {})
             metadata_json["manual_gate"] = {
                 "stage": stage_name.value,
@@ -1996,18 +2443,47 @@ class TopicCaseService:
             signature = claim.claim_signature or _claim_signature(claim.claim_text)
             bucket = grouped.setdefault(
                 signature,
-                {"support": 0, "oppose": 0, "sources": set(), "party_positions": {}},
+                {
+                    "support": 0,
+                    "oppose": 0,
+                    "sources": set(),
+                    "contributions": set(),
+                    "party_positions": {},
+                },
             )
             for link in links_by_claim.get(claim.id, []):
                 evidence = evidence_by_id.get(link.evidence_id)
                 publisher = (
                     evidence.publisher if evidence else None
                 ) or (evidence.origin_url if evidence else None) or "unknown"
+                # Observed distinct publishers, not an independence claim.
                 bucket["sources"].add(publisher)
-                if link.relation == "opposes":
-                    bucket["oppose"] += 1
-                else:
+
+                # Only eligible, policy-resolved contributions count. A
+                # collector ``reported_by``, ``uncertain``, an invalid/unanchored
+                # link and a bare source attachment all contribute nothing; the
+                # raw legacy ``opposes`` alias alone never becomes opposition.
+                resolution = resolve_effective_relationship(
+                    stored_relation=link.relation,
+                    alignment_status=link.alignment_status,
+                    assessment_origin=link.assessment_origin,
+                    assessment_version=link.assessment_version,
+                    exact_anchor=(link.alignment_status == "exact"),
+                    collector_generated=(link.assessment_origin == "collector"),
+                )
+                contribution = link_contribution(resolution)
+                if contribution is None:
+                    continue
+                # Deduplicate per existing claim group: repeated links/rows for
+                # the same evidence and effective relationship count once.
+                dedup_key = (str(link.evidence_id), resolution.effective_relationship)
+                if dedup_key in bucket["contributions"]:
+                    continue
+                bucket["contributions"].add(dedup_key)
+                if contribution == "support":
                     bucket["support"] += 1
+                else:
+                    bucket["oppose"] += 1
             bucket["party_positions"].update(claim.party_positions or {})
 
         for claim in claims:
@@ -2139,6 +2615,8 @@ class TopicCaseService:
                     "verification_status": item.verification_status,
                     "credibility_tier": item.credibility_tier,
                     "requires_human_review": bool(item.requires_human_review),
+                    # Pointer to the immutable current capture; never the body.
+                    "current_capture_id": item.current_capture_id,
                     "capture_metadata": item.capture_metadata or {},
                     "verification_checks": [
                         {
@@ -2165,6 +2643,7 @@ class TopicCaseService:
                 evidence = evidence_by_id.get(link.evidence_id)
                 if evidence is None:
                     continue
+                link_fields = link_read_model(link)
                 linked_evidence.append(
                     {
                         "id": evidence.id,
@@ -2175,6 +2654,19 @@ class TopicCaseService:
                         "publisher": evidence.publisher,
                         "origin_url": evidence.origin_url,
                         "source_type": evidence.source_type,
+                        # Citation/alignment diagnostics. ``relation`` above stays
+                        # the raw stored value; ``effective_relation`` is the
+                        # policy-resolved one (never inflating support).
+                        "capture_id": link_fields["capture_id"],
+                        "citation_id": link_fields["citation_id"],
+                        "quote": link_fields["quote"],
+                        "start_char": link_fields["start_char"],
+                        "end_char": link_fields["end_char"],
+                        "alignment_status": link_fields["alignment_status"],
+                        "effective_relation": link_fields["effective_relation"],
+                        "assessment_origin": link_fields["assessment_origin"],
+                        "assessment_version": link_fields["assessment_version"],
+                        "diagnostic_reason": link_fields["diagnostic_reason"],
                     }
                 )
             claim_payload = {

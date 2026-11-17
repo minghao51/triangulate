@@ -2,12 +2,18 @@
 
 import logging
 from datetime import UTC, datetime
+from typing import Any
+
 from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
 from rich.prompt import Prompt
 
 from src.storage import get_database, Event, Claim, Review, ReviewStatus
+from src.storage.review_state import (
+    bind_review_decision,
+    compute_event_analysis_hash,
+)
 
 logger = logging.getLogger(__name__)
 console = Console()
@@ -52,6 +58,16 @@ def cmd_review(event_id: str | None = None) -> None:
 
     finally:
         session.close()
+
+
+def bind_cli_decision(session, event: Event, review: Review) -> None:
+    """Bind a legacy CLI decision to the analysis revision it reviewed.
+
+    Mirrors ``TopicCaseService.review_case`` so an equivalent rerun does not
+    reset a CLI-approved event (including legacy rows with a NULL hash).
+    """
+    event_id: Any = event.id
+    bind_review_decision(review, compute_event_analysis_hash(session, event_id))
 
 
 def review_event(event: Event, session) -> None:
@@ -108,11 +124,13 @@ def review_event(event: Event, session) -> None:
     if choice == "a":
         review.status = ReviewStatus.APPROVED
         review.reviewed_at = datetime.now(UTC)
+        bind_cli_decision(session, event, review)
         session.commit()
         console.print("[green]Event approved[/green]\n")
     elif choice == "r":
         review.status = ReviewStatus.REJECTED
         review.reviewed_at = datetime.now(UTC)
+        bind_cli_decision(session, event, review)
         session.commit()
         console.print("[red]Event rejected[/red]\n")
     elif choice == "e":

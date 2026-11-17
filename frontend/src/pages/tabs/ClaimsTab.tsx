@@ -1,5 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import type { Claim, NarrativeCluster } from '../../types/backend-models';
 import { getClaimsOverviewForCase } from '../../services/api';
 import { ShieldAlert, ThumbsUp, ThumbsDown, GitCommit, ChevronDown, ChevronRight, Layers } from 'lucide-react';
@@ -10,32 +11,90 @@ interface ClaimsTabProps {
   refreshToken?: number;
 }
 
+/**
+ * Claims tab.
+ *
+ * Data is fetched through React Query keyed by case, so a slow response for a
+ * previous case can never overwrite the current case's claims. Selection and
+ * expansion state live in a component keyed by case, so it resets with the case.
+ */
 const ClaimsTab: React.FC<ClaimsTabProps> = ({ caseId, refreshToken = 0 }) => {
+    const { data, isLoading, error, refetch } = useQuery({
+        queryKey: ['claims-overview', caseId, refreshToken],
+        queryFn: () => getClaimsOverviewForCase(caseId),
+        enabled: !!caseId,
+    });
+
+    if (!caseId) {
+        return (
+            <div className="claims-container p-base">
+                <div role="alert">No case selected for claims.</div>
+            </div>
+        );
+    }
+
+    if (isLoading) {
+        return (
+            <div className="claims-container p-base">
+                <div className="claims-header">
+                    <h3>Primary Claims Mapping</h3>
+                    <p className="subtitle">Corroboration network for identified facts and allegations.</p>
+                </div>
+                <div className="claims-state" role="status">Loading claims…</div>
+            </div>
+        );
+    }
+
+    if (error) {
+        return (
+            <div className="claims-container p-base">
+                <div className="claims-header">
+                    <h3>Primary Claims Mapping</h3>
+                    <p className="subtitle">Corroboration network for identified facts and allegations.</p>
+                </div>
+                <div className="claims-state claims-state--error" role="alert">
+                    <p>
+                        Failed to load claims
+                        {error instanceof Error && error.message ? `: ${error.message}` : '.'}
+                    </p>
+                    <button type="button" className="btn btn-secondary" onClick={() => refetch()}>
+                        Retry
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <ClaimsContent
+            key={caseId}
+            caseId={caseId}
+            claims={data?.claims ?? []}
+            narratives={data?.narratives ?? []}
+        />
+    );
+};
+
+interface ClaimsContentProps {
+    caseId: string;
+    claims: Claim[];
+    narratives: NarrativeCluster[];
+}
+
+const ClaimsContent: React.FC<ClaimsContentProps> = ({ caseId, claims, narratives }) => {
     const navigate = useNavigate();
-    const [claims, setClaims] = useState<Claim[]>([]);
-    const [narratives, setNarratives] = useState<NarrativeCluster[]>([]);
-    const [error, setError] = useState<string | null>(null);
     const [expandedNarratives, setExpandedNarratives] = useState<Set<string>>(new Set());
 
-    useEffect(() => {
-        if (caseId) {
-            getClaimsOverviewForCase(caseId)
-                .then((data) => {
-                    setClaims(data.claims);
-                    setNarratives(data.narratives);
-                })
-                .catch((err: Error) => setError(err.message));
-        }
-    }, [caseId, refreshToken]);
-
     const toggleNarrative = (id: string) => {
-        const newExpanded = new Set(expandedNarratives);
-        if (newExpanded.has(id)) {
-            newExpanded.delete(id);
-        } else {
-            newExpanded.add(id);
-        }
-        setExpandedNarratives(newExpanded);
+        setExpandedNarratives((current) => {
+            const next = new Set(current);
+            if (next.has(id)) {
+                next.delete(id);
+            } else {
+                next.add(id);
+            }
+            return next;
+        });
     };
 
     const claimsByNarrative = useMemo(
@@ -71,46 +130,62 @@ const ClaimsTab: React.FC<ClaimsTabProps> = ({ caseId, refreshToken = 0 }) => {
                 <p className="subtitle">Corroboration network for identified facts and allegations.</p>
             </div>
 
-            <div className="narratives-section">
-                {narratives.length > 0 && narratives.map((narrative) => {
-                    const isExpanded = expandedNarratives.has(narrative.id);
-                    const narrativeClaims = claimsByNarrative[narrative.id] || [];
+            {claims.length === 0 && narratives.length === 0 ? (
+                <div className="claims-state" role="status">
+                    No claims have been recorded for this case yet.
+                </div>
+            ) : (
+                <>
+                    {narratives.length > 0 && (
+                        <div className="narratives-section">
+                            {narratives.map((narrative) => {
+                                const isExpanded = expandedNarratives.has(narrative.id);
+                                const narrativeClaims = claimsByNarrative[narrative.id] || [];
 
-                        return (
-                        <div key={narrative.id} className="narrative-cluster glass-panel">
-                            <button
-                                className="narrative-header"
-                                onClick={() => toggleNarrative(narrative.id)}
-                            >
-                                <div className="narrative-title-row">
-                                    {isExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
-                                    <Layers size={16} className="narrative-icon" />
-                                    <span className="narrative-summary">{narrative.stanceSummary}</span>
-                                </div>
-                                <div className="narrative-meta">
-                                    <span className="narrative-count">{narrative.claimCount} claims</span>
-                                    <span className="narrative-sources">{narrative.sourceCount} sources</span>
-                                </div>
-                            </button>
+                                return (
+                                    <div key={narrative.id} className="narrative-cluster glass-panel">
+                                        <button
+                                            type="button"
+                                            className="narrative-header"
+                                            aria-expanded={isExpanded}
+                                            aria-controls={`narrative-claims-${narrative.id}`}
+                                            onClick={() => toggleNarrative(narrative.id)}
+                                        >
+                                            <div className="narrative-title-row">
+                                                {isExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+                                                <Layers size={16} className="narrative-icon" />
+                                                <span className="narrative-summary">{narrative.stanceSummary}</span>
+                                            </div>
+                                            <div className="narrative-meta">
+                                                <span className="narrative-count">{narrative.claimCount} claims</span>
+                                                <span className="narrative-sources">{narrative.sourceCount} sources</span>
+                                            </div>
+                                        </button>
 
-                            {isExpanded && (
-                                <div className="narrative-claims">
-                                    {narrativeClaims.map((claim) => (
-                                        <ClaimRow key={claim.id} claim={claim} caseId={caseId} navigate={navigate} />
-                                    ))}
-                                </div>
-                            )}
+                                        {isExpanded && (
+                                            <div className="narrative-claims" id={`narrative-claims-${narrative.id}`}>
+                                                {narrativeClaims.length === 0 ? (
+                                                    <p className="subtitle">No claim currently references this cluster.</p>
+                                                ) : (
+                                                    narrativeClaims.map((claim) => (
+                                                        <ClaimRow key={claim.id} claim={claim} caseId={caseId} navigate={navigate} />
+                                                    ))
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })}
                         </div>
-                    );
-                })}
-            </div>
+                    )}
 
-            <div className="claims-list">
-                {error && <div>Failed to load claims: {error}</div>}
-                {unclusteredClaims.map((claim) => (
-                    <ClaimRow key={claim.id} claim={claim} caseId={caseId} navigate={navigate} />
-                ))}
-            </div>
+                    <div className="claims-list">
+                        {unclusteredClaims.map((claim) => (
+                            <ClaimRow key={claim.id} claim={claim} caseId={caseId} navigate={navigate} />
+                        ))}
+                    </div>
+                </>
+            )}
         </div>
     );
 };
@@ -122,7 +197,7 @@ interface ClaimRowProps {
 }
 
 const ClaimRow: React.FC<ClaimRowProps> = ({ claim, caseId, navigate }) => (
-    <div key={claim.id} className="claim-row glass-panel">
+    <div className="claim-row glass-panel">
         <div className="claim-main">
             <div className="claim-tags">
                 <span className={`badge ${claim.type === 'fact' ? 'badge-info' : 'badge-warning'}`}>
@@ -156,7 +231,13 @@ const ClaimRow: React.FC<ClaimRowProps> = ({ claim, caseId, navigate }) => (
         </div>
 
         <div className="claim-actions">
-            <button className="btn btn-secondary" onClick={() => navigate(`/cases/${caseId}/evidence?claim=${claim.id}`)}>
+            <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() =>
+                    navigate(`/cases/${caseId}/evidence?claim=${encodeURIComponent(claim.id)}`)
+                }
+            >
                 Inspect Evidence
             </button>
         </div>

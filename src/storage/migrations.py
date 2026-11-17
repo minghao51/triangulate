@@ -8,7 +8,7 @@ from src.storage.database import Database, get_database
 class Migration:
     """A database migration."""
 
-    def __init__(self, version: int, name: str, up: str, down: str = None):
+    def __init__(self, version: int, name: str, up: str, down: str | None = None):
         """Initialize migration.
 
         Args:
@@ -26,7 +26,7 @@ class Migration:
 class MigrationManager:
     """Manage database migrations."""
 
-    def __init__(self, db_path: str = None):
+    def __init__(self, db_path: str | None = None):
         """Initialize migration manager.
 
         Args:
@@ -88,6 +88,12 @@ class MigrationManager:
                 self._apply_intake_queue_schema(session)
             elif migration.version == 6:
                 self._apply_event_location_schema(session)
+            elif migration.version == 7:
+                self._apply_review_analysis_hash_schema(session)
+            elif migration.version == 8:
+                self._apply_evidence_capture_schema(session)
+            elif migration.version == 9:
+                self._apply_claim_citation_schema(session)
             else:
                 # Apply migration SQL
                 session.execute(text(migration.up_sql))
@@ -362,6 +368,227 @@ class MigrationManager:
                 """
             )
         )
+
+    def _apply_review_analysis_hash_schema(self, session) -> None:
+        """Persist the analysis fingerprint and prior-decision metadata on reviews."""
+        inspector = inspect(session.bind)
+        existing_tables = set(inspector.get_table_names())
+        if "reviews" not in existing_tables:
+            return
+        existing_columns = {
+            column["name"] for column in inspector.get_columns("reviews")
+        }
+        missing_columns = {
+            "analysis_hash": "TEXT",
+            "previous_decision_json": "JSON",
+        }
+        for column_name, column_type in missing_columns.items():
+            if column_name not in existing_columns:
+                session.execute(
+                    text(f"ALTER TABLE reviews ADD COLUMN {column_name} {column_type}")
+                )
+
+    def _apply_evidence_capture_schema(self, session) -> None:
+        """Add immutable evidence captures and the nullable current pointer.
+
+        Schema only: no legacy ``EvidenceItem.content`` is copied, no history is
+        invented and no review state is reset. Fresh databases already have the
+        table/column from ``Base.metadata.create_all``; legacy SQL tables are
+        brought to parity idempotently.
+        """
+        inspector = inspect(session.bind)
+        existing_tables = set(inspector.get_table_names())
+
+        # Create the capture table first: the inline FK below is only valid once
+        # the parent table exists.
+        session.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS evidence_captures (
+                    id TEXT PRIMARY KEY,
+                    evidence_id TEXT NOT NULL,
+                    text TEXT NOT NULL,
+                    text_sha256 TEXT NOT NULL,
+                    normalized_text_sha256 TEXT NOT NULL,
+                    normalization_version TEXT NOT NULL DEFAULT 'v1',
+                    recorded_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    observed_at TIMESTAMP,
+                    capture_kind TEXT NOT NULL DEFAULT 'live',
+                    metadata_json JSON NOT NULL DEFAULT '{}',
+                    FOREIGN KEY(evidence_id) REFERENCES evidence_items(id)
+                )
+                """
+            )
+        )
+
+        if "evidence_items" in existing_tables:
+            existing_columns = {
+                column["name"]
+                for column in inspector.get_columns("evidence_items")
+            }
+            if "current_capture_id" not in existing_columns:
+                # New nullable columns may carry an inline FK in SQLite; this is
+                # not a table rebuild and does not copy/replace any row data.
+                session.execute(
+                    text(
+                        "ALTER TABLE evidence_items "
+                        "ADD COLUMN current_capture_id TEXT "
+                        "REFERENCES evidence_captures(id)"
+                    )
+                )
+            session.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS "
+                    "ix_evidence_items_current_capture_id "
+                    "ON evidence_items (current_capture_id)"
+                )
+            )
+
+        session.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_evidence_captures_evidence_id "
+                "ON evidence_captures (evidence_id)"
+            )
+        )
+        session.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_evidence_captures_text_sha256 "
+                "ON evidence_captures (text_sha256)"
+            )
+        )
+        session.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS "
+                "ix_evidence_captures_normalized_text_sha256 "
+                "ON evidence_captures (normalized_text_sha256)"
+            )
+        )
+        session.execute(
+            text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS "
+                "uq_evidence_capture_evidence_text "
+                "ON evidence_captures (evidence_id, text_sha256)"
+            )
+        )
+
+    def _apply_claim_citation_schema(self, session) -> None:
+        """Add append-only validated citations and link alignment fields.
+
+        Schema only: no table rebuild, no content copy, no review reset and no
+        legacy row rewrite. Existing ``claim_evidence_links`` rows keep every old
+        column/default value; the new nullable columns stay null and
+        ``alignment_status`` defaults to ``not_provided``. Foreign keys are added
+        inline (valid for new nullable columns) after the parent
+        ``claim_citations`` table exists, so both fresh and legacy SQLite schemas
+        expose/enforce the same references when enforcement is enabled.
+        """
+        inspector = inspect(session.bind)
+        existing_tables = set(inspector.get_table_names())
+
+        # Parent-first: the inline FK below requires this table to exist.
+        session.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS claim_citations (
+                    id TEXT PRIMARY KEY,
+                    case_id TEXT NOT NULL,
+                    capture_id TEXT NOT NULL,
+                    original_claim_id TEXT,
+                    claim_signature TEXT,
+                    text TEXT NOT NULL,
+                    relationship TEXT NOT NULL,
+                    quote TEXT NOT NULL,
+                    start_char INTEGER NOT NULL,
+                    end_char INTEGER NOT NULL,
+                    alignment_status TEXT NOT NULL,
+                    alignment_version TEXT NOT NULL,
+                    assessment_origin TEXT,
+                    assessment_version TEXT,
+                    metadata_json JSON NOT NULL DEFAULT '{}',
+                    recorded_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY(case_id) REFERENCES topic_cases(id),
+                    FOREIGN KEY(capture_id) REFERENCES evidence_captures(id)
+                )
+                """
+            )
+        )
+
+        if "claim_evidence_links" in existing_tables:
+            existing_columns = {
+                column["name"]
+                for column in inspector.get_columns("claim_evidence_links")
+            }
+            new_columns = {
+                "capture_id": "TEXT REFERENCES evidence_captures(id)",
+                "citation_id": "TEXT REFERENCES claim_citations(id)",
+                "quote": "TEXT",
+                "start_char": "INTEGER",
+                "end_char": "INTEGER",
+                "alignment_status": "TEXT NOT NULL DEFAULT 'not_provided'",
+                "assessment_origin": "TEXT",
+                "assessment_version": "TEXT",
+                "assessment_metadata": "JSON NOT NULL DEFAULT '{}'",
+            }
+            for column_name, column_type in new_columns.items():
+                if column_name not in existing_columns:
+                    session.execute(
+                        text(
+                            f"ALTER TABLE claim_evidence_links "
+                            f"ADD COLUMN {column_name} {column_type}"
+                        )
+                    )
+            session.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS "
+                    "ix_claim_evidence_links_capture_id "
+                    "ON claim_evidence_links (capture_id)"
+                )
+            )
+            session.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS "
+                    "ix_claim_evidence_links_citation_id "
+                    "ON claim_evidence_links (citation_id)"
+                )
+            )
+            session.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS "
+                    "ix_claim_evidence_links_alignment_status "
+                    "ON claim_evidence_links (alignment_status)"
+                )
+            )
+
+        for index_name, table, column in (
+            ("ix_claim_citations_case_id", "claim_citations", "case_id"),
+            ("ix_claim_citations_capture_id", "claim_citations", "capture_id"),
+            (
+                "ix_claim_citations_original_claim_id",
+                "claim_citations",
+                "original_claim_id",
+            ),
+            (
+                "ix_claim_citations_claim_signature",
+                "claim_citations",
+                "claim_signature",
+            ),
+            (
+                "ix_claim_citations_relationship",
+                "claim_citations",
+                "relationship",
+            ),
+            (
+                "ix_claim_citations_alignment_status",
+                "claim_citations",
+                "alignment_status",
+            ),
+        ):
+            session.execute(
+                text(
+                    f"CREATE INDEX IF NOT EXISTS {index_name} "
+                    f"ON {table} ({column})"
+                )
+            )
 
     def _apply_event_location_schema(self, session) -> None:
         """Add event location columns if they are missing."""
@@ -745,10 +972,70 @@ MIGRATIONS: list[Migration] = [
         down="""
         """,
     ),
+    Migration(
+        version=7,
+        name="Add review analysis hash and prior decision metadata",
+        up="""
+        ALTER TABLE reviews ADD COLUMN analysis_hash TEXT;
+        ALTER TABLE reviews ADD COLUMN previous_decision_json JSON;
+        """,
+        down="""
+        """,
+    ),
+    Migration(
+        version=8,
+        name="Add immutable evidence captures and current pointer",
+        up="""
+        ALTER TABLE evidence_items ADD COLUMN current_capture_id TEXT;
+        CREATE TABLE IF NOT EXISTS evidence_captures (
+            id TEXT PRIMARY KEY,
+            evidence_id TEXT NOT NULL,
+            text TEXT NOT NULL,
+            text_sha256 TEXT NOT NULL,
+            normalized_text_sha256 TEXT NOT NULL,
+            normalization_version TEXT NOT NULL DEFAULT 'v1',
+            recorded_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            observed_at TIMESTAMP,
+            capture_kind TEXT NOT NULL DEFAULT 'live',
+            metadata_json JSON NOT NULL DEFAULT '{}',
+            FOREIGN KEY(evidence_id) REFERENCES evidence_items(id)
+        );
+        """,
+        down="""
+        """,
+    ),
+    Migration(
+        version=9,
+        name="Add validated claim citations and link alignment fields",
+        up="""
+        CREATE TABLE IF NOT EXISTS claim_citations (
+            id TEXT PRIMARY KEY,
+            case_id TEXT NOT NULL,
+            capture_id TEXT NOT NULL,
+            original_claim_id TEXT,
+            claim_signature TEXT,
+            text TEXT NOT NULL,
+            relationship TEXT NOT NULL,
+            quote TEXT NOT NULL,
+            start_char INTEGER NOT NULL,
+            end_char INTEGER NOT NULL,
+            alignment_status TEXT NOT NULL,
+            alignment_version TEXT NOT NULL,
+            assessment_origin TEXT,
+            assessment_version TEXT,
+            metadata_json JSON NOT NULL DEFAULT '{}',
+            recorded_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(case_id) REFERENCES topic_cases(id),
+            FOREIGN KEY(capture_id) REFERENCES evidence_captures(id)
+        );
+        """,
+        down="""
+        """,
+    ),
 ]
 
 
-def run_migrations(db_path: str = None) -> None:
+def run_migrations(db_path: str | None = None) -> None:
     """Run all pending migrations.
 
     Args:

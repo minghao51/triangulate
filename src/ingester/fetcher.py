@@ -4,7 +4,7 @@ import logging
 import uuid
 from datetime import UTC, datetime
 
-from src.ingester.rss import RSSFeed
+from src.ingester.rss import RSSFeed, SUCCESS_ACQUISITION_STATUSES
 from src.ingester.newsapi import NewsAPIClient
 from src.storage import get_database, Source
 from src.storage.models import SourceType
@@ -45,11 +45,18 @@ class ContentFetcher:
         for name, url in sources_config.get("rss", {}).items():
             logger.info(f"Fetching from RSS source: {name}")
             feed = RSSFeed(url)
-            articles = feed.fetch(max_articles=limit or 50)
-            all_articles.extend(articles)
+            outcome = feed.fetch_with_outcome(max_articles=limit or 50)
+            all_articles.extend(outcome.articles)
 
-            # Update source last_fetched time
-            self._update_source(name, SourceType.RSS, url)
+            if outcome.status in SUCCESS_ACQUISITION_STATUSES:
+                self._update_source(name, SourceType.RSS, url)
+            else:
+                logger.warning(
+                    "RSS source %s not acquired (%s: %s); last_fetched unchanged",
+                    name,
+                    outcome.status,
+                    outcome.error or outcome.reason,
+                )
 
         # Fetch from NewsAPI
         if self.newsapi_client:
@@ -77,9 +84,17 @@ class ContentFetcher:
         rss_sources = sources_config.get("rss", {})
         if source_name in rss_sources:
             feed = RSSFeed(rss_sources[source_name])
-            articles = feed.fetch(max_articles=limit)
-            self._update_source(source_name, SourceType.RSS, rss_sources[source_name])
-            return articles
+            outcome = feed.fetch_with_outcome(max_articles=limit)
+            if outcome.status in SUCCESS_ACQUISITION_STATUSES:
+                self._update_source(source_name, SourceType.RSS, rss_sources[source_name])
+            else:
+                logger.warning(
+                    "RSS source %s not acquired (%s: %s); last_fetched unchanged",
+                    source_name,
+                    outcome.status,
+                    outcome.error or outcome.reason,
+                )
+            return outcome.articles
 
         # Check NewsAPI
         if source_name == "newsapi" and self.newsapi_client:

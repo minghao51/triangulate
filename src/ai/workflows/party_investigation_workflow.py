@@ -56,7 +56,12 @@ async def collector_node(state: PartyInvestigationState) -> dict[str, Any]:
     logger.info("Executing Collector node...")
 
     result = await collect_claims(state["article"], include_metadata=True)
-    claims = result.get("output", {}).get("claims", [])
+    # ``collect_claims`` returns an envelope only for ``include_metadata=True``;
+    # narrow explicitly instead of assuming the union is a mapping.
+    if isinstance(result, dict):
+        claims = result.get("output", {}).get("claims", [])
+    else:
+        claims = list(result)
 
     if not claims:
         logger.warning("No claims extracted from article")
@@ -139,7 +144,7 @@ async def party_classifier_node(state: PartyInvestigationState) -> dict[str, Any
 async def party_investigators_node(state: PartyInvestigationState) -> dict[str, Any]:
     """Run all party investigations in parallel."""
     parties = state["parties"].get("parties", [])
-    claims = state.get("claims", [])
+    claims = list(state.get("claims", []))
     article = state.get("article", {})
 
     if not parties:
@@ -164,7 +169,9 @@ async def party_investigators_node(state: PartyInvestigationState) -> dict[str, 
     investigations = []
     diagnostics = []
     for party, result in zip(parties, raw_results, strict=False):
-        if isinstance(result, Exception):
+        # ``gather(return_exceptions=True)`` yields BaseException instances;
+        # narrowing on BaseException keeps a cancelled run from reaching .get().
+        if isinstance(result, BaseException):
             party_name = party.get("canonical_name", "Unknown Party")
             logger.warning("Party investigation failed for %s: %s", party_name, result)
             investigations.append(
@@ -240,7 +247,7 @@ async def arbiter_node(state: PartyInvestigationState) -> dict[str, Any]:
 # ============================================================================
 
 
-def create_party_investigation_workflow() -> StateGraph:
+def create_party_investigation_workflow() -> Any:
     """Create multi-agent LangGraph workflow for party-based investigation.
 
     This workflow:

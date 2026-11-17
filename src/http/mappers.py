@@ -15,9 +15,17 @@ from .schemas import (
     ClaimsOverviewResponse,
     CaseListItem,
     CaseTabs,
+    CaptureSummaryDTO,
+    CaptureWindowDTO,
+    CitationDTO,
+    ClaimCountsDTO,
     ClaimDTO,
+    ClaimDetailDTO,
     ClaimEvidenceLinkDTO,
+    EvidenceClaimReferenceDTO,
     EvidenceDTO,
+    EvidenceDetailDTO,
+    EvidenceSourceDTO,
     EvidenceVerificationCheckDTO,
     ExceptionDTO,
     NarrativeDTO,
@@ -80,12 +88,23 @@ def _map_status(value: str | None) -> str:
     return STATUS_MAP.get((value or "").upper(), "processing")
 
 
+def _runtime(value: Any) -> Any:
+    """Return a plain runtime value at a static-typing boundary.
+
+    The storage models declare classic ``Column[...]`` descriptors and this module
+    projects untyped dicts onto ``Literal``-typed DTO fields. At runtime these are
+    ordinary values, so narrowing here keeps the DTO contract strict instead of
+    widening it or suppressing the checker.
+    """
+    return value
+
+
 def _map_verification_status(value: str | None) -> str:
     return VERIFICATION_MAP.get((value or "").upper(), "unknown")
 
 
 def _map_automation(value: str | None) -> AutomationMode:
-    return AUTOMATION_MAP.get((value or "").lower(), "safe")
+    return _runtime(AUTOMATION_MAP.get((value or "").lower(), "safe"))
 
 
 def _map_exception(item: dict[str, Any]) -> ExceptionDTO:
@@ -117,18 +136,23 @@ def _map_case_counts(article_count: int, event_count: int, review_items: int) ->
 def map_case_list_item(case: TopicCase) -> CaseListItem:
     metadata = case.metadata_json or {}
     exceptions = metadata.get("exception_queue", [])
+    updated_at = _runtime(case.updated_at)
     return CaseListItem(
-        id=case.id,
-        query=case.query,
-        conflictDomain=case.conflict or "Unspecified",
-        status=_map_status(case.status.value if case.status else None),
-        stage=(case.current_stage.value if case.current_stage else "BOOTSTRAP"),
-        counts=_map_case_counts(case.article_count, case.event_count, case.open_review_items),
-        reportPath=case.report_path,
-        automationMode=_map_automation(case.routing_mode),
+        id=_runtime(case.id),
+        query=_runtime(case.query),
+        conflictDomain=_runtime(case.conflict or "Unspecified"),
+        status=_runtime(_map_status(getattr(case.status, "value", None))),
+        stage=_runtime(getattr(case.current_stage, "value", None) or "BOOTSTRAP"),
+        counts=_map_case_counts(
+            _runtime(case.article_count),
+            _runtime(case.event_count),
+            _runtime(case.open_review_items),
+        ),
+        reportPath=_runtime(case.report_path),
+        automationMode=_map_automation(_runtime(case.routing_mode)),
         hasNewMaterial=bool(metadata.get("last_retrieve_changed", False)),
         openExceptionsCount=_count_open_exceptions(exceptions),
-        lastUpdated=case.updated_at.isoformat() if case.updated_at else None,
+        lastUpdated=updated_at.isoformat() if updated_at else None,
     )
 
 
@@ -139,7 +163,7 @@ def _map_case_banner(detail: dict[str, Any]) -> CaseBanner:
         id=case["id"],
         query=case["query"],
         conflictDomain=case.get("conflict") or "Unspecified",
-        status=_map_status(case.get("status")),
+        status=_runtime(_map_status(case.get("status"))),
         stage=(case.get("current_stage") or "BOOTSTRAP"),
         counts=_map_case_counts(
             case.get("article_count", 0),
@@ -159,30 +183,52 @@ def _map_case_banner(detail: dict[str, Any]) -> CaseBanner:
     )
 
 
+def _map_claim_evidence_link(item: dict[str, Any]) -> ClaimEvidenceLinkDTO:
+    """Map one claim/evidence passage.
+
+    ``relation`` stays the raw stored diagnostic value. ``effectiveRelation`` is
+    the policy-resolved reading and defaults to ``uncertain`` -- never to support
+    -- when a legacy payload carries no resolved value.
+    """
+    return ClaimEvidenceLinkDTO(
+        id=item["id"],
+        relation=item.get("relation", "supports"),
+        confidenceScore=item.get("confidence_score"),
+        sourceDiversityRank=item.get("source_diversity_rank"),
+        title=item.get("title"),
+        publisher=item.get("publisher"),
+        originUrl=item.get("origin_url"),
+        sourceType=item.get("source_type"),
+        captureId=item.get("capture_id"),
+        citationId=item.get("citation_id"),
+        quote=item.get("quote"),
+        startChar=item.get("start_char"),
+        endChar=item.get("end_char"),
+        alignmentStatus=item.get("alignment_status") or "not_provided",
+        effectiveRelation=item.get("effective_relation") or "uncertain",
+        assessmentOrigin=item.get("assessment_origin"),
+        assessmentVersion=item.get("assessment_version"),
+        diagnosticReason=item.get("diagnostic_reason"),
+    )
+
+
 def _map_claim(claim: dict[str, Any]) -> ClaimDTO:
     return ClaimDTO(
         id=claim["id"],
         text=claim.get("claim_text", ""),
-        verificationStatus=_map_verification_status(claim.get("verification_status")),
-        type=((claim.get("fact_allegation_type") or "ALLEGATION").lower()),
+        verificationStatus=_runtime(
+            _map_verification_status(claim.get("verification_status"))
+        ),
+        type=_runtime((claim.get("fact_allegation_type") or "ALLEGATION").lower()),
         controversyScore=claim.get("controversy_score"),
         supportCount=claim.get("support_count", 0),
         opposeCount=claim.get("oppose_count", 0),
         sourceDiversityCount=claim.get("source_diversity_count", 0),
         claimSignature=claim.get("claim_signature") or claim["id"],
         narrativeClusterId=claim.get("narrative_cluster_id"),
+        verificationProvenance=claim.get("verification_provenance") or "unknown",
         evidence=[
-            ClaimEvidenceLinkDTO(
-                id=item["id"],
-                relation=item.get("relation", "supports"),
-                confidenceScore=item.get("confidence_score"),
-                sourceDiversityRank=item.get("source_diversity_rank"),
-                title=item.get("title"),
-                publisher=item.get("publisher"),
-                originUrl=item.get("origin_url"),
-                sourceType=item.get("source_type"),
-            )
-            for item in claim.get("evidence", [])
+            _map_claim_evidence_link(item) for item in claim.get("evidence", [])
         ],
     )
 
@@ -203,9 +249,12 @@ def _map_evidence(evidence: dict[str, Any], claim_ids_by_evidence: dict[str, lis
         canonicalUrl=evidence.get("canonical_url"),
         publisher=evidence.get("publisher"),
         sourceType=evidence.get("source_type", "web"),
-        verificationStatus=_map_verification_status(evidence.get("verification_status")),
+        verificationStatus=_runtime(
+            _map_verification_status(evidence.get("verification_status"))
+        ),
         credibilityTier=evidence.get("credibility_tier") or "unknown",
         requiresHumanReview=bool(evidence.get("requires_human_review")),
+        currentCaptureId=evidence.get("current_capture_id"),
         linkedClaims=claim_ids_by_evidence.get(evidence["id"], []),
         verificationChecks=[
             EvidenceVerificationCheckDTO(
@@ -246,7 +295,7 @@ def _map_party(party: dict[str, Any], claims: list[dict[str, Any]], investigatio
         name=party_name,
         aliases=party.get("aliases") or [],
         description=party.get("description") or "",
-        overallStance=stance,
+        overallStance=_runtime(stance),
         isModelInferred=not bool(party.get("is_bootstrap_confirmed")),
         associatedClaimsCount=associated_claims,
     )
@@ -264,7 +313,9 @@ def _map_timeline_event(event: dict[str, Any], claims: list[dict[str, Any]]) -> 
         timestamp=event.get("timestamp"),
         title=event.get("title", ""),
         summary=event.get("summary"),
-        verificationStatus=_map_verification_status(event.get("verification_status")),
+        verificationStatus=_runtime(
+            _map_verification_status(event.get("verification_status"))
+        ),
         linkedEvidenceCount=len(linked_evidence_ids),
         locationCountryCode=event.get("location_country_code"),
         locationLat=event.get("location_lat"),
@@ -278,7 +329,7 @@ def _map_run_history(run: dict[str, Any]) -> RunHistoryItemDTO:
         stage=run.get("stage", "UNKNOWN"),
         model=run.get("model_used"),
         durationMs=run.get("duration_ms"),
-        status=RUN_STATUS_MAP.get(run.get("status", "").upper(), "pending"),
+        status=_runtime(RUN_STATUS_MAP.get(run.get("status", "").upper(), "pending")),
         fallbackCount=run.get("fallback_count", 0),
         parseFailureCount=run.get("parse_failure_count", 0),
         timestamp=run.get("started_at"),
@@ -361,6 +412,156 @@ def map_case_detail(detail: dict[str, Any]) -> CaseDetailResponse:
                 manifestPath=detail["case"].get("latest_manifest_path"),
             ),
         ),
+    )
+
+
+def _map_capture_summary(item: dict[str, Any]) -> CaptureSummaryDTO:
+    return CaptureSummaryDTO(
+        id=item["id"],
+        evidenceId=item.get("evidence_id"),
+        textSha256=item.get("text_sha256"),
+        normalizedTextSha256=item.get("normalized_text_sha256"),
+        normalizationVersion=item.get("normalization_version"),
+        captureKind=item.get("capture_kind"),
+        recordedAt=item.get("recorded_at"),
+        observedAt=item.get("observed_at"),
+        metadata=item.get("metadata") or {},
+        charLength=item.get("char_length", 0),
+        isCurrent=bool(item.get("is_current")),
+    )
+
+
+def _evidence_source_kwargs(item: dict[str, Any]) -> dict[str, Any]:
+    """Keyword arguments shared by the citation and evidence detail DTOs."""
+    return {
+        "id": item["id"],
+        "eventId": item.get("event_id"),
+        "caseArticleId": item.get("case_article_id"),
+        "evidenceType": item.get("evidence_type"),
+        "sourceType": item.get("source_type"),
+        "title": item.get("title"),
+        "publisher": item.get("publisher"),
+        "originUrl": item.get("origin_url"),
+        "canonicalUrl": item.get("canonical_url"),
+        "publishedAt": item.get("published_at"),
+        "verificationStatus": _map_verification_status(
+            item.get("verification_status")
+        ),
+        "credibilityTier": item.get("credibility_tier"),
+        "requiresHumanReview": bool(item.get("requires_human_review")),
+        "captureMetadata": item.get("capture_metadata") or {},
+    }
+
+
+def map_citation_detail(payload: dict[str, Any]) -> CitationDTO:
+    """Map a frozen citation read model (resolvable without a live claim)."""
+    evidence = payload.get("evidence")
+    capture = payload.get("capture")
+    return CitationDTO(
+        id=payload["id"],
+        caseId=payload["case_id"],
+        captureId=payload.get("capture_id"),
+        evidenceId=payload.get("evidence_id"),
+        originalClaimId=payload.get("original_claim_id"),
+        claimSignature=payload.get("claim_signature"),
+        claimText=payload.get("claim_text", ""),
+        relationship=payload.get("relationship") or "uncertain",
+        quote=payload.get("quote", ""),
+        startChar=payload.get("start_char"),
+        endChar=payload.get("end_char"),
+        alignmentStatus=payload.get("alignment_status") or "not_provided",
+        alignmentVersion=payload.get("alignment_version"),
+        assessmentOrigin=payload.get("assessment_origin"),
+        assessmentVersion=payload.get("assessment_version"),
+        assessmentMetadata=payload.get("assessment_metadata") or {},
+        recordedAt=payload.get("recorded_at"),
+        liveClaimPresent=bool(payload.get("live_claim_present")),
+        liveClaimId=payload.get("live_claim_id"),
+        evidence=(
+            EvidenceSourceDTO(**_evidence_source_kwargs(evidence))
+            if isinstance(evidence, dict)
+            else None
+        ),
+        capture=(
+            _map_capture_summary(capture) if isinstance(capture, dict) else None
+        ),
+    )
+
+
+def map_claim_detail(payload: dict[str, Any]) -> ClaimDetailDTO:
+    """Map one claim read model, including its evidence passages."""
+    counts = payload.get("counts") or {}
+    return ClaimDetailDTO(
+        id=payload["id"],
+        caseId=payload["case_id"],
+        eventId=payload.get("event_id"),
+        claimText=payload.get("claim_text", ""),
+        claimSignature=payload.get("claim_signature") or payload["id"],
+        verificationStatus=_runtime(
+            _map_verification_status(payload.get("verification_status"))
+        ),
+        verificationProvenance=payload.get("verification_provenance") or "unknown",
+        type=_runtime(
+            (payload.get("fact_allegation_type") or "ALLEGATION").lower()
+        ),
+        controversyScore=payload.get("controversy_score"),
+        narrativeClusterId=payload.get("narrative_cluster_id"),
+        partyPositions=payload.get("party_positions") or {},
+        counts=ClaimCountsDTO(
+            supportCount=counts.get("support_count", 0),
+            opposeCount=counts.get("oppose_count", 0),
+            sourceDiversityCount=counts.get("source_diversity_count", 0),
+            evidenceCount=counts.get("evidence_count", 0),
+        ),
+        passages=[
+            _map_claim_evidence_link(item) for item in payload.get("passages", [])
+        ],
+    )
+
+
+def map_evidence_detail(payload: dict[str, Any]) -> EvidenceDetailDTO:
+    """Map one evidence read model: metadata, capture list, claim references."""
+    return EvidenceDetailDTO(
+        **_evidence_source_kwargs(payload),
+        currentCaptureId=payload.get("current_capture_id"),
+        captures=[
+            _map_capture_summary(item) for item in payload.get("captures", [])
+        ],
+        relatedClaims=[
+            EvidenceClaimReferenceDTO(
+                claimId=item["claim_id"],
+                claimText=item.get("claim_text", ""),
+                claimSignature=item.get("claim_signature"),
+                linkId=item.get("link_id"),
+                effectiveRelation=item.get("effective_relation") or "uncertain",
+                relation=item.get("relation"),
+                alignmentStatus=item.get("alignment_status") or "not_provided",
+                citationId=item.get("citation_id"),
+                captureId=item.get("capture_id"),
+                quote=item.get("quote"),
+                startChar=item.get("start_char"),
+                endChar=item.get("end_char"),
+                diagnosticReason=item.get("diagnostic_reason"),
+            )
+            for item in payload.get("related_claims", [])
+        ],
+    )
+
+
+def map_capture_window(payload: dict[str, Any]) -> CaptureWindowDTO:
+    """Map one bounded capture text window."""
+    return CaptureWindowDTO(
+        captureId=payload["capture_id"],
+        evidenceId=payload["evidence_id"],
+        start=payload["start"],
+        length=payload["length"],
+        totalLength=payload["total_length"],
+        text=payload.get("text", ""),
+        textSha256=payload.get("text_sha256"),
+        captureKind=payload.get("capture_kind"),
+        recordedAt=payload.get("recorded_at"),
+        observedAt=payload.get("observed_at"),
+        metadata=payload.get("metadata") or {},
     )
 
 

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import { useParams, useNavigate, Routes, Route, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -10,7 +10,6 @@ import {
   Users,
   Clock,
   AlertTriangle,
-  X,
   RefreshCw,
   TerminalSquare,
 } from 'lucide-react';
@@ -48,27 +47,38 @@ const CaseIntelligenceCenter: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const currentPath = location.pathname.split('/').pop() || '';
-  const [error, setError] = useState<string | null>(null);
 
-  const { setActiveCase, setCaseDetail } = useCaseStore();
+  const { setActiveCase, setCaseDetail, clearActiveCase } = useCaseStore();
 
   // Fetch case data
-  const { data: detailData, isLoading, refetch } = useQuery({
+  const { data: detailData, isLoading, error: queryError, refetch } = useQuery({
     queryKey: ['caseDetail', id],
     queryFn: () => getCaseDetail(id!),
     enabled: !!id,
     refetchInterval: 15000, // Poll every 15 seconds
   });
 
-  const activeCase = detailData?.case || null;
+  // Only trust detail that belongs to the case currently in the route.
+  const activeCase =
+    detailData?.case && detailData.case.id === id ? detailData.case : null;
 
-  // Update store when data changes
+  // Clear the shared store when the route's case changes so a previous case can
+  // never stay active behind a new case.
   useEffect(() => {
-    if (activeCase) {
-      setActiveCase(activeCase);
-      setCaseDetail(detailData!);
+    clearActiveCase();
+  }, [id, clearActiveCase]);
+
+  // Apply store state only for the matching case; a late response for case A can
+  // never overwrite case B because the id is compared before writing.
+  useEffect(() => {
+    if (detailData?.case && detailData.case.id === id) {
+      setActiveCase(detailData.case);
+      setCaseDetail(detailData);
     }
-  }, [activeCase, detailData, setActiveCase, setCaseDetail]);
+  }, [detailData, id, setActiveCase, setCaseDetail]);
+
+  // Release the shared store when leaving the case workspace entirely.
+  useEffect(() => () => clearActiveCase(), [clearActiveCase]);
 
   const tabs: TabConfig[] = [
     { id: 'overview', label: 'Overview', icon: <FileText size={16} />, path: '' },
@@ -99,16 +109,15 @@ const CaseIntelligenceCenter: React.FC = () => {
     );
   }
 
-  if (error && !activeCase) {
+  if (!id) {
     return (
       <div className="case-intelligence-center">
-        <div className="case-error">
+        <div className="case-error" role="alert">
           <AlertTriangle size={24} />
           <div>
-            <h3>Failed to load case</h3>
-            <p>{error}</p>
-            <Button variant="secondary" onClick={() => navigate('/cases')}>
-              <ArrowLeft size={16} />
+            <h3>No case selected</h3>
+            <p>The route does not include a case ID.</p>
+            <Button variant="secondary" icon={<ArrowLeft size={16} />} onClick={() => navigate('/cases')}>
               Back to Cases
             </Button>
           </div>
@@ -117,8 +126,45 @@ const CaseIntelligenceCenter: React.FC = () => {
     );
   }
 
+  if (queryError) {
+    return (
+      <div className="case-intelligence-center">
+        <div className="case-error" role="alert">
+          <AlertTriangle size={24} />
+          <div>
+            <h3>Failed to load case</h3>
+            <p>
+              {queryError instanceof Error && queryError.message
+                ? queryError.message
+                : 'The case could not be loaded.'}
+            </p>
+            <div className="case-error-actions">
+              <Button variant="secondary" onClick={() => refetch()}>Retry</Button>
+              <Button variant="ghost" icon={<ArrowLeft size={16} />} onClick={() => navigate('/cases')}>
+                Back to Cases
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (!activeCase) {
-    return null;
+    return (
+      <div className="case-intelligence-center">
+        <div className="case-error" role="alert">
+          <AlertTriangle size={24} />
+          <div>
+            <h3>Case not found</h3>
+            <p>No case with ID <code>{id}</code> was returned by the API.</p>
+            <Button variant="secondary" icon={<ArrowLeft size={16} />} onClick={() => navigate('/cases')}>
+              Back to Cases
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   const activeTab = tabs.find((t) => t.path === currentPath) || tabs[0];
@@ -164,7 +210,7 @@ const CaseIntelligenceCenter: React.FC = () => {
         <div className="case-metrics-bar">
           <div className="case-metric">
             <FileText size={14} />
-            <span className="metric-label">Sources</span>
+            <span className="metric-label">Articles</span>
             <span className="metric-value">{activeCase.counts.articles}</span>
           </div>
 
@@ -196,20 +242,6 @@ const CaseIntelligenceCenter: React.FC = () => {
         </div>
       </div>
 
-      {/* Error Banner */}
-      {error && (
-        <div className="case-error-banner">
-          <AlertTriangle size={16} />
-          <span>{error}</span>
-          <button
-            className="error-close"
-            onClick={() => setError(null)}
-          >
-            <X size={14} />
-          </button>
-        </div>
-      )}
-
       {/* Tabs Navigation */}
       <div className="case-tabs-nav">
         <div className="tabs-list">
@@ -233,7 +265,9 @@ const CaseIntelligenceCenter: React.FC = () => {
       </div>
 
       {/* Tab Content */}
-      <div className="case-tab-content">
+      {/* Keyed so per-case tab state (filters, expansions, selections) is reset on
+          case changes instead of leaking across cases. */}
+      <div className="case-tab-content" key={id}>
         <Routes>
           <Route
             index
