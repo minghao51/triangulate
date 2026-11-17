@@ -584,6 +584,12 @@ async def _execute_stage(
                 .filter(CaseStageRun.id == stage_run_id)
                 .first()
             )
+            if case is None or stage_run is None:
+                logger.error(
+                    "Cannot record failure for stage run %s: row or case missing",
+                    stage_run_id,
+                )
+                return
             stage_run.status = StageStatus.FAILED
             stage_run.completed_at = _utcnow()
             stage_run.error_message = str(exc)
