@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import uuid
 from pathlib import Path
 from typing import Any
@@ -15,6 +16,8 @@ from src.storage import TaxonomyVersion, get_database
 
 
 DEFAULT_TAXONOMY_PATH = Path(__file__).resolve().parents[2] / "bias_taxonomy.toml"
+
+logger = logging.getLogger(__name__)
 
 
 def load_bias_taxonomy(path: Path | None = None) -> BiasTaxonomySchema:
@@ -32,9 +35,17 @@ def taxonomy_checksum(payload: dict[str, Any]) -> str:
     ).hexdigest()
 
 
-def sync_bias_taxonomy(path: Path | None = None) -> TaxonomyVersion:
-    """Persist the active taxonomy version and return the active row."""
+def sync_bias_taxonomy(path: Path | None = None) -> TaxonomyVersion | None:
+    """Persist the active taxonomy version and return the active row.
+
+    Returns ``None`` when no taxonomy file is available (a fresh checkout without
+    the optional ``bias_taxonomy.toml``): the taxonomy is diagnostic metadata, so
+    its absence must not stop a case run or a read model from working.
+    """
     taxonomy_path = path or DEFAULT_TAXONOMY_PATH
+    if not Path(taxonomy_path).exists():
+        logger.info("No bias taxonomy at %s; continuing without taxonomy", taxonomy_path)
+        return None
     taxonomy = load_bias_taxonomy(taxonomy_path)
     payload = taxonomy.model_dump()
     checksum = taxonomy_checksum(payload)

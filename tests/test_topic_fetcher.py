@@ -4,6 +4,7 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from pathlib import Path
 
+from src.ingester.rss import FeedAcquisitionOutcome
 from src.ingester.topic_fetcher import TopicFetcher
 
 
@@ -141,20 +142,40 @@ class TestTopicFetcher:
         """Test fetching from empty source list."""
         result = await fetcher._fetch_from_sources([], 10)
 
-        assert result == {"articles": [], "exceptions": []}
+        # Legacy keys stay present for existing callers.
+        assert result["articles"] == []
+        assert result["exceptions"] == []
+        # ... and B02 adds structured coverage: no source was even requested.
+        assert result["source_outcomes"] == []
+        assert result["acquisition_coverage"] == "not_attempted"
+        assert result["acquisition_counts"]["requested"] == 0
+        assert result["acquisition_counts"]["attempted"] == 0
 
     @pytest.mark.asyncio
     async def test_fetch_from_sources_rss_error(self, fetcher, mock_sources):
         """Test fetching from sources when RSS fails."""
-        with patch('src.ingester.topic_fetcher.RSSFeed') as mock_feed_class:
+        failed_outcome = FeedAcquisitionOutcome(
+            source_url="http://example.com/rss",
+            status="failed",
+            attempted=True,
+            error="RSS error",
+            reason="transport_error",
+        )
+        with patch("src.ingester.topic_fetcher.RSSFeed") as mock_feed_class:
             mock_feed = MagicMock()
-            mock_feed.fetch.side_effect = Exception("RSS error")
+            mock_feed.fetch_with_outcome.return_value = failed_outcome
             mock_feed_class.return_value = mock_feed
 
             result = await fetcher._fetch_from_sources(mock_sources, 10)
 
             assert result["articles"] == []
             assert len(result["exceptions"]) == len(mock_sources)
+            assert result["acquisition_coverage"] == "failed"
+            assert result["acquisition_counts"]["failed"] == len(mock_sources)
+            assert all(
+                outcome["status"] == "failed"
+                for outcome in result["source_outcomes"]
+            )
 
     @pytest.mark.asyncio
     async def test_score_articles(self, fetcher):

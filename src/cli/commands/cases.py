@@ -322,8 +322,12 @@ def cmd_monitor_cases(
         console.print(f"[red]Config file not found: {topics_config}[/red]")
         return
 
-    with open(topics_config) as handle:
-        config = yaml.safe_load(handle) or {}
+    try:
+        with open(topics_config) as handle:
+            config = yaml.safe_load(handle) or {}
+    except (OSError, yaml.YAMLError) as exc:
+        console.print(f"[red]Could not read config {topics_config}: {exc}[/red]")
+        return
 
     topics = config.get("topics", [])
     if not topics:
@@ -343,3 +347,4 @@ def cmd_monitor_cases(
             time.sleep(max(interval, 1) * 60)
     except KeyboardInterrupt:
         console.print("\n[yellow]Monitor stopped[/yellow]")
+

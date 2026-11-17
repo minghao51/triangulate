@@ -50,16 +50,16 @@ async def test_workflow_classifies_parties():
         ]
     }
 
-    with patch("src.ai.workflow.collect_claims", new=AsyncMock(return_value=claims)):
+    with patch("src.ai.baseline_workflow.collect_claims", new=AsyncMock(return_value=claims)):
         with patch(
-            "src.ai.workflow.classify_parties", new=AsyncMock(return_value=party_data)
+            "src.ai.baseline_workflow.classify_parties", new=AsyncMock(return_value=party_data)
         ):
             with patch(
-                "src.ai.workflow.cluster_claims",
+                "src.ai.baseline_workflow.cluster_claims",
                 new=AsyncMock(return_value={"clusters": {"0": claims}}),
             ):
                 with patch(
-                    "src.ai.workflow.narrate_cluster",
+                    "src.ai.baseline_workflow.narrate_cluster",
                     new=AsyncMock(
                         return_value={
                             "stance_summary": "Test",

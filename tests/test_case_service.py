@@ -1099,3 +1099,4 @@ async def test_process_intake_queue_can_attach_saved_capture_to_case(monkeypatch
         assert session.query(CaseArticle).filter(CaseArticle.case_id == "case-1").count() == 1
     finally:
         session.close()
+

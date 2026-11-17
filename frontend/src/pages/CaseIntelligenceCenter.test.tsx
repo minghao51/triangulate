@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { Link, MemoryRouter, Route, Routes } from 'react-router-dom';
 
 import CaseIntelligenceCenter from './CaseIntelligenceCenter';
 import { useCaseStore } from '../stores/case-store';
@@ -198,3 +198,111 @@ describe('CaseIntelligenceCenter routes', () => {
     expect(screen.queryByText('Tab not found')).toBeNull();
   });
 });
+
+describe('CaseIntelligenceCenter failure and case-switch states', () => {
+  const storeState = () => useCaseStore.getState();
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useCaseStore.getState().clearActiveCase();
+    apiMocks.getClaimsOverviewForCase.mockResolvedValue({ claims: [], narratives: [] });
+    apiMocks.getEvidenceForCase.mockResolvedValue([]);
+    apiMocks.getExceptionsForCase.mockResolvedValue([]);
+    apiMocks.getPartiesForCase.mockResolvedValue([]);
+    apiMocks.getTimelineForCase.mockResolvedValue([]);
+    apiMocks.getRunHistoryForCase.mockResolvedValue([]);
+    apiMocks.getReportForCase.mockResolvedValue({
+      status: 'pending',
+      markdownPath: null,
+      markdownContent: null,
+      manifestPath: null,
+    });
+  });
+
+  it('shows a retryable error instead of a blank panel when the case read fails', async () => {
+    apiMocks.getCaseDetail.mockRejectedValueOnce(new Error('case read failed'));
+
+    renderCaseRoute('/cases/case-12345678');
+
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toContain('case read failed');
+    expect(screen.queryByText('Operator Commands')).toBeNull();
+
+    apiMocks.getCaseDetail.mockResolvedValueOnce(baseCaseDetail);
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+
+    expect(await screen.findByRole('heading', { name: 'Operator Commands' })).toBeDefined();
+  });
+
+  it('states that a case is not found instead of returning nothing', async () => {
+    apiMocks.getCaseDetail.mockResolvedValue({
+      ...baseCaseDetail,
+      case: { ...baseCaseDetail.case, id: 'a-different-case' },
+    });
+
+    renderCaseRoute('/cases/case-12345678');
+
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toContain('Case not found');
+    expect(alert.textContent).toContain('case-12345678');
+    expect(screen.getByRole('button', { name: /Back to Cases/i })).toBeDefined();
+  });
+
+  it('never lets a late response for the previous case overwrite the current case', async () => {
+    const caseA = { ...baseCaseDetail, case: { ...baseCaseDetail.case, id: 'case-AAAAAAAA', query: 'Case A' } };
+    const caseB = { ...baseCaseDetail, case: { ...baseCaseDetail.case, id: 'case-BBBBBBBB', query: 'Case B' } };
+
+    let resolveA: (value: unknown) => void = () => {};
+    apiMocks.getCaseDetail.mockImplementation((caseId: string) => {
+      if (caseId === 'case-AAAAAAAA') {
+        return new Promise((resolve) => {
+          resolveA = resolve;
+        });
+      }
+      return Promise.resolve(caseB);
+    });
+
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={['/cases/case-AAAAAAAA']}>
+          <Routes>
+            <Route path="/cases/:id/*" element={<CaseSwitcher />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+
+    expect(await screen.findByText('Loading case intelligence...')).toBeDefined();
+    expect(storeState().activeCase).toBeNull();
+
+    fireEvent.click(screen.getByRole('link', { name: 'go-to-b' }));
+    expect(await screen.findByRole('heading', { name: 'Operator Commands' })).toBeDefined();
+    expect(storeState().activeCase?.id).toBe('case-BBBBBBBB');
+
+    // The stale case A answer arrives after case B is displayed.
+    resolveA(caseA);
+    await waitFor(() => expect(storeState().activeCase?.id).toBe('case-BBBBBBBB'));
+    expect(storeState().activeCase?.query).toBe('Case B');
+    expect(storeState().caseDetail?.case.id).toBe('case-BBBBBBBB');
+  });
+
+  it('clears the shared store when the case workspace unmounts', async () => {
+    apiMocks.getCaseDetail.mockResolvedValue(baseCaseDetail);
+
+    const { unmount } = renderCaseRoute('/cases/case-12345678');
+    expect(await screen.findByRole('heading', { name: 'Operator Commands' })).toBeDefined();
+    expect(storeState().activeCase?.id).toBe('case-12345678');
+
+    unmount();
+    await waitFor(() => expect(storeState().activeCase).toBeNull());
+    expect(storeState().caseDetail).toBeNull();
+  });
+});
+
+const CaseSwitcher = () => (
+  <>
+    <Link to="/cases/case-BBBBBBBB">go-to-b</Link>
+    <CaseIntelligenceCenter />
+  </>
+);

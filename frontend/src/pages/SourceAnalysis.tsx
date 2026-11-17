@@ -1,346 +1,283 @@
-import React, { useMemo } from 'react';
+import React from 'react';
 import { useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import type { Evidence } from '../types/backend-models';
 import { getEvidenceForCase } from '../services/api';
-import { SourceRadar } from '../components/data-visualization/SourceRadar';
 import Card, { CardHeader, CardTitle, CardBody } from '../components/design-system/Card';
 import Badge from '../components/design-system/Badge';
+import Button from '../components/design-system/Button';
+import './SourceAnalysis.css';
+
+/**
+ * Source analysis for a case.
+ *
+ * Counts only what each evidence record actually stores. Publisher names are
+ * never used to guess a region, political leaning or factuality rating, and no
+ * baseline/benchmark scores are invented.
+ */
+
+const countBy = (values: Array<string | null>): Array<[string, number]> => {
+  const counts = new Map<string, number>();
+  values.forEach((value) => {
+    if (!value) return;
+    counts.set(value, (counts.get(value) || 0) + 1);
+  });
+  return Array.from(counts.entries()).sort(([, a], [, b]) => b - a);
+};
+
+const percentage = (count: number, total: number): string => {
+  if (!Number.isFinite(total) || total <= 0) return 'n/a';
+  return `${((count / total) * 100).toFixed(1)}%`;
+};
+
+const barWidth = (count: number, total: number): string => {
+  if (!Number.isFinite(total) || total <= 0) return '0%';
+  return `${Math.min(100, (count / total) * 100)}%`;
+};
 
 export const SourceAnalysis: React.FC = () => {
   const { id } = useParams<{ id: string }>();
 
-  // Fetch case data
-  const { data: evidence = [], isLoading, error } = useQuery({
+  const { data: evidence, isLoading, error, refetch } = useQuery({
     queryKey: ['evidence', id],
-    queryFn: () => getEvidenceForCase(id || ''),
+    queryFn: () => getEvidenceForCase(id!),
     enabled: !!id,
-    refetchInterval: 15000, // 15s polling
+    refetchInterval: 15000,
   });
 
-  // Calculate source statistics
-  const sourceStats = useMemo(() => {
-    const byType: Record<string, number> = {};
-    const byPublisher: Record<string, number> = {};
-    const byCredibility: Record<string, number> = {};
-    const byRegion: Record<string, number> = {};
+  const items: Evidence[] = evidence ?? [];
+  const total = items.length;
 
-    evidence.forEach((ev) => {
-      // By type
-      byType[ev.sourceType] = (byType[ev.sourceType] || 0) + 1;
+  const byType = countBy(items.map((item) => item.sourceType || null));
+  const byPublisher = countBy(items.map((item) => item.publisher || null));
+  const byCredibility = countBy(items.map((item) => item.credibilityTier || null));
+  const withoutCredibility = items.filter((item) => !item.credibilityTier).length;
 
-      // By publisher
-      if (ev.publisher) {
-        byPublisher[ev.publisher] = (byPublisher[ev.publisher] || 0) + 1;
-      }
-
-      // By credibility tier
-      if (ev.credibilityTier) {
-        byCredibility[ev.credibilityTier] = (byCredibility[ev.credibilityTier] || 0) + 1;
-      }
-
-      // Extract region from publisher (simplified)
-      if (ev.publisher) {
-        const region = ev.publisher.includes('BBC') || ev.publisher.includes('UK')
-          ? 'UK'
-          : ev.publisher.includes('CNN') || ev.publisher.includes('NYTimes')
-          ? 'US'
-          : 'Other';
-        byRegion[region] = (byRegion[region] || 0) + 1;
-      }
+  const repeatedUrls = (() => {
+    const urlCounts = new Map<string, number>();
+    items.forEach((item) => {
+      if (!item.canonicalUrl) return;
+      urlCounts.set(item.canonicalUrl, (urlCounts.get(item.canonicalUrl) || 0) + 1);
     });
-
-    return { byType, byPublisher, byCredibility, byRegion };
-  }, [evidence]);
-
-  // Calculate baseline for comparison
-  const baseline = useMemo(() => {
-    // Simplified baseline - in production would come from aggregated data
-    const sourceTypeDiversity = Math.min(100, (Object.keys(sourceStats.byType).length / 5) * 100);
-    const publisherDiversity = Math.min(100, (Object.keys(sourceStats.byPublisher).length / 10) * 100);
-    const avgCredibility = 60; // Baseline average
-    const verificationRate = 70; // Baseline verification
-    const reviewNeeded = 20; // Baseline review needed
-
-    return { sourceTypeDiversity, publisherDiversity, avgCredibility, verificationRate, reviewNeeded };
-  }, [sourceStats]);
-
-  // Top sources
-  const topSources = useMemo(() => {
-    return Object.entries(sourceStats.byPublisher)
-      .sort(([, a], [, b]) => b - a)
-      .slice(0, 10);
-  }, [sourceStats]);
-
-  // Bias analysis (simplified)
-  const biasAnalysis = useMemo(() => {
-    const left = evidence.filter((e) => e.publisher?.toLowerCase().includes('left') || e.publisher?.toLowerCase().includes('progressive')).length;
-    const right = evidence.filter((e) => e.publisher?.toLowerCase().includes('right') || e.publisher?.toLowerCase().includes('conservative')).length;
-    const center = evidence.filter((e) => e.publisher?.toLowerCase().includes('center') || e.publisher?.toLowerCase().includes('times')).length;
-
-    return { left, right, center, other: evidence.length - left - right - center };
-  }, [evidence]);
-
-  // Duplication detection
-  const duplicateSources = useMemo(() => {
-    const urlMap = new Map<string, Evidence[]>();
-    evidence.forEach((ev) => {
-      if (ev.canonicalUrl) {
-        const urls = urlMap.get(ev.canonicalUrl) || [];
-        urls.push(ev);
-        urlMap.set(ev.canonicalUrl, urls);
-      }
-    });
-
-    return Array.from(urlMap.entries())
-      .filter(([, evs]) => evs.length > 1)
-      .map(([url, evs]) => ({ url, count: evs.length, sources: evs }));
-  }, [evidence]);
+    return Array.from(urlCounts.entries()).filter(([, count]) => count > 1);
+  })();
 
   return (
-    <div className="p-6 space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
+    <div className="source-analysis">
+      <div className="source-analysis-header">
         <div>
-          <h1 className="text-2xl font-bold text-[#f0f2f5]">Source Analysis</h1>
-          <p className="text-sm text-[#9aa1b3] mt-1">
-            Comprehensive analysis of evidence sources and credibility
+          <h1>Source Analysis</h1>
+          <p className="source-analysis-subtitle">
+            Recorded counts for this case's evidence items. Bias, factuality and independence
+            assessments are not provided by this read API, so none is shown.
           </p>
         </div>
+        <Button variant="secondary" onClick={() => refetch()}>Refresh</Button>
       </div>
 
-      {/* Overview Stats */}
-      <div className="grid grid-cols-4 gap-4">
-        <Card padding="sm">
-          <CardBody className="space-y-1">
-            <div className="text-xs text-[#9aa1b3] uppercase tracking-wider">Total Sources</div>
-            <div className="text-2xl font-bold text-[#00d4ff]">{evidence.length}</div>
-          </CardBody>
-        </Card>
-        <Card padding="sm">
-          <CardBody className="space-y-1">
-            <div className="text-xs text-[#9aa1b3] uppercase tracking-wider">Source Types</div>
-            <div className="text-2xl font-bold text-[#00ff9d]">{Object.keys(sourceStats.byType).length}</div>
-          </CardBody>
-        </Card>
-        <Card padding="sm">
-          <CardBody className="space-y-1">
-            <div className="text-xs text-[#9aa1b3] uppercase tracking-wider">Publishers</div>
-            <div className="text-2xl font-bold text-[#a55eea]">{Object.keys(sourceStats.byPublisher).length}</div>
-          </CardBody>
-        </Card>
-        <Card padding="sm">
-          <CardBody className="space-y-1">
-            <div className="text-xs text-[#9aa1b3] uppercase tracking-wider">Duplicates</div>
-            <div className="text-2xl font-bold text-[#ff4757]">{duplicateSources.length}</div>
-          </CardBody>
-        </Card>
-      </div>
-
-      {isLoading ? (
+      {!id ? (
         <Card>
-          <CardBody className="py-16">
-            <div className="text-center text-[#9aa1b3]">Loading source analysis...</div>
+          <CardBody>
+            <div className="source-analysis-state source-analysis-state--error" role="alert">
+              No case ID in the route.
+            </div>
+          </CardBody>
+        </Card>
+      ) : isLoading ? (
+        <Card>
+          <CardBody>
+            <div className="source-analysis-state" role="status">Loading evidence records…</div>
           </CardBody>
         </Card>
       ) : error ? (
         <Card>
-          <CardBody className="py-16">
-            <div className="text-center text-[#ff4757]">Failed to load source data</div>
+          <CardBody>
+            <div className="source-analysis-state source-analysis-state--error" role="alert">
+              <p>
+                Failed to load source data
+                {error instanceof Error && error.message ? `: ${error.message}` : '.'}
+              </p>
+              <Button variant="secondary" onClick={() => refetch()}>Retry</Button>
+            </div>
+          </CardBody>
+        </Card>
+      ) : total === 0 ? (
+        <Card>
+          <CardBody>
+            <div className="source-analysis-state" role="status">
+              <div className="source-analysis-state-title">No evidence records</div>
+              <p>
+                This case has no recorded evidence items, so there are no source counts to report.
+                No source assessment can be inferred from this empty response.
+              </p>
+            </div>
           </CardBody>
         </Card>
       ) : (
         <>
-          {/* Source Diversity Radar */}
-          <SourceRadar
-            evidence={evidence}
-            baseline={baseline}
-            size={500}
-          />
+          <div className="source-analysis-stats">
+            <Card padding="sm">
+              <CardBody>
+                <div className="source-analysis-stat-label">Evidence Items</div>
+                <div className="source-analysis-stat-value">{total}</div>
+              </CardBody>
+            </Card>
+            <Card padding="sm">
+              <CardBody>
+                <div className="source-analysis-stat-label">Source Types Recorded</div>
+                <div className="source-analysis-stat-value">{byType.length}</div>
+              </CardBody>
+            </Card>
+            <Card padding="sm">
+              <CardBody>
+                <div className="source-analysis-stat-label">Publishers Recorded</div>
+                <div className="source-analysis-stat-value">{byPublisher.length}</div>
+              </CardBody>
+            </Card>
+            <Card padding="sm">
+              <CardBody>
+                <div className="source-analysis-stat-label">Credibility Labels Recorded</div>
+                <div className="source-analysis-stat-value">
+                  {byCredibility.length}
+                  {withoutCredibility > 0 && (
+                    <span className="source-analysis-stat-note">
+                      {' '}· {withoutCredibility} without a label
+                    </span>
+                  )}
+                </div>
+              </CardBody>
+            </Card>
+          </div>
 
-          <div className="grid grid-cols-2 gap-6">
-            {/* Source Distribution by Type */}
+          <div className="source-analysis-grid">
             <Card>
               <CardHeader>
                 <CardTitle>Source Type Distribution</CardTitle>
               </CardHeader>
               <CardBody>
-                <div className="space-y-3">
-                  {Object.entries(sourceStats.byType)
-                    .sort(([, a], [, b]) => b - a)
-                    .map(([type, count]) => {
-                      const percentage = (count / evidence.length) * 100;
-                      return (
-                        <div key={type}>
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-sm text-[#f0f2f5] capitalize">{type}</span>
-                            <span className="text-sm text-[#00d4ff] font-mono">{count} ({percentage.toFixed(1)}%)</span>
-                          </div>
-                          <div className="w-full h-2 bg-[#1a1a1a] rounded-sm overflow-hidden">
-                            <div
-                              className="h-full bg-[#00d4ff] transition-all duration-300"
-                              style={{ width: `${percentage}%` }}
-                            />
-                          </div>
-                        </div>
-                      );
-                    })}
+                <div className="source-analysis-bars">
+                  {byType.map(([type, count]) => (
+                    <div key={type}>
+                      <div className="source-analysis-bar-row">
+                        <span className="source-analysis-bar-label">{type}</span>
+                        <span className="source-analysis-bar-value">
+                          {count} ({percentage(count, total)})
+                        </span>
+                      </div>
+                      <div className="source-analysis-bar-track">
+                        <div className="source-analysis-bar-fill" style={{ width: barWidth(count, total) }} />
+                      </div>
+                    </div>
+                  ))}
+                  {byType.length === 0 && (
+                    <div className="source-analysis-state" role="status">
+                      No source type is recorded for these evidence items.
+                    </div>
+                  )}
                 </div>
               </CardBody>
             </Card>
 
-            {/* Top Publishers */}
             <Card>
               <CardHeader>
-                <CardTitle>Top Publishers</CardTitle>
+                <CardTitle>Publishers Recorded</CardTitle>
               </CardHeader>
               <CardBody>
-                <div className="space-y-2">
-                  {topSources.map(([publisher, count], index) => (
-                    <div
-                      key={publisher}
-                      className="flex items-center justify-between p-2 bg-[#0a0a0a] border border-[#1a1a1a] rounded-sm hover:border-[#2d3340] transition-colors"
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="text-xs text-[#6c7385] font-mono w-6">#{index + 1}</div>
-                        <div className="text-sm text-[#f0f2f5]">{publisher}</div>
-                      </div>
+                <div className="source-analysis-bars">
+                  {byPublisher.map(([publisher, count]) => (
+                    <div key={publisher} className="source-analysis-publisher-row">
+                      <span className="source-analysis-bar-label">{publisher}</span>
                       <Badge variant="neutral" size="sm">{count}</Badge>
                     </div>
                   ))}
-                  {topSources.length === 0 && (
-                    <div className="text-center text-[#6c7385] py-8">No publisher data available</div>
+                  {items.filter((item) => !item.publisher).length > 0 && (
+                    <div className="source-analysis-bar-note">
+                      {items.filter((item) => !item.publisher).length} evidence item(s) have no
+                      recorded publisher.
+                    </div>
+                  )}
+                  {byPublisher.length === 0 && (
+                    <div className="source-analysis-state" role="status">
+                      No publisher is recorded for these evidence items.
+                    </div>
                   )}
                 </div>
               </CardBody>
             </Card>
 
-            {/* Credibility Tier Breakdown */}
             <Card>
               <CardHeader>
-                <CardTitle>Credibility Tier Analysis</CardTitle>
+                <CardTitle>Recorded Credibility Labels</CardTitle>
               </CardHeader>
               <CardBody>
-                <div className="space-y-3">
-                  {Object.entries(sourceStats.byCredibility)
-                    .sort(([, a], [, b]) => b - a)
-                    .map(([tier, count]) => {
-                      const percentage = (count / evidence.length) * 100;
-                      const tierColors: Record<string, string> = {
-                        'high': 'bg-[#00ff9d]',
-                        'medium': 'bg-[#ffb800]',
-                        'low': 'bg-[#ff4757]',
-                        'unknown': 'bg-[#6c7385]',
-                      };
-                      return (
-                        <div key={tier}>
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-sm text-[#f0f2f5] capitalize">{tier}</span>
-                            <span className="text-sm text-[#00d4ff] font-mono">{count} ({percentage.toFixed(1)}%)</span>
-                          </div>
-                          <div className="w-full h-2 bg-[#1a1a1a] rounded-sm overflow-hidden">
-                            <div
-                              className={`h-full ${tierColors[tier] || 'bg-[#6c7385]'} transition-all duration-300`}
-                              style={{ width: `${percentage}%` }}
-                            />
-                          </div>
-                        </div>
-                      );
-                    })}
-                  {Object.keys(sourceStats.byCredibility).length === 0 && (
-                    <div className="text-center text-[#6c7385] py-8">No credibility data available</div>
+                <div className="source-analysis-bars">
+                  {byCredibility.map(([tier, count]) => (
+                    <div key={tier}>
+                      <div className="source-analysis-bar-row">
+                        <span className="source-analysis-bar-label">{tier}</span>
+                        <span className="source-analysis-bar-value">
+                          {count} ({percentage(count, total)})
+                        </span>
+                      </div>
+                      <div className="source-analysis-bar-track">
+                        <div className="source-analysis-bar-fill" style={{ width: barWidth(count, total) }} />
+                      </div>
+                    </div>
+                  ))}
+                  {byCredibility.length === 0 && (
+                    <div className="source-analysis-state" role="status">
+                      No credibility label is recorded (not provided) for these evidence items.
+                    </div>
+                  )}
+                  {withoutCredibility > 0 && (
+                    <div className="source-analysis-bar-note">
+                      {withoutCredibility} of {total} evidence item(s) have no recorded credibility
+                      label — treated as not recorded/provided, not as a low score.
+                    </div>
                   )}
                 </div>
               </CardBody>
             </Card>
 
-            {/* Bias Analysis */}
             <Card>
               <CardHeader>
-                <CardTitle>Source Bias Distribution</CardTitle>
+                <CardTitle>Bias &amp; Factuality</CardTitle>
               </CardHeader>
               <CardBody>
-                <div className="space-y-3">
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-sm text-[#f0f2f5]">Left-leaning</span>
-                      <span className="text-sm text-[#00d4ff] font-mono">{biasAnalysis.left}</span>
-                    </div>
-                    <div className="w-full h-2 bg-[#1a1a1a] rounded-sm overflow-hidden">
-                      <div
-                        className="h-full bg-[#00d4ff] transition-all duration-300"
-                        style={{ width: `${(biasAnalysis.left / evidence.length) * 100}%` }}
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-sm text-[#f0f2f5]">Center</span>
-                      <span className="text-sm text-[#00d4ff] font-mono">{biasAnalysis.center}</span>
-                    </div>
-                    <div className="w-full h-2 bg-[#1a1a1a] rounded-sm overflow-hidden">
-                      <div
-                        className="h-full bg-[#00ff9d] transition-all duration-300"
-                        style={{ width: `${(biasAnalysis.center / evidence.length) * 100}%` }}
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-sm text-[#f0f2f5]">Right-leaning</span>
-                      <span className="text-sm text-[#00d4ff] font-mono">{biasAnalysis.right}</span>
-                    </div>
-                    <div className="w-full h-2 bg-[#1a1a1a] rounded-sm overflow-hidden">
-                      <div
-                        className="h-full bg-[#ff4757] transition-all duration-300"
-                        style={{ width: `${(biasAnalysis.right / evidence.length) * 100}%` }}
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-sm text-[#f0f2f5]">Other/Unknown</span>
-                      <span className="text-sm text-[#00d4ff] font-mono">{biasAnalysis.other}</span>
-                    </div>
-                    <div className="w-full h-2 bg-[#1a1a1a] rounded-sm overflow-hidden">
-                      <div
-                        className="h-full bg-[#6c7385] transition-all duration-300"
-                        style={{ width: `${(biasAnalysis.other / evidence.length) * 100}%` }}
-                      />
-                    </div>
-                  </div>
+                <div className="source-analysis-state source-analysis-state--unavailable" role="status">
+                  <Badge variant="neutral" size="sm">Not provided</Badge>
+                  <p>
+                    Bias, factuality and leaning assessments are not provided by this read API.
+                    Publisher names are not used to infer political orientation or accuracy.
+                  </p>
                 </div>
               </CardBody>
             </Card>
 
-            {/* Duplicate Sources */}
-            <Card className="col-span-2">
+            <Card className="source-analysis-wide">
               <CardHeader>
-                <CardTitle>Duplicate Source Detection</CardTitle>
+                <CardTitle>Repeated Canonical URLs</CardTitle>
               </CardHeader>
               <CardBody>
-                {duplicateSources.length === 0 ? (
-                  <div className="text-center text-[#00ff9d] py-8">
-                    <div className="text-4xl mb-2">✓</div>
-                    <div className="text-sm">No duplicate sources detected</div>
+                {repeatedUrls.length === 0 ? (
+                  <div className="source-analysis-state" role="status">
+                    No canonical URL appears more than once among these evidence records.
                   </div>
                 ) : (
-                  <div className="space-y-2">
-                    {duplicateSources.map(({ url, count }) => (
-                      <div
-                        key={url}
-                        className="flex items-center justify-between p-3 bg-[#0a0a0a] border border-[#ff4757] rounded-sm"
-                      >
-                        <div className="flex-1">
-                          <div className="text-sm text-[#f0f2f5] truncate">{url}</div>
-                          <div className="text-xs text-[#9aa1b3] mt-1">
-                            Found in {count} sources
-                          </div>
-                        </div>
-                        <Badge variant="danger" size="sm">{count}x</Badge>
-                      </div>
-                    ))}
-                  </div>
+                  <>
+                    <p className="source-analysis-bar-note">
+                      The same canonical URL is recorded on more than one evidence item. These remain
+                      separate evidence records; this is not a source-independence analysis.
+                    </p>
+                    <ul className="source-analysis-urls">
+                      {repeatedUrls.map(([url, count]) => (
+                        <li key={url}>
+                          <span className="source-analysis-url">{url}</span>
+                          <Badge variant="neutral" size="sm">{count} records</Badge>
+                        </li>
+                      ))}
+                    </ul>
+                  </>
                 )}
               </CardBody>
             </Card>

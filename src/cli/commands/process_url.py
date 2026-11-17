@@ -152,7 +152,9 @@ async def cmd_process_url_async(
         console.print("\n[bold blue]Saving to database...[/bold blue]")
         service = build_case_service()
         queued = await service.capture_url_to_intake(url, case_id=case_id)
-        summary = await service.process_intake_queue(intake_ids=[item.id for item in queued])
+        summary = await service.process_intake_queue(
+            intake_ids=[str(item.id) for item in queued]
+        )
         if summary["processed"] > 0:
             console.print("[green]✓ Saved through the durable intake pipeline[/green]")
         else:

@@ -58,6 +58,8 @@ class CaseRunContext:
     report_bundle: dict[str, Any] | None = None
     exception_queue: list[dict[str, Any]] | None = None
     changed: bool = False
+    # Delay-aware stage failure recorded by a persistence callback (B02).
+    stage_failure: dict[str, Any] | None = None
 
 
 def _utcnow() -> datetime:

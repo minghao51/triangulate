@@ -615,3 +615,4 @@ async def test_report_download_endpoints(monkeypatch, tmp_path):
         assert json.loads(manifest_response.text)["case_id"] == case.id
     finally:
         app.dependency_overrides.clear()
+

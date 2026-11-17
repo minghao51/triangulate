@@ -1,0 +1,191 @@
+/* Scoped styles for the pipeline monitor page. */
+
+.pipeline-monitor {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  padding: 1.5rem;
+}
+
+.pipeline-monitor-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.pipeline-monitor-header h1 {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.pipeline-monitor-subtitle {
+  margin: 0.25rem 0 0;
+  max-width: 44rem;
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+}
+
+.pipeline-monitor-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.pipeline-monitor-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8125rem;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.pipeline-monitor-toggle input {
+  width: 1rem;
+  height: 1rem;
+  accent-color: var(--accent-primary);
+}
+
+.pipeline-monitor-toggle input:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
+}
+
+.pipeline-monitor-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  gap: 1rem;
+}
+
+.pipeline-monitor-metric-label {
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-secondary);
+}
+
+.pipeline-monitor-metric-value {
+  margin-top: 0.25rem;
+  font-size: 1.5rem;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  color: var(--accent-primary);
+}
+
+.pipeline-monitor-metric-value--success {
+  color: var(--status-success);
+}
+
+.pipeline-monitor-metric-value--error {
+  color: var(--status-danger);
+}
+
+.pipeline-monitor-metric-value--text {
+  font-size: 1.125rem;
+  color: var(--text-primary);
+}
+
+.pipeline-monitor-panels {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(24rem, 1fr));
+  gap: 1.5rem;
+  align-items: start;
+}
+
+.pipeline-monitor-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1.5rem 1rem;
+  text-align: center;
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+}
+
+.pipeline-monitor-state--error {
+  color: var(--status-danger);
+}
+
+.pipeline-monitor-state--unavailable {
+  align-items: flex-start;
+  text-align: left;
+  padding: 0.5rem 0;
+}
+
+.pipeline-monitor-state code {
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+}
+
+.pipeline-monitor-runs {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 24rem;
+  overflow-y: auto;
+}
+
+.pipeline-monitor-run {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.625rem 0.75rem;
+  background-color: var(--bg-app);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm, 2px);
+}
+
+.pipeline-monitor-run-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  flex-shrink: 0;
+  border-radius: var(--radius-sm, 2px);
+}
+
+.pipeline-monitor-run-main {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.pipeline-monitor-run-stage {
+  font-size: 0.875rem;
+  color: var(--text-primary);
+}
+
+.pipeline-monitor-run-model {
+  font-size: 0.6875rem;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pipeline-monitor-run-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.125rem;
+  white-space: nowrap;
+}
+
+.pipeline-monitor-run-duration {
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  color: var(--text-primary);
+}
+
+.pipeline-monitor-run-status {
+  font-size: 0.6875rem;
+  text-transform: capitalize;
+  color: var(--text-secondary);
+}

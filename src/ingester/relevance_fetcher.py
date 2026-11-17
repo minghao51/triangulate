@@ -103,11 +103,46 @@ class RelevanceFetcher:
             source_plan,
             max_articles * 2,  # Fetch more to account for filtering
         )
+        raw_outcomes = None
         if isinstance(fetched, list):
             articles = fetched
         else:
             articles = fetched["articles"]
             fetch_exceptions.extend(fetched["exceptions"])
+            raw_outcomes = fetched.get("source_outcomes")
+
+        # B02: acquisition coverage/sources are derived only from validated
+        # per-source outcomes (never from a caller-declared ``succeeded`` flag).
+        # Imported lazily because ``TopicFetcher`` subclasses this class.
+        from src.ingester.topic_fetcher import (
+            COVERAGE_UNKNOWN,
+            SUCCESS_ACQUISITION_STATUSES,
+            describe_source_outcomes,
+            validated_outcome_kind,
+        )
+
+        requested_hint = len(source_plan)
+        if raw_outcomes is None:
+            acquisition_sources: list[dict] = []
+            coverage = COVERAGE_UNKNOWN
+            counts = describe_source_outcomes(
+                [], requested_count=requested_hint
+            )["counts"]
+            acquisition_observed = False
+        else:
+            acquisition_sources = [dict(outcome) for outcome in raw_outcomes]
+            summary = describe_source_outcomes(
+                acquisition_sources, requested_count=requested_hint
+            )
+            coverage = summary["coverage"]
+            counts = summary["counts"]
+            acquisition_observed = True
+
+        canonical_sources_used = [
+            source.get("source_name")
+            for source in acquisition_sources
+            if validated_outcome_kind(source) in SUCCESS_ACQUISITION_STATUSES
+        ]
 
         # Score articles by relevance
         scored_articles = await self._score_articles(
@@ -125,7 +160,12 @@ class RelevanceFetcher:
             "conflict": conflict,
             "queries_generated": search_queries,
             "source_plan": source_plan[:20],
-            "sources_used": [s.get("name") for s in prioritized_sources[:10]],
+            "sources_used": canonical_sources_used,
+            "source_outcomes": acquisition_sources,
+            "acquisition_coverage": coverage,
+            "acquisition_counts": counts,
+            "acquisition_observed": acquisition_observed,
+            "source_plan_total": requested_hint,
             "articles_fetched": len(articles),
             "articles_processed": len(final_articles),
             "confirmed_parties": confirmed_parties or [],

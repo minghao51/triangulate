@@ -457,6 +457,8 @@ def _mark_stage_running(
     session = get_database().get_session_sync()
     try:
         case = session.query(TopicCase).filter(TopicCase.id == case_id).first()
+        if case is None:
+            raise RuntimeError(f"Case {case_id!r} is missing")
         attempt = (
             session.query(CaseStageRun)
             .filter(
@@ -534,6 +536,11 @@ async def _execute_stage(
                 .filter(CaseStageRun.id == stage_run_id)
                 .first()
             )
+            if case is None or stage_run is None:
+                raise RuntimeError(
+                    f"Stage run {stage_run_id!r} or its case is missing before "
+                    "completion could be recorded"
+                )
             artifact_ids = persist_callback(session, context, stage_run, result)
             stage_run.status = StageStatus.COMPLETED
             stage_run.completed_at = _utcnow()
@@ -577,6 +584,12 @@ async def _execute_stage(
                 .filter(CaseStageRun.id == stage_run_id)
                 .first()
             )
+            if case is None or stage_run is None:
+                logger.error(
+                    "Cannot record failure for stage run %s: row or case missing",
+                    stage_run_id,
+                )
+                return
             stage_run.status = StageStatus.FAILED
             stage_run.completed_at = _utcnow()
             stage_run.error_message = str(exc)

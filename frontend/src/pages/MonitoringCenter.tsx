@@ -1,343 +1,308 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getCases } from '../services/api';
 import Card, { CardHeader, CardTitle, CardBody } from '../components/design-system/Card';
 import Badge from '../components/design-system/Badge';
 import Button from '../components/design-system/Button';
 import type { TopicCase } from '../types/backend-models';
+import './MonitoringCenter.css';
 
-interface Monitor {
-  id: string;
-  name: string;
-  query: string;
-  schedule: string;
-  active: boolean;
-  lastRun: string | null;
-  nextRun: string | null;
-  status: 'running' | 'idle' | 'error';
-}
+/**
+ * Monitoring overview.
+ *
+ * Only values the read API actually returns are rendered here. The API has no
+ * schedule, next-run, alert, acknowledgement or performance endpoints, so those
+ * panels state that the data is not provided instead of inventing numbers.
+ */
 
-interface Alert {
-  id: string;
-  monitorId: string;
-  severity: 'high' | 'medium' | 'low';
-  message: string;
-  timestamp: string;
-  acknowledged: boolean;
-}
+type MonitoringTab = 'monitors' | 'alerts' | 'performance';
 
-const MOCK_NOW = Date.parse('2026-03-19T12:00:00.000Z');
+const NOT_PROVIDED = 'Not provided by the API';
 
-export const MonitoringCenter: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'monitors' | 'alerts' | 'performance'>('monitors');
-  const [selectedMonitor, setSelectedMonitor] = useState<Monitor | null>(null);
+const UNAVAILABLE_EXPLANATIONS: Record<Exclude<MonitoringTab, 'monitors'>, string> = {
+  alerts:
+    'The current read API exposes no alert feed, so nothing is listed here. Alert acknowledgement is not available from this UI and no client-side acknowledgement is stored.',
+  performance:
+    'The current read API exposes no response-time, success-rate or aggregate run metrics for monitoring cases, so no performance values are shown.',
+};
 
-  // Fetch all cases (simulated monitors)
-  const { data: cases, isLoading, error } = useQuery({
+const formatTimestamp = (value: string | null): string => {
+  if (!value) return 'Never recorded';
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? 'Unparseable timestamp' : parsed.toLocaleString();
+};
+
+const MonitoringCenter: React.FC = () => {
+  const [activeTab, setActiveTab] = useState<MonitoringTab>('monitors');
+  const [selectedMonitorId, setSelectedMonitorId] = useState<string | null>(null);
+
+  const {
+    data: cases,
+    isLoading,
+    error,
+    refetch,
+    isFetching,
+  } = useQuery({
     queryKey: ['cases'],
     queryFn: () => getCases(),
-    refetchInterval: 30000, // 30s polling
+    refetchInterval: 30000,
   });
 
-  // Simulated monitors data
-  const monitors: Monitor[] = cases
-    ?.filter((c: TopicCase) => c.status === 'monitoring')
-    .map((c: TopicCase) => ({
-      id: c.id,
-      name: c.query,
-      query: c.query,
-      schedule: 'Daily',
-      active: true,
-      lastRun: c.lastUpdated,
-      nextRun: new Date(MOCK_NOW + 86400000).toISOString(),
-      status: 'idle' as const,
-    })) || [];
+  // Only recorded monitoring cases; nothing is synthesised from other statuses.
+  const monitors = useMemo(
+    () => (cases ?? []).filter((c: TopicCase) => c.status === 'monitoring'),
+    [cases]
+  );
 
-  // Simulated alerts data
-  const alerts: Alert[] = [
-    {
-      id: '1',
-      monitorId: monitors[0]?.id || '',
-      severity: 'high',
-      message: 'New material detected - 15 new articles found',
-      timestamp: new Date(MOCK_NOW - 3600000).toISOString(),
-      acknowledged: false,
-    },
-    {
-      id: '2',
-      monitorId: monitors[0]?.id || '',
-      severity: 'medium',
-      message: 'Verification status changed for 3 claims',
-      timestamp: new Date(MOCK_NOW - 7200000).toISOString(),
-      acknowledged: false,
-    },
-    {
-      id: '3',
-      monitorId: monitors[1]?.id || '',
-      severity: 'low',
-      message: 'Scheduled check completed successfully',
-      timestamp: new Date(MOCK_NOW - 10800000).toISOString(),
-      acknowledged: true,
-    },
-  ];
+  // Look the selection up by ID so a changed/removed case can never leave a
+  // stale monitor object selected.
+  const selectedMonitor = monitors.find((monitor) => monitor.id === selectedMonitorId) ?? null;
 
-  const activeMonitors = monitors.filter((m) => m.active).length;
-  const unacknowledgedAlerts = alerts.filter((a) => !a.acknowledged).length;
+  const lastUpdatedValues = monitors
+    .map((monitor) => monitor.lastUpdated)
+    .filter((value): value is string => Boolean(value));
 
-  const getSeverityColor = (severity: string) => {
-    switch (severity) {
-      case 'high': return 'text-[#ff4757]';
-      case 'medium': return 'text-[#ffb800]';
-      default: return 'text-[#00ff9d]';
-    }
-  };
+  // Only parseable timestamps may produce "most recent"; an unparseable value
+  // makes the aggregate unknown instead of silently picking an arbitrary row.
+  const parsedUpdates = lastUpdatedValues
+    .map((value) => Date.parse(value))
+    .filter((value) => Number.isFinite(value));
+  const hasUnparseableTimestamp = parsedUpdates.length !== lastUpdatedValues.length;
+  const newestUpdate =
+    !hasUnparseableTimestamp && parsedUpdates.length > 0
+      ? new Date(Math.max(...parsedUpdates)).toISOString()
+      : null;
 
-  const getSeverityBadge = (severity: string) => {
-    switch (severity) {
-      case 'high': return 'danger';
-      case 'medium': return 'warning';
-      default: return 'success';
-    }
-  };
+  // Counts are only published for a successful, current read. While loading or
+  // after an error the value is unknown, so an em dash is shown instead of 0.
+  const hasResolvedData = !isLoading && !error && cases !== undefined;
+  const unknownValue = '—';
 
   return (
-    <div className="p-6 space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
+    <div className="monitoring-center">
+      <div className="monitoring-header">
         <div>
-          <h1 className="text-2xl font-bold text-[#f0f2f5]">Active Monitoring</h1>
-          <p className="text-sm text-[#9aa1b3] mt-1">
-            Configure and monitor automated investigation tasks
+          <h1>Active Monitoring</h1>
+          <p className="monitoring-subtitle">
+            Cases whose recorded status is <code>monitoring</code>. Scheduling, alerting and
+            performance telemetry are not exposed by the current read API.
           </p>
         </div>
-        <Button variant="primary" icon={<span>+</span>}>
-          New Monitor
-        </Button>
-      </div>
-
-      {/* Overview Stats */}
-      <div className="grid grid-cols-4 gap-4">
-        <Card padding="sm">
-          <CardBody className="flex items-center justify-between">
-            <div>
-              <div className="text-xs text-[#9aa1b3] uppercase tracking-wider">Active Monitors</div>
-              <div className="text-2xl font-bold text-[#00d4ff]">{activeMonitors}</div>
-            </div>
-            <div className="text-3xl">📡</div>
-          </CardBody>
-        </Card>
-        <Card padding="sm">
-          <CardBody className="flex items-center justify-between">
-            <div>
-              <div className="text-xs text-[#9aa1b3] uppercase tracking-wider">Pending Alerts</div>
-              <div className="text-2xl font-bold text-[#ff4757]">{unacknowledgedAlerts}</div>
-            </div>
-            <div className="text-3xl">🔔</div>
-          </CardBody>
-        </Card>
-        <Card padding="sm">
-          <CardBody className="flex items-center justify-between">
-            <div>
-              <div className="text-xs text-[#9aa1b3] uppercase tracking-wider">Total Checks</div>
-              <div className="text-2xl font-bold text-[#00ff9d]">
-                {monitors.reduce((sum, m) => sum + (m.lastRun ? 1 : 0), 0)}
-              </div>
-            </div>
-            <div className="text-3xl">✓</div>
-          </CardBody>
-        </Card>
-        <Card padding="sm">
-          <CardBody className="flex items-center justify-between">
-            <div>
-              <div className="text-xs text-[#9aa1b3] uppercase tracking-wider">System Health</div>
-              <div className="text-2xl font-bold text-[#00ff9d]">98%</div>
-            </div>
-            <div className="text-3xl">💚</div>
-          </CardBody>
-        </Card>
-      </div>
-
-      {/* Tabs */}
-      <div className="border-b border-[#2d3340]">
-        <div className="flex gap-6">
-          <button
-            onClick={() => setActiveTab('monitors')}
-            className={`pb-3 text-sm font-medium transition-colors ${
-              activeTab === 'monitors'
-                ? 'text-[#00d4ff] border-b-2 border-[#00d4ff]'
-                : 'text-[#9aa1b3] hover:text-[#f0f2f5]'
-            }`}
+        <div className="monitoring-header-actions">
+          <Button variant="secondary" onClick={() => refetch()} loading={isFetching && !isLoading}>
+            Refresh
+          </Button>
+          <Button
+            variant="primary"
+            disabled
+            title="Creating a monitor requires a mutation endpoint, which this read-only UI does not expose."
           >
-            Monitors ({monitors.length})
-          </button>
-          <button
-            onClick={() => setActiveTab('alerts')}
-            className={`pb-3 text-sm font-medium transition-colors ${
-              activeTab === 'alerts'
-                ? 'text-[#00d4ff] border-b-2 border-[#00d4ff]'
-                : 'text-[#9aa1b3] hover:text-[#f0f2f5]'
-            }`}
-          >
-            Alerts ({alerts.length})
-          </button>
-          <button
-            onClick={() => setActiveTab('performance')}
-            className={`pb-3 text-sm font-medium transition-colors ${
-              activeTab === 'performance'
-                ? 'text-[#00d4ff] border-b-2 border-[#00d4ff]'
-                : 'text-[#9aa1b3] hover:text-[#f0f2f5]'
-            }`}
-          >
-            Performance
-          </button>
+            New Monitor
+          </Button>
         </div>
+      </div>
+
+      <p className="monitoring-notice" role="note">
+        Monitor creation, editing and manual runs are unavailable in this UI. Use the CLI
+        (<code>uv run triangulate case rerun &lt;case-id&gt; --from retrieve</code>) to start work
+        for a case.
+      </p>
+
+      <div className="monitoring-stats">
+        <Card padding="sm">
+          <CardBody>
+            <div className="monitoring-stat-label">Monitoring Cases</div>
+            <div className="monitoring-stat-value">
+              {hasResolvedData ? monitors.length : unknownValue}
+            </div>
+          </CardBody>
+        </Card>
+        <Card padding="sm">
+          <CardBody>
+            <div className="monitoring-stat-label">Cases With Recorded Update</div>
+            <div className="monitoring-stat-value">
+              {hasResolvedData ? lastUpdatedValues.length : unknownValue}
+            </div>
+          </CardBody>
+        </Card>
+        <Card padding="sm">
+          <CardBody>
+            <div className="monitoring-stat-label">Most Recent Valid Recorded Update</div>
+            <div className="monitoring-stat-value monitoring-stat-value--text">
+              {hasResolvedData
+                ? hasUnparseableTimestamp
+                  ? 'Unknown (unparseable recorded timestamp)'
+                  : newestUpdate
+                    ? formatTimestamp(newestUpdate)
+                    : 'Never recorded'
+                : unknownValue}
+            </div>
+          </CardBody>
+        </Card>
+        <Card padding="sm">
+          <CardBody>
+            <div className="monitoring-stat-label">Schedule / Next Run</div>
+            <div className="monitoring-stat-value monitoring-stat-value--muted">{NOT_PROVIDED}</div>
+          </CardBody>
+        </Card>
+        <Card padding="sm">
+          <CardBody>
+            <div className="monitoring-stat-label">System Health</div>
+            <div className="monitoring-stat-value monitoring-stat-value--muted">{NOT_PROVIDED}</div>
+          </CardBody>
+        </Card>
+      </div>
+
+      <div className="monitoring-tabs" role="tablist" aria-label="Monitoring sections">
+        {(['monitors', 'alerts', 'performance'] as MonitoringTab[]).map((tab) => (
+          <button
+            key={tab}
+            role="tab"
+            id={`monitoring-tab-${tab}`}
+            aria-selected={activeTab === tab}
+            aria-controls={`monitoring-panel-${tab}`}
+            className={`monitoring-tab ${activeTab === tab ? 'monitoring-tab--active' : ''}`}
+            onClick={() => setActiveTab(tab)}
+          >
+            {tab === 'monitors'
+              ? hasResolvedData
+                ? `Monitors (${monitors.length})`
+                : 'Monitors'
+              : tab === 'alerts'
+                ? 'Alerts'
+                : 'Performance'}
+          </button>
+        ))}
       </div>
 
       {isLoading ? (
         <Card>
-          <CardBody className="py-16">
-            <div className="text-center text-[#9aa1b3]">Loading monitoring data...</div>
+          <CardBody>
+            <div className="monitoring-state" role="status">Loading monitoring cases…</div>
           </CardBody>
         </Card>
       ) : error ? (
         <Card>
-          <CardBody className="py-16">
-            <div className="text-center text-[#ff4757]">Failed to load monitoring data</div>
+          <CardBody>
+            <div className="monitoring-state monitoring-state--error" role="alert">
+              <p>Failed to load monitoring cases{error instanceof Error && error.message ? `: ${error.message}` : '.'}</p>
+              <Button variant="secondary" onClick={() => refetch()}>Retry</Button>
+            </div>
           </CardBody>
         </Card>
       ) : (
-        <>
-          {/* Monitors Tab */}
+        <div
+          role="tabpanel"
+          id={`monitoring-panel-${activeTab}`}
+          aria-labelledby={`monitoring-tab-${activeTab}`}
+        >
           {activeTab === 'monitors' && (
-            <div className="grid grid-cols-3 gap-6">
-              <div className="col-span-2 space-y-4">
+            <div className="monitoring-layout">
+              <div className="monitoring-list">
                 {monitors.length === 0 ? (
                   <Card>
-                    <CardBody className="py-16">
-                      <div className="text-center text-[#6c7385]">
-                        <div className="text-4xl mb-3">📡</div>
-                        <div className="text-sm">No active monitors configured</div>
-                        <Button className="mt-4" variant="primary">
-                          Create First Monitor
-                        </Button>
+                    <CardBody>
+                      <div className="monitoring-state" role="status">
+                        <div className="monitoring-state-title">No monitoring cases recorded</div>
+                        <p>
+                          No case currently has the recorded status <code>monitoring</code>. This is
+                          an empty result, not a healthy system check.
+                        </p>
                       </div>
                     </CardBody>
                   </Card>
                 ) : (
-                  monitors.map((monitor) => (
-                    <Card
-                      key={monitor.id}
-                      hover
-                      className={selectedMonitor?.id === monitor.id ? 'border-[#00d4ff]' : ''}
-                      onClick={() => setSelectedMonitor(monitor)}
-                    >
-                      <CardBody>
-                        <div className="flex items-center justify-between">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-3 mb-2">
-                              <h3 className="text-base font-semibold text-[#f0f2f5]">{monitor.name}</h3>
-                              <Badge variant={monitor.active ? 'success' : 'neutral'} size="sm">
-                                {monitor.active ? 'Active' : 'Inactive'}
-                              </Badge>
-                              <Badge variant={monitor.status === 'running' ? 'info' : 'neutral'} size="sm">
-                                {monitor.status}
-                              </Badge>
-                            </div>
-                            <div className="text-sm text-[#9aa1b3] mb-3">{monitor.query}</div>
-                            <div className="flex items-center gap-6 text-xs text-[#6c7385]">
-                              <span>Schedule: {monitor.schedule}</span>
-                              <span>Last Run: {monitor.lastRun ? new Date(monitor.lastRun).toLocaleString() : 'Never'}</span>
-                              <span>Next Run: {monitor.nextRun ? new Date(monitor.nextRun).toLocaleString() : 'N/A'}</span>
-                            </div>
-                          </div>
-                          <div className="flex gap-2">
-                            <Button variant="ghost" size="sm">
-                              Edit
-                            </Button>
-                            <Button variant="ghost" size="sm">
-                              Run Now
-                            </Button>
-                          </div>
-                        </div>
-                      </CardBody>
-                    </Card>
-                  ))
+                  <ul className="monitoring-list-items">
+                    {monitors.map((monitor) => {
+                      const isSelected = monitor.id === selectedMonitorId;
+                      return (
+                        <li key={monitor.id}>
+                          <button
+                            type="button"
+                            className={`monitoring-row ${isSelected ? 'monitoring-row--selected' : ''}`}
+                            aria-pressed={isSelected}
+                            onClick={() => setSelectedMonitorId(monitor.id)}
+                          >
+                            <span className="monitoring-row-main">
+                              <span className="monitoring-row-title">{monitor.query}</span>
+                              <span className="monitoring-row-meta">
+                                <Badge variant="success" size="sm">{monitor.status}</Badge>
+                                <span>{monitor.conflictDomain}</span>
+                                <span>{monitor.stage}</span>
+                              </span>
+                            </span>
+                            <span className="monitoring-row-side">
+                              <span className="monitoring-row-label">Last updated</span>
+                              <span>{formatTimestamp(monitor.lastUpdated)}</span>
+                            </span>
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
                 )}
               </div>
 
-              {/* Monitor Details */}
-              <div className="space-y-4">
+              <div className="monitoring-detail">
                 {selectedMonitor ? (
-                  <>
-                    <Card>
-                      <CardHeader>
-                        <CardTitle>Monitor Configuration</CardTitle>
-                      </CardHeader>
-                      <CardBody className="space-y-4">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Recorded Monitor State</CardTitle>
+                    </CardHeader>
+                    <CardBody>
+                      <dl className="monitoring-detail-list">
                         <div>
-                          <div className="text-xs text-[#9aa1b3] uppercase tracking-wider mb-1">Query</div>
-                          <div className="text-sm text-[#f0f2f5]">{selectedMonitor.query}</div>
-                        </div>
-                        <div>
-                          <div className="text-xs text-[#9aa1b3] uppercase tracking-wider mb-1">Schedule</div>
-                          <div className="text-sm text-[#f0f2f5]">{selectedMonitor.schedule}</div>
+                          <dt>Query</dt>
+                          <dd>{selectedMonitor.query}</dd>
                         </div>
                         <div>
-                          <div className="text-xs text-[#9aa1b3] uppercase tracking-wider mb-1">Status</div>
-                          <Badge variant={selectedMonitor.active ? 'success' : 'neutral'}>
-                            {selectedMonitor.active ? 'Active' : 'Inactive'}
-                          </Badge>
+                          <dt>Case ID</dt>
+                          <dd><code>{selectedMonitor.id}</code></dd>
                         </div>
-                        <div className="pt-4 border-t border-[#2d3340] space-y-2">
-                          <Button className="w-full" variant="primary">
-                            Run Now
-                          </Button>
-                          <Button className="w-full" variant="secondary">
-                            Edit Configuration
-                          </Button>
-                          <Button className="w-full" variant="danger">
-                            Delete Monitor
-                          </Button>
+                        <div>
+                          <dt>Recorded status</dt>
+                          <dd>{selectedMonitor.status}</dd>
                         </div>
-                      </CardBody>
-                    </Card>
-
-                    <Card>
-                      <CardHeader>
-                        <CardTitle>Recent Alerts</CardTitle>
-                      </CardHeader>
-                      <CardBody>
-                        <div className="space-y-2">
-                          {alerts
-                            .filter((a) => a.monitorId === selectedMonitor.id)
-                            .slice(0, 5)
-                            .map((alert) => (
-                              <div
-                                key={alert.id}
-                                className="flex items-start gap-3 p-2 bg-[#0a0a0a] border border-[#1a1a1a] rounded-sm"
-                              >
-                                <div className={getSeverityColor(alert.severity)}>⚠</div>
-                                <div className="flex-1">
-                                  <div className="text-sm text-[#f0f2f5]">{alert.message}</div>
-                                  <div className="text-xs text-[#6c7385] mt-1">
-                                    {new Date(alert.timestamp).toLocaleString()}
-                                  </div>
-                                </div>
-                              </div>
-                            ))}
-                          {alerts.filter((a) => a.monitorId === selectedMonitor.id).length === 0 && (
-                            <div className="text-center text-[#6c7385] py-4">No recent alerts</div>
-                          )}
+                        <div>
+                          <dt>Stage</dt>
+                          <dd>{selectedMonitor.stage}</dd>
                         </div>
-                      </CardBody>
-                    </Card>
-                  </>
+                        <div>
+                          <dt>Last updated</dt>
+                          <dd>{formatTimestamp(selectedMonitor.lastUpdated)}</dd>
+                        </div>
+                        <div>
+                          <dt>Schedule / next run</dt>
+                          <dd className="monitoring-unavailable">{NOT_PROVIDED}</dd>
+                        </div>
+                      </dl>
+                      <div className="monitoring-detail-actions">
+                        <Button
+                          variant="secondary"
+                          disabled
+                          title="No run-trigger endpoint exists; use the CLI."
+                        >
+                          Run Now
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          disabled
+                          title="Monitor configuration is not persisted by any current API."
+                        >
+                          Edit Configuration
+                        </Button>
+                      </div>
+                      <p className="monitoring-cli-hint">
+                        Start work with{' '}
+                        <code>uv run triangulate case rerun {selectedMonitor.id} --from retrieve</code>.
+                      </p>
+                    </CardBody>
+                  </Card>
                 ) : (
                   <Card>
-                    <CardBody className="py-16">
-                      <div className="text-center text-[#6c7385]">
-                        <div className="text-4xl mb-3">📊</div>
-                        <div className="text-sm">Select a monitor to view details</div>
+                    <CardBody>
+                      <div className="monitoring-state" role="status">
+                        Select a monitoring case to view its recorded state.
                       </div>
                     </CardBody>
                   </Card>
@@ -346,115 +311,20 @@ export const MonitoringCenter: React.FC = () => {
             </div>
           )}
 
-          {/* Alerts Tab */}
-          {activeTab === 'alerts' && (
+          {activeTab !== 'monitors' && (
             <Card>
               <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle>Recent Alerts</CardTitle>
-                  <Button variant="secondary" size="sm">
-                    Acknowledge All
-                  </Button>
-                </div>
+                <CardTitle>{activeTab === 'alerts' ? 'Alerts' : 'Performance'}</CardTitle>
               </CardHeader>
               <CardBody>
-                <div className="space-y-3">
-                  {alerts.map((alert) => (
-                    <div
-                      key={alert.id}
-                      className={`p-4 border rounded-sm ${
-                        alert.acknowledged ? 'border-[#1a1a1a] opacity-60' : 'border-[#2d3340]'
-                      }`}
-                    >
-                      <div className="flex items-start justify-between">
-                        <div className="flex items-start gap-3">
-                          <span className={getSeverityColor(alert.severity)}>⚠</span>
-                          <div>
-                            <div className="flex items-center gap-2 mb-1">
-                              <span className="text-sm font-medium text-[#f0f2f5]">
-                                {alerts.find((m) => m.id === alert.monitorId)?.monitorId || 'Unknown Monitor'}
-                              </span>
-                              <Badge variant={getSeverityBadge(alert.severity)} size="sm">
-                                {alert.severity}
-                              </Badge>
-                              {alert.acknowledged && (
-                                <Badge variant="neutral" size="sm">
-                                  Acknowledged
-                                </Badge>
-                              )}
-                            </div>
-                            <div className="text-sm text-[#f0f2f5]">{alert.message}</div>
-                            <div className="text-xs text-[#6c7385] mt-1">
-                              {new Date(alert.timestamp).toLocaleString()}
-                            </div>
-                          </div>
-                        </div>
-                        {!alert.acknowledged && (
-                          <Button variant="ghost" size="sm">
-                            Acknowledge
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                  {alerts.length === 0 && (
-                    <div className="text-center text-[#00ff9d] py-8">
-                      <div className="text-4xl mb-2">✓</div>
-                      <div className="text-sm">No alerts</div>
-                    </div>
-                  )}
+                <div className="monitoring-state monitoring-state--unavailable" role="status">
+                  <Badge variant="neutral" size="sm">Unavailable</Badge>
+                  <p>{UNAVAILABLE_EXPLANATIONS[activeTab]}</p>
                 </div>
               </CardBody>
             </Card>
           )}
-
-          {/* Performance Tab */}
-          {activeTab === 'performance' && (
-            <div className="space-y-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle>System Performance</CardTitle>
-                </CardHeader>
-                <CardBody>
-                  <div className="grid grid-cols-3 gap-6">
-                    <div>
-                      <div className="text-xs text-[#9aa1b3] uppercase tracking-wider mb-2">Avg Response Time</div>
-                      <div className="text-3xl font-bold text-[#00d4ff]">1.2s</div>
-                      <div className="text-xs text-[#00ff9d] mt-1">↓ 15% from last week</div>
-                    </div>
-                    <div>
-                      <div className="text-xs text-[#9aa1b3] uppercase tracking-wider mb-2">Success Rate</div>
-                      <div className="text-3xl font-bold text-[#00ff9d]">98.5%</div>
-                      <div className="text-xs text-[#00ff9d] mt-1">↑ 2% from last week</div>
-                    </div>
-                    <div>
-                      <div className="text-xs text-[#9aa1b3] uppercase tracking-wider mb-2">Total Runs</div>
-                      <div className="text-3xl font-bold text-[#a55eea]">
-                        {monitors.reduce((sum, m) => sum + (m.lastRun ? 1 : 0), 0)}
-                      </div>
-                      <div className="text-xs text-[#9aa1b3] mt-1">All time</div>
-                    </div>
-                  </div>
-                </CardBody>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Performance History</CardTitle>
-                </CardHeader>
-                <CardBody>
-                  <div className="h-64 flex items-center justify-center text-[#6c7385]">
-                    <div className="text-center">
-                      <div className="text-4xl mb-2">📈</div>
-                      <div className="text-sm">Performance chart would be rendered here</div>
-                      <div className="text-xs mt-1">(Requires charting library integration)</div>
-                    </div>
-                  </div>
-                </CardBody>
-              </Card>
-            </div>
-          )}
-        </>
+        </div>
       )}
     </div>
   );

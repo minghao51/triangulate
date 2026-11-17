@@ -12,7 +12,7 @@ from src.storage.models import Base
 class Database:
     """Database connection manager."""
 
-    def __init__(self, db_path: str = None):
+    def __init__(self, db_path: str | None = None):
         """Initialize database connection.
 
         Args:
@@ -79,7 +79,7 @@ def get_database() -> Database:
     return _db
 
 
-def init_database(db_path: str = None) -> Database:
+def init_database(db_path: str | None = None) -> Database:
     """Initialize the database.
 
     Args:
