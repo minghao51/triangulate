@@ -26,6 +26,43 @@ keep their legacy `supports` relation and no `ClaimCitation` rows exist. New run
 now write validated citations and policy-derived relationships; a production case
 rerun is a separate, owner-authorized operation.
 
+## 1a. Landing state and remote divergence (2026-11-15)
+
+This work landed locally as **commit `7180db8`** — `feat(evidence): validated
+quotations, honest extraction and inspector read API`, 87 files (B00–B03, E01,
+E02 A/B1/B2/B3, E03, the ORM typing migration and the docs), on top of the last
+shared commit `4196865`. It was verified immediately before landing: backend
+**409 passed / 9 deselected**, Ruff clean; frontend `npm run check` and
+`npm test -- --run` (72 tests).
+
+**`origin/main` has diverged and must not be force-pushed over.** The remote
+advanced with `bd49b8a` *"Add case review and investigation workflows"*
+(2026-08-04, 82 files: ingestion fetchers, review/investigation workflows,
+frontend routes/shell/claim panels, migrations). A plain push was rejected and no
+history was rewritten.
+
+**Blocking integration hazard — migration version collision.** The two lines use
+the *same* version numbers for different schemas:
+
+| Version | This line (landed) | `origin/main` (`bd49b8a`) |
+|---|---|---|
+| 7 | review analysis hash + prior decision metadata | OSINT provenance + workflow diagnostics |
+| 8 | immutable evidence captures + current pointer | review audit trail + evaluation schema |
+| 9 | validated claim citations + link alignment fields | — |
+
+Applying either line to a database already stamped by the other would silently
+skip the missing DDL (the manager records versions, not schemas), producing schema
+divergence. Integration therefore requires **renumbering** one line's migrations
+and re-verifying fresh *and* legacy upgrades, not a text merge.
+
+Current state: the work is preserved on the local `main` and pushed to the
+review branch `feature/evidence-workbench-e02-e03`; `origin/main` is untouched.
+Decide the integration route before any further ticket: (a) merge `origin/main`
+into a local integration branch, renumber this line's migrations to 10/11/12,
+resolve the overlapping frontend/ingester/service conflicts and re-run the full
+gates plus fresh/legacy migration tests, or (b) keep this work on the branch for
+review and integrate deliberately later.
+
 ## 2. Non-negotiable safety rules
 
 - Application Python/tests run **only** in the disposable copy recorded in
