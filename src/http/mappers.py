@@ -8,6 +8,7 @@ from typing import Any
 from src.storage import TopicCase
 
 from .schemas import (
+    ArbiterReasoningDTO,
     AutomationMode,
     CaseBanner,
     CaseCounts,
@@ -23,16 +24,31 @@ from .schemas import (
     ClaimDetailDTO,
     ClaimEvidenceLinkDTO,
     EvidenceClaimReferenceDTO,
+    EvidenceArtifactDTO,
     EvidenceDTO,
     EvidenceDetailDTO,
+    EvidenceLineageDTO,
     EvidenceSourceDTO,
     EvidenceVerificationCheckDTO,
     ExceptionDTO,
+    ReviewAnnotationDTO,
+    ReviewAuditEntryDTO,
+    ReviewActivityDTO,
     NarrativeDTO,
+    OsintArtifactDTO,
+    PartyConsensusDTO,
     PartyDTO,
     ReportDTO,
     RunHistoryItemDTO,
+    SourceStanceBreakdown,
+    TaxonomyDTO,
     TimelineEventDTO,
+    WorkflowCheckpointDTO,
+    WorkflowDiagnosticsDTO,
+    AgentOutputDTO,
+    EvaluationResultDTO,
+    EvaluationSummaryDTO,
+    MonitoringSummaryDTO,
 )
 
 
@@ -125,11 +141,69 @@ def _map_exception(item: dict[str, Any]) -> ExceptionDTO:
     )
 
 
+def map_review_activity(payload: dict[str, Any]) -> ReviewActivityDTO:
+    return ReviewActivityDTO(
+        annotations=[
+            ReviewAnnotationDTO(
+                id=item["id"],
+                targetType=item.get("target_type", "case"),
+                targetId=item.get("target_id", ""),
+                annotationType=item.get("annotation_type", "comment"),
+                author=item.get("author", "operator"),
+                content=item.get("content", ""),
+                metadata=item.get("metadata", {}),
+                createdAt=item.get("created_at"),
+            )
+            for item in payload.get("annotations", [])
+        ],
+        auditEntries=[
+            ReviewAuditEntryDTO(
+                id=item["id"],
+                actionType=item.get("action_type", "unknown"),
+                targetType=item.get("target_type", "case"),
+                targetId=item.get("target_id", ""),
+                actor=item.get("actor", "operator"),
+                rationale=item.get("rationale"),
+                metadata=item.get("metadata", {}),
+                createdAt=item.get("created_at"),
+            )
+            for item in payload.get("audit_entries", [])
+        ],
+    )
+
+
+def map_evaluation_summary(payload: dict[str, Any]) -> EvaluationSummaryDTO:
+    def map_result(item: dict[str, Any]) -> EvaluationResultDTO:
+        return EvaluationResultDTO(
+            id=item["id"],
+            status=item.get("status", "completed"),
+            evaluationKind=item.get("evaluation_kind", "case_quality"),
+            summary=item.get("summary", {}),
+            metrics=item.get("metrics", {}),
+            createdAt=item.get("created_at"),
+        )
+
+    return EvaluationSummaryDTO(
+        latest=map_result(payload["latest"]),
+        history=[map_result(item) for item in payload.get("history", [])],
+    )
+
+
+def map_monitoring_summary(payload: dict[str, Any]) -> MonitoringSummaryDTO:
+    return MonitoringSummaryDTO(
+        cases=payload.get("cases", {}),
+        review=payload.get("review", {}),
+        pipeline=payload.get("pipeline", {}),
+        intake=payload.get("intake", {}),
+        evaluation=payload.get("evaluation", {}),
+    )
+
+
 def _map_case_counts(article_count: int, event_count: int, review_items: int) -> CaseCounts:
     return CaseCounts(
-        articles=article_count,
-        events=event_count,
-        reviewItems=review_items,
+        articles=article_count or 0,
+        events=event_count or 0,
+        reviewItems=review_items or 0,
     )
 
 
@@ -212,7 +286,53 @@ def _map_claim_evidence_link(item: dict[str, Any]) -> ClaimEvidenceLinkDTO:
     )
 
 
-def _map_claim(claim: dict[str, Any]) -> ClaimDTO:
+def _compute_source_stance_breakdown(claim: dict[str, Any], all_sources: set[str]) -> SourceStanceBreakdown:
+    evidence = claim.get("evidence", [])
+    agreed = set()
+    disagreed = set()
+    for item in evidence:
+        publisher = item.get("publisher")
+        if not publisher:
+            continue
+        relation = item.get("relation", "supports")
+        if relation == "opposes":
+            disagreed.add(publisher)
+        else:
+            agreed.add(publisher)
+
+    didnt_report = all_sources - agreed - disagreed
+    return SourceStanceBreakdown(
+        agreedSources=sorted(list(agreed)),
+        disagreedSources=sorted(list(disagreed)),
+        didntReportSources=sorted(list(didnt_report)),
+    )
+
+
+def _map_claim(claim: dict[str, Any], all_sources: set[str] | None = None) -> ClaimDTO:
+    arbiter_reasoning = claim.get("arbiter_reasoning")
+    mapped_reasoning = None
+    if arbiter_reasoning and isinstance(arbiter_reasoning, dict):
+        party_consensus = arbiter_reasoning.get("party_consensus", {})
+        mapped_reasoning = ArbiterReasoningDTO(
+            isFact=arbiter_reasoning.get("is_fact", ""),
+            verificationRationale=arbiter_reasoning.get("verification_rationale", ""),
+            partyConsensus=PartyConsensusDTO(
+                unanimous=party_consensus.get("unanimous", False),
+                supportingParties=party_consensus.get("supporting_parties", []),
+                opposingParties=party_consensus.get("opposing_parties", []),
+                neutralParties=party_consensus.get("neutral_parties", []),
+            ),
+        )
+
+    party_positions_raw = claim.get("party_positions") or {}
+    party_positions = {}
+    for party_name, position in party_positions_raw.items():
+        mapped_position = POSITION_MAP.get(position.upper() if isinstance(position, str) else position, "neutral")
+        if mapped_position in ("for", "against", "neutral"):
+            party_positions[party_name] = mapped_position
+
+    stance_breakdown = _compute_source_stance_breakdown(claim, all_sources or set())
+
     return ClaimDTO(
         id=claim["id"],
         text=claim.get("claim_text", ""),
@@ -227,9 +347,12 @@ def _map_claim(claim: dict[str, Any]) -> ClaimDTO:
         claimSignature=claim.get("claim_signature") or claim["id"],
         narrativeClusterId=claim.get("narrative_cluster_id"),
         verificationProvenance=claim.get("verification_provenance") or "unknown",
+        arbiterReasoning=mapped_reasoning,
+        partyPositions=party_positions,
         evidence=[
             _map_claim_evidence_link(item) for item in claim.get("evidence", [])
         ],
+        sourceStanceBreakdown=stance_breakdown,
     )
 
 
@@ -256,6 +379,25 @@ def _map_evidence(evidence: dict[str, Any], claim_ids_by_evidence: dict[str, lis
         requiresHumanReview=bool(evidence.get("requires_human_review")),
         currentCaptureId=evidence.get("current_capture_id"),
         linkedClaims=claim_ids_by_evidence.get(evidence["id"], []),
+        lineage=EvidenceLineageDTO(
+            caseId=(evidence.get("lineage") or {}).get("case_id", ""),
+            eventId=(evidence.get("lineage") or {}).get("event_id"),
+            caseArticleId=(evidence.get("lineage") or {}).get("case_article_id"),
+            origin=(evidence.get("lineage") or {}).get("origin", "native_ingestion"),
+        )
+        if evidence.get("lineage")
+        else None,
+        artifacts=[
+            EvidenceArtifactDTO(
+                id=item["id"],
+                tool=item.get("tool", "unknown"),
+                artifactType=item.get("artifact_type", "file"),
+                sourcePath=item.get("source_path", ""),
+                relation=item.get("relation", "derived_from"),
+                importedAt=item.get("imported_at"),
+            )
+            for item in evidence.get("artifacts", [])
+        ],
         verificationChecks=[
             EvidenceVerificationCheckDTO(
                 id=item["id"],
@@ -290,6 +432,19 @@ def _map_party(party: dict[str, Any], claims: list[dict[str, Any]], investigatio
     elif any(item.get("party_id") == party["id"] for item in investigations):
         stance = "mixed"
 
+    party_investigation = next(
+        (inv for inv in investigations if inv.get("party_id") == party["id"] or inv.get("party_name") == party_name),
+        None
+    )
+    investigation_data = None
+    claims_supported = 0
+    claims_contested = 0
+    if party_investigation:
+        inv_data = party_investigation.get("investigation", {})
+        investigation_data = party_investigation.get("investigation_data", inv_data)
+        claims_supported = len(inv_data.get("claims_supported", []))
+        claims_contested = len(inv_data.get("claims_contested", []))
+
     return PartyDTO(
         id=party["id"],
         name=party_name,
@@ -298,6 +453,9 @@ def _map_party(party: dict[str, Any], claims: list[dict[str, Any]], investigatio
         overallStance=_runtime(stance),
         isModelInferred=not bool(party.get("is_bootstrap_confirmed")),
         associatedClaimsCount=associated_claims,
+        investigationData=investigation_data,
+        claimsSupported=claims_supported,
+        claimsContested=claims_contested,
     )
 
 
@@ -364,6 +522,8 @@ def _map_narrative_with_claims(
         stanceSummary=narrative.get("stance_summary", ""),
         sourceCount=source_count,
         claimCount=len(claims_in_cluster),
+        keyThemes=narrative.get("key_themes", []),
+        mainEntities=narrative.get("main_entities", []),
     )
 
 
@@ -376,14 +536,26 @@ def _load_report_content(path: str | None) -> str | None:
     return report_path.read_text(encoding="utf-8")
 
 
+def _extract_all_sources(detail: dict[str, Any]) -> set[str]:
+    sources: set[str] = set()
+    for article in detail.get("articles", []):
+        source = article.get("source")
+        if source:
+            sources.add(source)
+    return sources
+
+
 def map_case_detail(detail: dict[str, Any]) -> CaseDetailResponse:
     claims = detail.get("claims", [])
     claim_ids_by_evidence = _collect_claim_ids_by_evidence(claims)
+    all_sources = _extract_all_sources(detail)
+    workflow = detail.get("workflow") or {}
+    taxonomy = workflow.get("taxonomy")
 
     return CaseDetailResponse(
         case=_map_case_banner(detail),
         tabs=CaseTabs(
-            claims=[_map_claim(claim) for claim in claims],
+            claims=[_map_claim(claim, all_sources) for claim in claims],
             evidence=[
                 _map_evidence(item, claim_ids_by_evidence)
                 for item in detail.get("evidence", [])
@@ -405,6 +577,54 @@ def map_case_detail(detail: dict[str, Any]) -> CaseDetailResponse:
                 _map_narrative_with_claims(item, claims)
                 for item in detail.get("narratives", [])
             ],
+            osintArtifacts=[
+                OsintArtifactDTO(
+                    id=item["id"],
+                    tool=item.get("tool", "unknown"),
+                    artifactType=item.get("artifact_type", "file"),
+                    sourcePath=item.get("source_path", ""),
+                    importedAt=item.get("imported_at"),
+                    importMetadata=item.get("import_metadata", {}),
+                )
+                for item in detail.get("osint_artifacts", [])
+            ],
+            workflow=WorkflowDiagnosticsDTO(
+                taxonomy=TaxonomyDTO(
+                    id=taxonomy["id"],
+                    kind=taxonomy.get("kind", "bias_review"),
+                    version=taxonomy.get("version", "unknown"),
+                    path=taxonomy.get("path"),
+                    checksum=taxonomy.get("checksum", ""),
+                )
+                if taxonomy
+                else None,
+                checkpoints=[
+                    WorkflowCheckpointDTO(
+                        id=item["id"],
+                        stageName=item.get("stage_name", ""),
+                        checkpointKey=item.get("checkpoint_key", ""),
+                        status=item.get("status", "unknown"),
+                        summary=item.get("summary"),
+                        retryCount=item.get("retry_count", 0),
+                        payload=item.get("payload", {}),
+                        createdAt=item.get("created_at"),
+                    )
+                    for item in workflow.get("checkpoints", [])
+                ],
+                agentOutputs=[
+                    AgentOutputDTO(
+                        id=item["id"],
+                        stageName=item.get("stage_name", ""),
+                        agentName=item.get("agent_name", ""),
+                        outputType=item.get("output_type", "stage_result"),
+                        summary=item.get("summary"),
+                        payload=item.get("payload", {}),
+                        taxonomyVersionId=item.get("taxonomy_version_id"),
+                        createdAt=item.get("created_at"),
+                    )
+                    for item in workflow.get("agent_outputs", [])
+                ],
+            ),
             report=ReportDTO(
                 status="generated" if detail["case"].get("report_path") else "pending",
                 markdownPath=detail["case"].get("report_path"),
@@ -567,8 +787,9 @@ def map_capture_window(payload: dict[str, Any]) -> CaptureWindowDTO:
 
 def map_claims_overview(detail: dict[str, Any]) -> ClaimsOverviewResponse:
     claims = detail.get("claims", [])
+    all_sources = _extract_all_sources(detail)
     return ClaimsOverviewResponse(
-        claims=[_map_claim(claim) for claim in claims],
+        claims=[_map_claim(claim, all_sources) for claim in claims],
         narratives=[
             _map_narrative_with_claims(item, claims)
             for item in detail.get("narratives", [])

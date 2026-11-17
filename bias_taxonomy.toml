@@ -1,0 +1,32 @@
+version = "2026.03.24"
+taxonomy_kind = "bias_review"
+
+[[dimensions]]
+id = "framing"
+label = "Framing"
+description = "Detect emotionally loaded or agenda-setting framing."
+heuristics = [
+  "Highlights emotionally charged wording over factual description",
+  "Uses selective adjectives to imply blame or virtue",
+]
+mitigation_prompt = "Separate factual description from emotionally charged framing and note the framing explicitly."
+
+[[dimensions]]
+id = "selection_bias"
+label = "Selection Bias"
+description = "Detect missing context, omitted actors, or evidence asymmetry."
+heuristics = [
+  "Presents one side's evidence without naming absent corroboration",
+  "Leaves out material counter-evidence that changes interpretation",
+]
+mitigation_prompt = "Call out omitted context, missing evidence, and what additional corroboration would reduce uncertainty."
+
+[[dimensions]]
+id = "source_credibility"
+label = "Source Credibility"
+description = "Assess whether sourcing supports operator trust."
+heuristics = [
+  "Relies on anonymous or single-source reporting",
+  "Does not distinguish first-hand evidence from commentary",
+]
+mitigation_prompt = "Explain source provenance, note confidence limits, and distinguish direct evidence from interpretation."

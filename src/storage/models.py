@@ -155,6 +155,8 @@ class Event(Base):
     case_id: Mapped[str | None] = mapped_column(String, ForeignKey("topic_cases.id"), index=True)
     case_run_id: Mapped[str | None] = mapped_column(String, ForeignKey("case_stage_runs.id"))
 
+    workflow_route: Mapped[str | None] = mapped_column(String, nullable=True)
+    source_url: Mapped[str | None] = mapped_column(String, nullable=True)
 
 class Claim(Base):
     """Individual factual claims extracted from sources."""
@@ -193,6 +195,8 @@ class Narrative(Base):
     source_count: Mapped[int | None] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=utc_now)
 
+    key_themes: Mapped[list[str] | None] = mapped_column(JSON, default=list)
+    main_entities: Mapped[list[str] | None] = mapped_column(JSON, default=list)
 
 class Review(Base):
     """Human review workflow tracking."""
@@ -247,6 +251,7 @@ class PartyInvestigation(Base):
 
     created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=utc_now)
 
+    party_name: Mapped[str | None] = mapped_column(String, nullable=True)
 
 class TopicCase(Base):
     """Top-level topic/question case that owns the workflow lifecycle."""
@@ -615,3 +620,133 @@ def _prevent_claim_citation_delete(mapper, connection, target) -> None:
     raise ValueError(
         "ClaimCitation rows are append-only; delete is not permitted"
     )
+
+
+class OsintArtifact(Base):
+    """Imported external OSINT artifact attached to a case."""
+
+    __tablename__ = "osint_artifacts"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    case_id: Mapped[str] = mapped_column(String, ForeignKey("topic_cases.id"), nullable=False, index=True)
+    tool: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    artifact_type: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    source_path: Mapped[str] = mapped_column(String, nullable=False)
+    fingerprint: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    raw_text: Mapped[str | None] = mapped_column(Text)
+    raw_payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    import_metadata: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    imported_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+
+class EvidenceArtifactLink(Base):
+    """Normalized provenance link between evidence and imported artifacts."""
+
+    __tablename__ = "evidence_artifact_links"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    evidence_id: Mapped[str] = mapped_column(
+        String, ForeignKey("evidence_items.id"), nullable=False, index=True
+    )
+    osint_artifact_id: Mapped[str] = mapped_column(
+        String, ForeignKey("osint_artifacts.id"), nullable=False, index=True
+    )
+    relation: Mapped[str] = mapped_column(String, nullable=False, default="derived_from")
+    confidence_score: Mapped[float | None] = mapped_column(Float)
+    provenance_metadata: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+class WorkflowCheckpoint(Base):
+    """Durable checkpoint for resumable case workflow stages."""
+
+    __tablename__ = "workflow_checkpoints"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    case_id: Mapped[str] = mapped_column(String, ForeignKey("topic_cases.id"), nullable=False, index=True)
+    stage_run_id: Mapped[str | None] = mapped_column(String, ForeignKey("case_stage_runs.id"), index=True)
+    stage_name: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    checkpoint_key: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    summary: Mapped[str | None] = mapped_column(Text)
+    retry_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    payload_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+
+class TaxonomyVersion(Base):
+    """Versioned taxonomy metadata used by workflow diagnostics and review logic."""
+
+    __tablename__ = "taxonomy_versions"
+    __table_args__ = (
+        UniqueConstraint("taxonomy_kind", "version", name="uq_taxonomy_kind_version"),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    taxonomy_kind: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    version: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    path: Mapped[str | None] = mapped_column(String)
+    checksum: Mapped[str] = mapped_column(String, nullable=False)
+    taxonomy_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    is_active: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+
+class AgentOutput(Base):
+    """Persisted typed output for an AI or orchestration stage."""
+
+    __tablename__ = "agent_outputs"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    case_id: Mapped[str] = mapped_column(String, ForeignKey("topic_cases.id"), nullable=False, index=True)
+    stage_run_id: Mapped[str | None] = mapped_column(String, ForeignKey("case_stage_runs.id"), index=True)
+    stage_name: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    agent_name: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    output_type: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    summary: Mapped[str | None] = mapped_column(Text)
+    output_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    taxonomy_version_id: Mapped[str | None] = mapped_column(String, ForeignKey("taxonomy_versions.id"), index=True)
+    created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+class ReviewAnnotation(Base):
+    """Human-authored annotation, comment, or flag against reviewable case entities."""
+
+    __tablename__ = "review_annotations"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    case_id: Mapped[str] = mapped_column(String, ForeignKey("topic_cases.id"), nullable=False, index=True)
+    target_type: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    target_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    annotation_type: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    author: Mapped[str] = mapped_column(String, nullable=False, default="operator")
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+
+class ReviewAuditEntry(Base):
+    """Immutable audit log for human review actions."""
+
+    __tablename__ = "review_audit_entries"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    case_id: Mapped[str] = mapped_column(String, ForeignKey("topic_cases.id"), nullable=False, index=True)
+    action_type: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    target_type: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    target_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    actor: Mapped[str] = mapped_column(String, nullable=False, default="operator")
+    rationale: Mapped[str | None] = mapped_column(Text)
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+
+class EvaluationRun(Base):
+    """Persisted evaluation result for a case and its current outputs."""
+
+    __tablename__ = "evaluation_runs"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    case_id: Mapped[str] = mapped_column(String, ForeignKey("topic_cases.id"), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String, nullable=False, default="completed", index=True)
+    evaluation_kind: Mapped[str] = mapped_column(String, nullable=False, default="case_quality", index=True)
+    summary_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    metrics_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    model_config_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    workflow_version: Mapped[str | None] = mapped_column(String)
+    output_version: Mapped[str | None] = mapped_column(String)
+    taxonomy_version_id: Mapped[str | None] = mapped_column(String, ForeignKey("taxonomy_versions.id"), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)

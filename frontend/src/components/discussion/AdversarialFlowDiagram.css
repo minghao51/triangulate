@@ -1,0 +1,216 @@
+.adversarial-flow-diagram {
+    padding: 16px;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 8px;
+}
+
+.diagram-title {
+    margin: 0 0 16px 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.flow-container {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.flow-nodes {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.flow-node {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+    min-width: 180px;
+}
+
+.flow-node.completed {
+    border-color: rgba(34, 197, 94, 0.4);
+    background: rgba(34, 197, 94, 0.1);
+}
+
+.flow-node.running {
+    border-color: rgba(59, 130, 246, 0.4);
+    background: rgba(59, 130, 246, 0.1);
+}
+
+.flow-node.pending {
+    opacity: 0.6;
+}
+
+.node-icon {
+    color: var(--text-secondary);
+}
+
+.flow-node.completed .node-icon {
+    color: #22c55e;
+}
+
+.node-content {
+    flex: 1;
+}
+
+.node-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.node-description {
+    font-size: 11px;
+    color: var(--text-secondary);
+    margin-top: 2px;
+}
+
+.node-status-badge {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    padding: 2px 6px;
+    border-radius: 3px;
+}
+
+.node-status-badge.completed {
+    background: rgba(34, 197, 94, 0.2);
+    color: #22c55e;
+}
+
+.node-status-badge.running {
+    background: rgba(59, 130, 246, 0.2);
+    color: #3b82f6;
+}
+
+.node-status-badge.pending {
+    background: rgba(156, 163, 175, 0.2);
+    color: #9ca3af;
+}
+
+.flow-arrow {
+    color: var(--text-secondary);
+    flex-shrink: 0;
+}
+
+/* Party Investigations Branch */
+.party-investigations-branch {
+    margin-top: 8px;
+    padding: 12px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px dashed rgba(255, 255, 255, 0.15);
+    border-radius: 6px;
+}
+
+.branch-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-bottom: 10px;
+}
+
+.branch-nodes {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.party-node {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 4px;
+    font-size: 12px;
+}
+
+.party-icon {
+    color: var(--text-secondary);
+}
+
+.party-info {
+    display: flex;
+    flex-direction: column;
+}
+
+.party-name {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.party-claims {
+    font-size: 10px;
+    color: var(--text-secondary);
+}
+
+.party-status {
+    font-size: 9px;
+    font-weight: 600;
+    text-transform: uppercase;
+    padding: 2px 4px;
+    border-radius: 2px;
+}
+
+.party-status.completed {
+    background: rgba(34, 197, 94, 0.2);
+    color: #22c55e;
+}
+
+.party-status.running {
+    background: rgba(59, 130, 246, 0.2);
+    color: #3b82f6;
+}
+
+/* Arbiter Summary */
+.arbiter-summary {
+    margin-top: 8px;
+    padding: 12px 16px;
+    background: rgba(168, 85, 247, 0.1);
+    border: 1px solid rgba(168, 85, 247, 0.3);
+    border-radius: 6px;
+}
+
+.summary-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #a855f7;
+    margin-bottom: 10px;
+}
+
+.summary-stats {
+    display: flex;
+    gap: 24px;
+}
+
+.stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.stat-value {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.stat-label {
+    font-size: 11px;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+}

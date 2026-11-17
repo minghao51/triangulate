@@ -10,78 +10,11 @@ This module uses AI to analyze user queries and determine:
 import logging
 from typing import Optional
 
+from src.ai.prompts import get_prompt
 from src.ai.schemas import DateRangeSchema, QueryGenerationSchema, SourcePrioritySchema
 from src.ai.utils import call_llm, call_structured_llm
 
 logger = logging.getLogger(__name__)
-
-# Conflict detection prompt
-CONFLICT_DETECTION_PROMPT = """
-You are an expert in geopolitical conflicts. Analyze the following topic/query
-and determine which conflict context it relates to.
-
-Available conflicts:
-- gaza_war: Gaza War, Israel-Hamas conflict, Middle East tensions
-- ukraine_war: Russia-Ukraine war, NATO-Russia tensions
-- iran_war: Iran-related conflicts, Iran-Israel tensions, Iran nuclear program
-
-Topic: {topic}
-
-Return ONLY the conflict folder name (e.g., "gaza_war", "ukraine_war", "iran_war").
-If the topic doesn't clearly relate to any conflict, return the most relevant one.
-"""
-
-# Query generation prompt
-QUERY_GENERATION_PROMPT = """
-You are an expert search strategist for news analysis. Given a topic and conflict context,
-generate 5-10 relevant search queries that would find comprehensive news coverage.
-
-Topic: {topic}
-Conflict: {conflict}
-
-Generate queries that:
-- Use different keywords and phrases
-- Include names of key parties/entities involved
-- Cover different aspects and perspectives
-- Include both broad and specific terms
-
-Return queries as a JSON list of strings, e.g.:
-["query 1", "query 2", "query 3", ...]
-"""
-
-# Source prioritization prompt
-SOURCE_PRIORITIZATION_PROMPT = """
-You are an expert in media analysis for the {conflict} conflict.
-
-Given the topic "{topic}", analyze this list of media sources and score their
-relevance on a scale of 0-1 (where 1.0 is highly relevant).
-
-Sources:
-{sources}
-
-Return a JSON object mapping source names to relevance scores, e.g.:
-{{"Source Name": 0.95, "Another Source": 0.80, ...}}
-
-Consider:
-- Does the source cover this topic?
-- How reliable is the source for this conflict?
-- Does the source provide unique perspectives?
-"""
-
-# Date extraction prompt
-DATE_EXTRACTION_PROMPT = """
-Analyze the following topic/query and extract any date or time range mentioned.
-
-Topic: {topic}
-
-If a date range is mentioned, return as JSON:
-{{"start": "YYYY-MM-DD", "end": "YYYY-MM-DD"}}
-
-If no date range is mentioned, return:
-{{"start": null, "end": null}}
-
-Use ISO 8601 format (YYYY-MM-DD).
-"""
 
 
 class TopicAnalyzer:
@@ -105,7 +38,7 @@ class TopicAnalyzer:
         Returns:
             Conflict folder name (gaza_war, ukraine_war, or iran_war)
         """
-        prompt = CONFLICT_DETECTION_PROMPT.format(topic=query)
+        prompt = get_prompt("CONFLICT_DETECTION", topic=query)
 
         try:
             response = await call_llm(
@@ -142,10 +75,7 @@ class TopicAnalyzer:
         Returns:
             List of search query strings
         """
-        prompt = QUERY_GENERATION_PROMPT.format(
-            topic=query,
-            conflict=conflict,
-        )
+        prompt = get_prompt("QUERY_GENERATION", topic=query, conflict=conflict)
 
         try:
             response = await call_structured_llm(
@@ -187,7 +117,8 @@ class TopicAnalyzer:
             for s in sources
         ])
 
-        prompt = SOURCE_PRIORITIZATION_PROMPT.format(
+        prompt = get_prompt(
+            "SOURCE_PRIORITIZATION",
             topic=query,
             conflict=conflict,
             sources=source_list,
@@ -235,7 +166,7 @@ class TopicAnalyzer:
         Returns:
             Tuple of (start_date, end_date) or None
         """
-        prompt = DATE_EXTRACTION_PROMPT.format(topic=query)
+        prompt = get_prompt("DATE_EXTRACTION", topic=query)
 
         try:
             response = await call_structured_llm(

@@ -9,6 +9,7 @@ const CorroborationNetwork = lazy(() => import('../pages/CorroborationNetwork'))
 const SourceAnalysis = lazy(() => import('../pages/SourceAnalysis'));
 const NarrativeLandscape = lazy(() => import('../pages/NarrativeLandscape'));
 const MonitoringCenter = lazy(() => import('../pages/MonitoringCenter'));
+const AiIntegrationInfo = lazy(() => import('../pages/AiIntegrationInfo'));
 
 // Top-level pages live in this registry so new routes default to lazy loading.
 export const appRoutes = [
@@ -21,4 +22,5 @@ export const appRoutes = [
   { path: 'cases/:id/sources', element: <SourceAnalysis /> },
   { path: 'cases/:id/narratives', element: <NarrativeLandscape /> },
   { path: 'monitoring', element: <MonitoringCenter /> },
+  { path: 'ai-info', element: <AiIntegrationInfo /> },
 ] as const;

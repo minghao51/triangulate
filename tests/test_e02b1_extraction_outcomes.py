@@ -128,9 +128,9 @@ async def _patch_parties_and_clustering(monkeypatch: pytest.MonkeyPatch) -> None
         return {"clusters": {}}
 
     monkeypatch.setattr(
-        "src.ai.workflow.classify_parties", fake_classify_parties
+        "src.ai.baseline_workflow.classify_parties", fake_classify_parties
     )
-    monkeypatch.setattr("src.ai.workflow.cluster_claims", fake_cluster_claims)
+    monkeypatch.setattr("src.ai.baseline_workflow.cluster_claims", fake_cluster_claims)
 
 
 # ---------------------------------------------------------------------------
@@ -166,7 +166,12 @@ def test_claim_schema_round_trips_quote_and_offsets():
         "source_quote_end": 25,
     }
 
-    assert ClaimSchema.model_validate(payload).model_dump() == payload
+    dumped = ClaimSchema.model_validate(payload).model_dump()
+    # Quote proposals round-trip unchanged; the unified schema additionally
+    # defaults the optional party-investigation fields.
+    assert {key: dumped[key] for key in payload} == payload
+    assert dumped["position"] is None
+    assert dumped["sources"] == []
 
 
 # ---------------------------------------------------------------------------
@@ -495,7 +500,7 @@ async def test_valid_empty_collection_yields_a_zero_claim_event(
             body_char_count=len(ARTICLE["content"]),
         )
 
-    monkeypatch.setattr("src.ai.workflow.collect_claims", fake_collect)
+    monkeypatch.setattr("src.ai.baseline_workflow.collect_claims", fake_collect)
 
     event = await AIWorkflow({"llm": {"model": "gpt-4"}}).process_article(ARTICLE)
 
@@ -531,7 +536,7 @@ async def test_untrusted_zero_claim_outcomes_still_return_none(
     async def fake_collect(article: dict[str, Any], *, include_metadata: bool = False):
         return _collector_envelope([], status=status, trusted=False)
 
-    monkeypatch.setattr("src.ai.workflow.collect_claims", fake_collect)
+    monkeypatch.setattr("src.ai.baseline_workflow.collect_claims", fake_collect)
 
     assert await AIWorkflow({"llm": {"model": "gpt-4"}}).process_article(ARTICLE) is None
 
@@ -551,7 +556,7 @@ async def test_valid_envelope_records_the_outcome_on_the_event(
             body_char_count=len(ARTICLE["content"]),
         )
 
-    monkeypatch.setattr("src.ai.workflow.collect_claims", fake_collect)
+    monkeypatch.setattr("src.ai.baseline_workflow.collect_claims", fake_collect)
 
     event = await AIWorkflow({"llm": {"model": "gpt-4"}}).process_article(ARTICLE)
 
@@ -604,7 +609,7 @@ async def test_compat_raw_claim_list_is_never_trusted(
     async def fake_collect(article: dict[str, Any], *, include_metadata: bool = False):
         return [dict(ONE_CLAIM)]
 
-    monkeypatch.setattr("src.ai.workflow.collect_claims", fake_collect)
+    monkeypatch.setattr("src.ai.baseline_workflow.collect_claims", fake_collect)
 
     event = await AIWorkflow({"llm": {"model": "gpt-4"}}).process_article(ARTICLE)
 

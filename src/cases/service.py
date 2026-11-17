@@ -7,16 +7,18 @@ import hashlib
 import json
 import logging
 import re
+import statistics
 import time
 import uuid
-from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from sqlalchemy import or_
 
+from src.ai.taxonomy import sync_bias_taxonomy
 from src.ai.workflow import AIWorkflow
+from src.cases._serializers import build_case_detail_payload
 from src.ai.workflows.party_investigation_workflow import (
     create_party_investigation_workflow,
 )
@@ -36,6 +38,14 @@ from src.ingester.topic_fetcher import (
 )
 from src.ingester.url_capture import fetch_article_content
 from src.storage import (
+    AgentOutput,
+    EvaluationRun,
+    EvidenceArtifactLink,
+    OsintArtifact,
+    ReviewAnnotation,
+    ReviewAuditEntry,
+    TaxonomyVersion,
+    WorkflowCheckpoint,
     Claim,
     ClaimEvidenceLink,
     CaseArtifact,
@@ -58,6 +68,8 @@ from src.storage import (
     get_database,
 )
 from src.storage.event_store import store_event_in_db
+from src.cases._support import CaseRunContext
+from src.cases._persistence import _persist_workflow_diagnostics
 from src.cases.evidence import (
     link_contribution,
     normalize_capture_text,
@@ -92,23 +104,6 @@ AUTOMATION_MODE_ALIASES = {
     "blocked": "blocked",
     "autonomous": "autonomous",
 }
-
-
-@dataclass
-class CaseRunContext:
-    """Mutable state shared across a case run."""
-
-    case: TopicCase
-    run_started_at: datetime
-    output_dir: Path
-    bootstrap_result: dict[str, Any] | None = None
-    fetch_result: dict[str, Any] | None = None
-    selected_articles: list[CaseArticle] | None = None
-    processed_events: list[dict[str, Any]] | None = None
-    report_bundle: dict[str, Any] | None = None
-    exception_queue: list[dict[str, Any]] | None = None
-    changed: bool = False
-    stage_failure: dict[str, Any] | None = None
 
 
 def retrieval_acquisition_observation(result: dict[str, Any]) -> dict[str, Any]:
@@ -255,6 +250,11 @@ class TopicCaseService:
         self.party_workflow = create_party_investigation_workflow()
         self.json_exporter = JSONExporter()
         self.markdown_exporter = MarkdownExporter()
+        # Runtime taxonomy snapshot (bias taxonomy file), used by the
+        # evaluation/agent-output diagnostics.
+        taxonomy_path_value = self.config.get("ai", {}).get("taxonomy_path")
+        taxonomy_path = Path(taxonomy_path_value) if taxonomy_path_value else None
+        self.active_taxonomy = sync_bias_taxonomy(taxonomy_path)
 
     def list_cases(self) -> list[TopicCase]:
         session = get_database().get_session_sync()
@@ -2132,6 +2132,23 @@ class TopicCaseService:
                 case.current_stage = stage_name
                 case.latest_run_completed_at = _utcnow()
                 case.updated_at = _utcnow()
+                # Durable per-stage checkpoint + typed agent outputs (diagnostics
+                # only; never a success claim beyond the recorded status).
+                _persist_workflow_diagnostics(
+                    session,
+                    case_id=context.case.id,
+                    stage_run_id=stage_run.id,
+                    stage_name=stage_name,
+                    workflow_name=workflow_name,
+                    status="failed" if stage_failure is not None else "completed",
+                    result=json.loads(json.dumps(result, default=str)),
+                    summary=(
+                        str(stage_failure.get("message"))
+                        if stage_failure is not None
+                        else f"{stage_name.value} completed successfully."
+                    ),
+                    retry_count=stage_run.retry_count or 0,
+                )
                 session.commit()
                 context.case = case
             except Exception:
@@ -2827,3 +2844,700 @@ class TopicCaseService:
                 for artifact in artifacts
             ],
         }
+
+    def get_case_workflow_details(self, case_id: str) -> dict[str, Any]:
+        """Return durable workflow diagnostics for a case."""
+        session = get_database().get_session_sync()
+        try:
+            case = session.query(TopicCase).filter(TopicCase.id == case_id).first()
+            if case is None:
+                raise ValueError(f"Case {case_id} not found")
+            checkpoints = (
+                session.query(WorkflowCheckpoint)
+                .filter(WorkflowCheckpoint.case_id == case_id)
+                .order_by(WorkflowCheckpoint.created_at.desc())
+                .all()
+            )
+            outputs = (
+                session.query(AgentOutput)
+                .filter(AgentOutput.case_id == case_id)
+                .order_by(AgentOutput.created_at.desc())
+                .all()
+            )
+            return {
+                "case_id": case_id,
+                "current_stage": case.current_stage.value if case.current_stage else None,
+                "status": case.status.value if case.status else None,
+                "taxonomy": (
+                    {
+                        "id": self.active_taxonomy.id,
+                        "kind": self.active_taxonomy.taxonomy_kind,
+                        "version": self.active_taxonomy.version,
+                        "path": self.active_taxonomy.path,
+                        "checksum": self.active_taxonomy.checksum,
+                    }
+                    if self.active_taxonomy is not None
+                    else None
+                ),
+                "checkpoints": [
+                    {
+                        "id": checkpoint.id,
+                        "stage_name": checkpoint.stage_name,
+                        "checkpoint_key": checkpoint.checkpoint_key,
+                        "status": checkpoint.status,
+                        "summary": checkpoint.summary,
+                        "retry_count": checkpoint.retry_count,
+                        "payload": checkpoint.payload_json or {},
+                        "created_at": checkpoint.created_at.isoformat()
+                        if checkpoint.created_at
+                        else None,
+                    }
+                    for checkpoint in checkpoints
+                ],
+                "agent_outputs": [
+                    {
+                        "id": output.id,
+                        "stage_name": output.stage_name,
+                        "agent_name": output.agent_name,
+                        "output_type": output.output_type,
+                        "summary": output.summary,
+                        "payload": output.output_json or {},
+                        "taxonomy_version_id": output.taxonomy_version_id,
+                        "created_at": output.created_at.isoformat()
+                        if output.created_at
+                        else None,
+                    }
+                    for output in outputs
+                ],
+            }
+        finally:
+            session.close()
+
+    def get_case_review_activity(self, case_id: str) -> dict[str, Any]:
+        """Return annotations and audit log entries for human review actions."""
+        session = get_database().get_session_sync()
+        try:
+            case = session.query(TopicCase).filter(TopicCase.id == case_id).first()
+            if case is None:
+                raise ValueError(f"Case {case_id} not found")
+
+            annotations = (
+                session.query(ReviewAnnotation)
+                .filter(ReviewAnnotation.case_id == case_id)
+                .order_by(ReviewAnnotation.created_at.desc())
+                .all()
+            )
+            audit_entries = (
+                session.query(ReviewAuditEntry)
+                .filter(ReviewAuditEntry.case_id == case_id)
+                .order_by(ReviewAuditEntry.created_at.desc())
+                .all()
+            )
+            return {
+                "annotations": [
+                    {
+                        "id": item.id,
+                        "target_type": item.target_type,
+                        "target_id": item.target_id,
+                        "annotation_type": item.annotation_type,
+                        "author": item.author,
+                        "content": item.content,
+                        "metadata": item.metadata_json or {},
+                        "created_at": item.created_at.isoformat()
+                        if item.created_at
+                        else None,
+                    }
+                    for item in annotations
+                ],
+                "audit_entries": [
+                    {
+                        "id": item.id,
+                        "action_type": item.action_type,
+                        "target_type": item.target_type,
+                        "target_id": item.target_id,
+                        "actor": item.actor,
+                        "rationale": item.rationale,
+                        "metadata": item.metadata_json or {},
+                        "created_at": item.created_at.isoformat()
+                        if item.created_at
+                        else None,
+                    }
+                    for item in audit_entries
+                ],
+            }
+        finally:
+            session.close()
+
+    def add_review_annotation(
+        self,
+        case_id: str,
+        *,
+        target_type: str,
+        target_id: str,
+        annotation_type: str,
+        content: str,
+        author: str = "operator",
+        metadata: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Persist a review annotation and mirror it into the audit trail."""
+        session = get_database().get_session_sync()
+        try:
+            case = session.query(TopicCase).filter(TopicCase.id == case_id).first()
+            if case is None:
+                raise ValueError(f"Case {case_id} not found")
+
+            annotation = ReviewAnnotation(
+                id=str(uuid.uuid4()),
+                case_id=case_id,
+                target_type=target_type,
+                target_id=target_id,
+                annotation_type=annotation_type,
+                author=author,
+                content=content.strip(),
+                metadata_json=metadata or {},
+            )
+            session.add(annotation)
+            self._record_audit_entry(
+                session,
+                case_id=case_id,
+                action_type=f"annotation:{annotation_type}",
+                target_type=target_type,
+                target_id=target_id,
+                actor=author,
+                rationale=content.strip(),
+                metadata=metadata or {},
+            )
+            session.commit()
+            return {
+                "id": annotation.id,
+                "target_type": annotation.target_type,
+                "target_id": annotation.target_id,
+                "annotation_type": annotation.annotation_type,
+                "author": annotation.author,
+                "content": annotation.content,
+                "metadata": annotation.metadata_json or {},
+                "created_at": annotation.created_at.isoformat()
+                if annotation.created_at
+                else None,
+            }
+        finally:
+            session.close()
+
+    def evaluate_case(
+        self,
+        case_id: str,
+        *,
+        evaluation_kind: str = "case_quality",
+    ) -> dict[str, Any]:
+        """Score a case using lightweight, stable evaluation heuristics and persist the run."""
+        session = get_database().get_session_sync()
+        try:
+            case = session.query(TopicCase).filter(TopicCase.id == case_id).first()
+            if case is None:
+                raise ValueError(f"Case {case_id} not found")
+
+            detail = build_case_detail_payload(session, case)
+            claims = detail.get("claims", [])
+            evidence = detail.get("evidence", [])
+            exceptions = detail.get("exceptions", [])
+            stage_runs = detail.get("stage_runs", [])
+            active_taxonomy = (
+                session.query(TaxonomyVersion)
+                .filter(TaxonomyVersion.is_active == 1)
+                .order_by(TaxonomyVersion.created_at.desc())
+                .first()
+            )
+
+            total_claims = len(claims)
+            total_evidence = len(evidence)
+            open_exceptions = sum(1 for item in exceptions if item.get("status") != "resolved")
+            linked_claims = sum(1 for item in claims if item.get("evidence"))
+            contested_claims = sum(
+                1
+                for item in claims
+                if item.get("verification_status") == "CONTESTED"
+                or (item.get("oppose_count") or 0) > 0
+            )
+            source_diversity_values = [
+                float(item.get("source_diversity_count") or 0) for item in claims
+            ]
+            requires_human_review = sum(
+                1 for item in evidence if item.get("requires_human_review")
+            )
+            failed_runs = sum(1 for item in stage_runs if item.get("status") == "FAILED")
+            retry_count = sum(int((item.get("metrics") or {}).get("retry_count", 0)) for item in stage_runs)
+            fallback_count = sum(int(item.get("fallback_count") or 0) for item in stage_runs)
+            total_duration_ms = sum(int(item.get("duration_ms") or 0) for item in stage_runs)
+
+            evidence_linkage = linked_claims / total_claims if total_claims else 1.0
+            contradiction_handling = (
+                (sum(1 for item in claims if item.get("evidence") and ((item.get("oppose_count") or 0) > 0 or item.get("verification_status") == "CONTESTED")) / contested_claims)
+                if contested_claims
+                else 1.0
+            )
+            source_diversity = min(
+                (statistics.mean(source_diversity_values) / 3.0) if source_diversity_values else 0.0,
+                1.0,
+            )
+            review_burden = max(
+                0.0,
+                1.0
+                - (
+                    (case.open_review_items + requires_human_review)
+                    / max(total_claims + total_evidence, 1)
+                ),
+            )
+            neutrality = max(
+                0.0,
+                1.0 - ((contested_claims + open_exceptions) / max(total_claims + 1, 1)),
+            )
+            pipeline_resilience = max(
+                0.0,
+                1.0
+                - (
+                    (failed_runs + retry_count + fallback_count)
+                    / max(len(stage_runs) * 3, 1)
+                ),
+            )
+            overall_score = round(
+                (
+                    evidence_linkage
+                    + contradiction_handling
+                    + source_diversity
+                    + review_burden
+                    + neutrality
+                    + pipeline_resilience
+                )
+                / 6,
+                3,
+            )
+
+            metrics = {
+                "neutrality": round(neutrality, 3),
+                "evidence_linkage": round(evidence_linkage, 3),
+                "contradiction_handling": round(contradiction_handling, 3),
+                "review_burden": round(review_burden, 3),
+                "source_diversity": round(source_diversity, 3),
+                "pipeline_resilience": round(pipeline_resilience, 3),
+                "claims_total": total_claims,
+                "evidence_total": total_evidence,
+                "open_exceptions": open_exceptions,
+                "requires_human_review": requires_human_review,
+                "failed_stage_runs": failed_runs,
+                "total_duration_ms": total_duration_ms,
+            }
+            summary = {
+                "overall_score": overall_score,
+                "case_status": case.status.value if case.status else None,
+                "current_stage": case.current_stage.value if case.current_stage else None,
+                "taxonomy_version": active_taxonomy.version if active_taxonomy else None,
+                "workflow_version": "phase4-5-local",
+            }
+
+            evaluation = EvaluationRun(
+                id=str(uuid.uuid4()),
+                case_id=case_id,
+                status="completed",
+                evaluation_kind=evaluation_kind,
+                summary_json=summary,
+                metrics_json=metrics,
+                model_config_json=self.config.get("ai", {}),
+                workflow_version="phase4-5-local",
+                output_version=detail["case"].get("updated_at"),
+                taxonomy_version_id=active_taxonomy.id if active_taxonomy else None,
+            )
+            session.add(evaluation)
+            self._record_audit_entry(
+                session,
+                case_id=case_id,
+                action_type="evaluation:run",
+                target_type="case",
+                target_id=case_id,
+                actor="system",
+                rationale="Generated evaluation run for current case state.",
+                metadata={"evaluation_kind": evaluation_kind, "overall_score": overall_score},
+            )
+            session.commit()
+            return {
+                "id": evaluation.id,
+                "status": evaluation.status,
+                "evaluation_kind": evaluation.evaluation_kind,
+                "summary": summary,
+                "metrics": metrics,
+                "created_at": evaluation.created_at.isoformat()
+                if evaluation.created_at
+                else None,
+            }
+        finally:
+            session.close()
+
+    def get_case_evaluation_summary(self, case_id: str) -> dict[str, Any]:
+        """Return the latest evaluation run and a compact historical view for a case."""
+        session = get_database().get_session_sync()
+        try:
+            case = session.query(TopicCase).filter(TopicCase.id == case_id).first()
+            if case is None:
+                raise ValueError(f"Case {case_id} not found")
+
+            runs = (
+                session.query(EvaluationRun)
+                .filter(EvaluationRun.case_id == case_id)
+                .order_by(EvaluationRun.created_at.desc())
+                .all()
+            )
+            if runs:
+                latest = runs[0]
+                return {
+                    "latest": {
+                        "id": latest.id,
+                        "status": latest.status,
+                        "evaluation_kind": latest.evaluation_kind,
+                        "summary": latest.summary_json or {},
+                        "metrics": latest.metrics_json or {},
+                        "created_at": latest.created_at.isoformat()
+                        if latest.created_at
+                        else None,
+                    },
+                    "history": [
+                        {
+                            "id": item.id,
+                            "status": item.status,
+                            "evaluation_kind": item.evaluation_kind,
+                            "summary": item.summary_json or {},
+                            "metrics": item.metrics_json or {},
+                            "created_at": item.created_at.isoformat()
+                            if item.created_at
+                            else None,
+                        }
+                        for item in runs[:10]
+                    ],
+                }
+        finally:
+            session.close()
+        latest_payload = self.evaluate_case(case_id)
+        return {"latest": latest_payload, "history": [latest_payload]}
+
+    def get_monitoring_summary(self) -> dict[str, Any]:
+        """Return aggregate operator-facing observability and review backlog metrics."""
+        session = get_database().get_session_sync()
+        try:
+            cases = session.query(TopicCase).all()
+            stage_runs = session.query(CaseStageRun).all()
+            intake_items = session.query(IntakeItem).all()
+            evaluations = (
+                session.query(EvaluationRun)
+                .order_by(EvaluationRun.created_at.desc())
+                .limit(25)
+                .all()
+            )
+
+            open_exceptions = sum(
+                len(self._get_open_exceptions(case.metadata_json or {})) for case in cases
+            )
+            review_backlog = sum(int(case.open_review_items or 0) for case in cases)
+            failed_stage_runs = sum(1 for run in stage_runs if run.status.name == "FAILED")
+            running_stage_runs = sum(1 for run in stage_runs if run.status.name == "RUNNING")
+            retry_count = sum(int(run.retry_count or 0) for run in stage_runs)
+            fallback_count = sum(int(run.fallback_count or 0) for run in stage_runs)
+            avg_duration_ms = round(
+                statistics.mean(
+                    [int(run.duration_ms or 0) for run in stage_runs if run.duration_ms]
+                ),
+                2,
+            ) if any(run.duration_ms for run in stage_runs) else 0.0
+            avg_evaluation_score = round(
+                statistics.mean(
+                    [
+                        float((item.summary_json or {}).get("overall_score", 0.0))
+                        for item in evaluations
+                    ]
+                ),
+                3,
+            ) if evaluations else None
+
+            return {
+                "cases": {
+                    "total": len(cases),
+                    "review_ready": sum(
+                        1 for case in cases if (case.status.value if case.status else "") == "REVIEW_READY"
+                    ),
+                    "active": sum(
+                        1
+                        for case in cases
+                        if (case.status.value if case.status else "")
+                        not in {"APPROVED", "REJECTED"}
+                    ),
+                },
+                "review": {
+                    "open_exceptions": open_exceptions,
+                    "backlog": review_backlog,
+                },
+                "pipeline": {
+                    "running_stage_runs": running_stage_runs,
+                    "failed_stage_runs": failed_stage_runs,
+                    "retry_count": retry_count,
+                    "fallback_count": fallback_count,
+                    "avg_duration_ms": avg_duration_ms,
+                },
+                "intake": {
+                    "pending_items": sum(1 for item in intake_items if item.intake_status == "PENDING"),
+                    "processed_items": sum(1 for item in intake_items if item.intake_status == "PROCESSED"),
+                },
+                "evaluation": {
+                    "recent_runs": len(evaluations),
+                    "avg_overall_score": avg_evaluation_score,
+                },
+            }
+        finally:
+            session.close()
+
+    def ingest_osint_artifact(
+        self,
+        *,
+        tool: str,
+        file_path: Path,
+        case_id: str,
+        artifact_type: str | None = None,
+    ) -> dict[str, Any]:
+        """Import an external OSINT artifact and attach it to a case."""
+        session = get_database().get_session_sync()
+        try:
+            case = session.query(TopicCase).filter(TopicCase.id == case_id).first()
+            if case is None:
+                raise ValueError(f"Case {case_id} not found")
+
+            source_path = file_path.expanduser().resolve()
+            raw_text = source_path.read_text(encoding="utf-8")
+            raw_payload: dict[str, Any]
+            if source_path.suffix.lower() == ".json":
+                loaded = json.loads(raw_text)
+                raw_payload = loaded if isinstance(loaded, dict) else {"items": loaded}
+            else:
+                raw_payload = {"content": raw_text}
+
+            fingerprint = _fingerprint_article(
+                {
+                    "url": str(source_path),
+                    "title": raw_payload.get("title", source_path.name),
+                    "source": tool,
+                }
+            )
+            existing_artifact = (
+                session.query(OsintArtifact)
+                .filter(
+                    OsintArtifact.case_id == case_id,
+                    OsintArtifact.tool == tool,
+                    OsintArtifact.fingerprint == fingerprint,
+                )
+                .first()
+            )
+            artifact_kind = artifact_type or raw_payload.get("artifact_type") or source_path.suffix.lstrip(".") or "file"
+            if existing_artifact is None:
+                existing_artifact = OsintArtifact(
+                    id=str(uuid.uuid4()),
+                    case_id=case_id,
+                    tool=tool,
+                    artifact_type=artifact_kind,
+                    source_path=str(source_path),
+                    fingerprint=fingerprint,
+                    raw_text=raw_text[:20000],
+                    raw_payload=raw_payload,
+                    import_metadata={
+                        "file_name": source_path.name,
+                        "suffix": source_path.suffix.lower(),
+                        "import_mode": "cli",
+                    },
+                )
+                session.add(existing_artifact)
+            else:
+                existing_artifact.source_path = str(source_path)
+                existing_artifact.raw_text = raw_text[:20000]
+                existing_artifact.raw_payload = raw_payload
+                existing_artifact.import_metadata = {
+                    **(existing_artifact.import_metadata or {}),
+                    "file_name": source_path.name,
+                    "suffix": source_path.suffix.lower(),
+                    "import_mode": "cli",
+                }
+
+            evidence_url = (
+                raw_payload.get("origin_url")
+                or raw_payload.get("canonical_url")
+                or raw_payload.get("url")
+                or raw_payload.get("link")
+            )
+            evidence_id = str(
+                uuid.uuid5(
+                    uuid.NAMESPACE_URL,
+                    f"osint-evidence:{case_id}:{tool}:{source_path}",
+                )
+            )
+            evidence = (
+                session.query(EvidenceItem)
+                .filter(EvidenceItem.id == evidence_id)
+                .first()
+            )
+            if evidence is None:
+                evidence = EvidenceItem(
+                    id=evidence_id,
+                    case_id=case_id,
+                    evidence_type="osint_artifact",
+                    source_type="osint",
+                    title=raw_payload.get("title", source_path.name),
+                    origin_url=evidence_url,
+                    canonical_url=evidence_url,
+                    publisher=raw_payload.get("publisher")
+                    or raw_payload.get("source")
+                    or raw_payload.get("source_name")
+                    or tool,
+                    published_at=raw_payload.get("published_at")
+                    or raw_payload.get("timestamp"),
+                    content=raw_payload.get("content") or raw_text[:4000],
+                    capture_metadata={
+                        "tool": tool,
+                        "artifact_id": existing_artifact.id,
+                        "source_path": str(source_path),
+                        "lineage": {
+                            "case_id": case_id,
+                            "origin": "osint_import",
+                            "tool": tool,
+                        },
+                    },
+                    verification_status="UNVERIFIED",
+                    credibility_tier=raw_payload.get("credibility_tier", "operator_supplied"),
+                    requires_human_review=1,
+                )
+                session.add(evidence)
+            else:
+                evidence.title = raw_payload.get("title", evidence.title)
+                evidence.origin_url = evidence_url or evidence.origin_url
+                evidence.canonical_url = evidence_url or evidence.canonical_url
+                evidence.publisher = (
+                    raw_payload.get("publisher")
+                    or raw_payload.get("source")
+                    or raw_payload.get("source_name")
+                    or evidence.publisher
+                )
+                evidence.content = raw_payload.get("content") or evidence.content
+                evidence.capture_metadata = {
+                    **(evidence.capture_metadata or {}),
+                    "tool": tool,
+                    "artifact_id": existing_artifact.id,
+                    "source_path": str(source_path),
+                    "lineage": {
+                        "case_id": case_id,
+                        "origin": "osint_import",
+                        "tool": tool,
+                    },
+                }
+
+            link_id = str(
+                uuid.uuid5(
+                    uuid.NAMESPACE_URL,
+                    f"osint-link:{evidence.id}:{existing_artifact.id}",
+                )
+            )
+            link = (
+                session.query(EvidenceArtifactLink)
+                .filter(EvidenceArtifactLink.id == link_id)
+                .first()
+            )
+            if link is None:
+                session.add(
+                    EvidenceArtifactLink(
+                        id=link_id,
+                        evidence_id=evidence.id,
+                        osint_artifact_id=existing_artifact.id,
+                        relation="derived_from",
+                        confidence_score=1.0,
+                        provenance_metadata={
+                            "tool": tool,
+                            "source_path": str(source_path),
+                            "artifact_type": artifact_kind,
+                        },
+                    )
+                )
+
+            metadata = dict(case.metadata_json or {})
+            osint_summary = dict(metadata.get("osint_summary") or {})
+            osint_summary["last_imported_at"] = _utcnow().isoformat()
+            osint_summary["artifact_count"] = (
+                session.query(OsintArtifact)
+                .filter(OsintArtifact.case_id == case_id)
+                .count()
+                + (0 if existing_artifact.id else 1)
+            )
+            osint_summary["tools"] = sorted(
+                {
+                    row.tool
+                    for row in session.query(OsintArtifact.tool)
+                    .filter(OsintArtifact.case_id == case_id)
+                    .all()
+                }
+                | {tool}
+            )
+            metadata["osint_summary"] = osint_summary
+            case.metadata_json = metadata
+            self._refresh_case_metrics(session, case_id)
+            session.commit()
+            return {
+                "artifact_id": existing_artifact.id,
+                "evidence_id": evidence.id,
+                "tool": tool,
+                "source_path": str(source_path),
+                "artifact_type": artifact_kind,
+            }
+        finally:
+            session.close()
+
+    def stream_osint_artifacts(
+        self,
+        *,
+        tool: str,
+        watch_dir: Path,
+        case_id: str,
+        once: bool = False,
+    ) -> dict[str, Any]:
+        """Import all OSINT files from a directory."""
+        directory = watch_dir.expanduser().resolve()
+        if not directory.exists():
+            raise ValueError(f"Watch directory not found: {directory}")
+
+        imported = []
+        for file_path in sorted(path for path in directory.iterdir() if path.is_file()):
+            imported.append(
+                self.ingest_osint_artifact(tool=tool, file_path=file_path, case_id=case_id)
+            )
+
+        return {
+            "tool": tool,
+            "watch_dir": str(directory),
+            "imported_count": len(imported),
+            "mode": "once" if once else "snapshot",
+            "artifacts": imported,
+        }
+
+    def _record_audit_entry(
+        self,
+        session,
+        *,
+        case_id: str,
+        action_type: str,
+        target_type: str,
+        target_id: str,
+        actor: str,
+        rationale: str | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> ReviewAuditEntry:
+        entry = ReviewAuditEntry(
+            id=str(uuid.uuid4()),
+            case_id=case_id,
+            action_type=action_type,
+            target_type=target_type,
+            target_id=target_id,
+            actor=actor,
+            rationale=rationale,
+            metadata_json=metadata or {},
+        )
+        session.add(entry)
+        return entry

@@ -9,19 +9,27 @@ import pytest
 
 from src.cases import TopicCaseService
 from src.storage import (
+    AgentOutput,
     CaseArticle,
     CaseStageName,
     CaseStageRun,
     CaseStatus,
+    EvidenceArtifactLink,
     EvidenceItem,
     Event,
     IntakeItem,
+    OsintArtifact,
     Party,
     Review,
+    ReviewAnnotation,
+    ReviewAuditEntry,
     ReviewStatus,
+    WorkflowCheckpoint,
     TopicCase,
     VerificationStatus,
     Claim,
+    EvaluationRun,
+    StageStatus,
     init_database,
 )
 
@@ -64,7 +72,27 @@ class FakePartyWorkflow:
 
 def make_service(tmp_path: Path) -> TopicCaseService:
     init_database(str(tmp_path / "triangulate.db"))
-    service = TopicCaseService({"ai": {"model": "test-model"}}, output_root=tmp_path)
+    taxonomy = tmp_path / "bias_taxonomy.toml"
+    taxonomy.write_text(
+        '\n'.join(
+            [
+                'version = "test"',
+                'taxonomy_kind = "bias_review"',
+                "",
+                "[[dimensions]]",
+                'id = "framing"',
+                'label = "Framing"',
+                'description = "desc"',
+                'heuristics = ["h1"]',
+                'mitigation_prompt = "m1"',
+            ]
+        ),
+        encoding="utf-8",
+    )
+    service = TopicCaseService(
+        {"ai": {"model": "test-model", "taxonomy_path": str(taxonomy)}},
+        output_root=tmp_path,
+    )
     service.party_workflow = FakePartyWorkflow()
     return service
 
@@ -142,6 +170,18 @@ async def test_case_lifecycle_and_party_routing(monkeypatch, tmp_path):
             .all()
         )
         assert len(stage_runs) == 6
+        checkpoints = (
+            session.query(WorkflowCheckpoint)
+            .filter(WorkflowCheckpoint.case_id == case.id)
+            .all()
+        )
+        outputs = (
+            session.query(AgentOutput)
+            .filter(AgentOutput.case_id == case.id)
+            .all()
+        )
+        assert checkpoints
+        assert outputs
 
         event = session.query(Event).filter(Event.case_id == case.id).first()
         assert event is not None
@@ -150,6 +190,193 @@ async def test_case_lifecycle_and_party_routing(monkeypatch, tmp_path):
         review = session.query(Review).filter(Review.event_id == event.id).first()
         assert review is not None
         assert review.status == ReviewStatus.PENDING
+    finally:
+        session.close()
+
+
+def test_review_annotations_and_audit_entries_persist(tmp_path):
+    service = make_service(tmp_path)
+    session = init_database(str(tmp_path / "triangulate.db")).get_session_sync()
+    try:
+        session.add(
+            TopicCase(
+                id="case-1",
+                query="Annotated case",
+                slug="annotated-case",
+                status=CaseStatus.REVIEW_READY,
+            )
+        )
+        session.commit()
+    finally:
+        session.close()
+
+    annotation = service.add_review_annotation(
+        "case-1",
+        target_type="case",
+        target_id="case-1",
+        annotation_type="flag",
+        content="Needs contradiction review.",
+        author="analyst",
+    )
+    activity = service.get_case_review_activity("case-1")
+
+    assert annotation["annotation_type"] == "flag"
+    assert activity["annotations"][0]["content"] == "Needs contradiction review."
+    assert activity["audit_entries"][0]["action_type"] == "annotation:flag"
+
+    session = init_database(str(tmp_path / "triangulate.db")).get_session_sync()
+    try:
+        assert (
+            session.query(ReviewAnnotation)
+            .filter(ReviewAnnotation.case_id == "case-1")
+            .count()
+            == 1
+        )
+        assert (
+            session.query(ReviewAuditEntry)
+            .filter(ReviewAuditEntry.case_id == "case-1")
+            .count()
+            == 1
+        )
+    finally:
+        session.close()
+
+
+def test_case_evaluation_and_monitoring_summary(tmp_path):
+    service = make_service(tmp_path)
+    session = init_database(str(tmp_path / "triangulate.db")).get_session_sync()
+    try:
+        case = TopicCase(
+            id="case-1",
+            query="Evaluation case",
+            slug="evaluation-case",
+            status=CaseStatus.REVIEW_READY,
+            current_stage=CaseStageName.REPORT,
+            open_review_items=2,
+            metadata_json={
+                "exception_queue": [
+                    {
+                        "id": "exc-1",
+                        "type": "needs_more_sources",
+                        "message": "Need more sources",
+                        "status": "open",
+                        "severity": "medium",
+                        "recommended_action": "Investigate",
+                    }
+                ]
+            },
+        )
+        session.add(case)
+        session.add(
+            Event(
+                id="event-1",
+                case_id="case-1",
+                timestamp=datetime(2026, 3, 8, 12, 0, tzinfo=UTC),
+                title="Event",
+                summary="Summary",
+                verification_status=VerificationStatus.CONTESTED,
+            )
+        )
+        session.add(
+            Claim(
+                id="claim-1",
+                event_id="event-1",
+                claim_text="Claim text",
+                verification_status=VerificationStatus.CONTESTED,
+                claim_signature="sig-1",
+                support_count=1,
+                oppose_count=1,
+                source_diversity_count=2,
+            )
+        )
+        session.add(
+            EvidenceItem(
+                id="evidence-1",
+                case_id="case-1",
+                event_id="event-1",
+                evidence_type="article",
+                source_type="rss",
+                title="Evidence",
+                verification_status="UNVERIFIED",
+                requires_human_review=1,
+            )
+        )
+        session.add(
+            CaseStageRun(
+                id="run-1",
+                case_id="case-1",
+                stage_name=CaseStageName.INVESTIGATE,
+                status=StageStatus.COMPLETED,
+                duration_ms=1200,
+                retry_count=1,
+                fallback_count=1,
+            )
+        )
+        session.commit()
+    finally:
+        session.close()
+
+    evaluation = service.evaluate_case("case-1")
+    summary = service.get_case_evaluation_summary("case-1")
+    monitoring = service.get_monitoring_summary()
+
+    assert evaluation["summary"]["overall_score"] >= 0
+    assert summary["latest"]["id"] == evaluation["id"]
+    assert monitoring["review"]["open_exceptions"] == 1
+
+    session = init_database(str(tmp_path / "triangulate.db")).get_session_sync()
+    try:
+        assert (
+            session.query(EvaluationRun)
+            .filter(EvaluationRun.case_id == "case-1")
+            .count()
+            >= 1
+        )
+    finally:
+        session.close()
+
+
+def test_ingest_osint_artifact_links_evidence(tmp_path):
+    """OSINT imports should create a durable artifact and provenance-linked evidence."""
+    service = make_service(tmp_path)
+
+    session = init_database(str(tmp_path / "triangulate.db")).get_session_sync()
+    case = TopicCase(
+        id="case-1",
+        query="OSINT case",
+        slug="osint-case",
+        status=CaseStatus.REVIEW_READY,
+    )
+    session.add(case)
+    session.commit()
+    session.close()
+
+    artifact_path = tmp_path / "artifact.json"
+    artifact_path.write_text(
+        '{"title":"SpiderFoot result","url":"https://example.com/osint","content":"Captured from OSINT"}',
+        encoding="utf-8",
+    )
+
+    result = service.ingest_osint_artifact(
+        tool="spiderfoot",
+        file_path=artifact_path,
+        case_id="case-1",
+    )
+
+    session = init_database(str(tmp_path / "triangulate.db")).get_session_sync()
+    try:
+        artifact = session.query(OsintArtifact).filter(OsintArtifact.id == result["artifact_id"]).first()
+        evidence = session.query(EvidenceItem).filter(EvidenceItem.id == result["evidence_id"]).first()
+        link = (
+            session.query(EvidenceArtifactLink)
+            .filter(EvidenceArtifactLink.evidence_id == result["evidence_id"])
+            .first()
+        )
+        assert artifact is not None
+        assert artifact.tool == "spiderfoot"
+        assert evidence is not None
+        assert evidence.source_type == "osint"
+        assert link is not None
     finally:
         session.close()
 
@@ -872,3 +1099,4 @@ async def test_process_intake_queue_can_attach_saved_capture_to_case(monkeypatch
         assert session.query(CaseArticle).filter(CaseArticle.case_id == "case-1").count() == 1
     finally:
         session.close()
+

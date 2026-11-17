@@ -12,7 +12,7 @@ import {
   BarChart3,
   Zap,
 } from 'lucide-react';
-import { getCases } from '../services/api';
+import { getCases, getMonitoringSummary } from '../services/api';
 import Button from '../components/design-system/Button';
 import Card from '../components/design-system/Card';
 import { CardHeader, CardTitle, CardBody } from '../components/design-system/Card';
@@ -38,6 +38,11 @@ const Dashboard: React.FC = () => {
     queryKey: ['cases'],
     queryFn: getCases,
     refetchInterval: 30000, // Poll every 30 seconds
+  });
+  const { data: monitoringSummary } = useQuery({
+    queryKey: ['monitoringSummary'],
+    queryFn: getMonitoringSummary,
+    refetchInterval: 30000,
   });
 
   const metrics = useMemo<DashboardMetrics>(() => {
@@ -293,15 +298,26 @@ const Dashboard: React.FC = () => {
                       <span className="health-label">Exception Queue</span>
                     </div>
                     <Badge variant={metrics.openExceptions > 0 ? 'warning' : 'success'} size="sm">
-                      {metrics.openExceptions} items
+                      {monitoringSummary?.review?.open_exceptions ?? metrics.openExceptions} items
                     </Badge>
                   </div>
                   <div className="health-item">
                     <div className="health-info">
                       <BarChart3 size={16} className="health-icon" />
-                      <span className="health-label">Active Agents</span>
+                      <span className="health-label">Avg Evaluation</span>
                     </div>
-                    <Badge variant="info" size="sm">3 running</Badge>
+                    <Badge variant="info" size="sm">
+                      {monitoringSummary?.evaluation?.avg_overall_score ?? 'n/a'}
+                    </Badge>
+                  </div>
+                  <div className="health-item">
+                    <div className="health-info">
+                      <Clock size={16} className="health-icon" />
+                      <span className="health-label">Avg Stage Duration</span>
+                    </div>
+                    <Badge variant="neutral" size="sm">
+                      {monitoringSummary?.pipeline?.avg_duration_ms ?? 0} ms
+                    </Badge>
                   </div>
                 </div>
               </CardBody>

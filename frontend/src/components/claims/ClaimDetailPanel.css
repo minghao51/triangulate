@@ -1,0 +1,144 @@
+.claim-detail-panel {
+    padding: 12px 16px;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(0, 0, 0, 0.15);
+}
+
+.arbiter-section,
+.party-positions-only {
+    margin-bottom: 12px;
+}
+
+.arbiter-section:last-child,
+.party-positions-only:last-child {
+    margin-bottom: 0;
+}
+
+.section-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+    color: var(--text-secondary);
+}
+
+.section-header h4 {
+    margin: 0;
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.arbiter-content {
+    padding-left: 24px;
+}
+
+.arbiter-field {
+    margin-bottom: 8px;
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.field-label {
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-right: 6px;
+}
+
+.field-value {
+    color: var(--text-primary);
+}
+
+.party-consensus {
+    margin-top: 12px;
+    padding: 10px 12px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 6px;
+}
+
+.consensus-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    margin-bottom: 8px;
+}
+
+.unanimous-badge {
+    background: rgba(34, 197, 94, 0.2);
+    color: #22c55e;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.divided-badge {
+    background: rgba(251, 191, 36, 0.2);
+    color: #fbbf24;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.consensus-parties {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.party-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+}
+
+.party-group.supporting {
+    color: #22c55e;
+}
+
+.party-group.opposing {
+    color: #ef4444;
+}
+
+.party-group.neutral {
+    color: #9ca3af;
+}
+
+.party-label {
+    font-weight: 600;
+    min-width: 60px;
+}
+
+.party-names {
+    color: var(--text-primary);
+}
+
+.party-positions-list {
+    padding-left: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.position-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+}
+
+.position-row.supporting {
+    color: #22c55e;
+}
+
+.position-row.opposing {
+    color: #ef4444;
+}
+
+.position-row.neutral {
+    color: #9ca3af;
+}

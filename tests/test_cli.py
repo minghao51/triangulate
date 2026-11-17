@@ -156,6 +156,60 @@ def test_case_exception_command(monkeypatch):
     assert called["action"] == "resolve"
 
 
+def test_case_workflow_command(monkeypatch):
+    """The case workflow command should delegate to the workflow handler."""
+    called = {}
+
+    def fake_handler(**kwargs):
+        called.update(kwargs)
+
+    monkeypatch.setattr("src.cli.main.cmd_show_case_workflow", fake_handler)
+    result = runner.invoke(app, ["case", "workflow", "case-1"])
+    assert result.exit_code == 0
+    assert called["case_id"] == "case-1"
+
+
+def test_case_evaluate_command(monkeypatch):
+    """The case evaluate command should delegate to the evaluation handler."""
+    called = {}
+
+    def fake_handler(**kwargs):
+        called.update(kwargs)
+
+    monkeypatch.setattr("src.cli.main.cmd_evaluate_case", fake_handler)
+    result = runner.invoke(app, ["case", "evaluate", "case-1"])
+    assert result.exit_code == 0
+    assert called["case_id"] == "case-1"
+
+
+def test_osint_ingest_command(monkeypatch, tmp_path):
+    """The OSINT ingest command should delegate to the OSINT handler."""
+    called = {}
+    sample = tmp_path / "artifact.json"
+    sample.write_text('{"title":"artifact"}', encoding="utf-8")
+
+    def fake_handler(**kwargs):
+        called.update(kwargs)
+
+    monkeypatch.setattr("src.cli.main.cmd_osint_ingest", fake_handler)
+    result = runner.invoke(
+        app,
+        [
+            "osint",
+            "ingest",
+            "--tool",
+            "spiderfoot",
+            "--file",
+            str(sample),
+            "--case-id",
+            "case-1",
+        ],
+    )
+    assert result.exit_code == 0
+    assert called["tool"] == "spiderfoot"
+    assert called["case_id"] == "case-1"
+
+
 def test_cases_command_lists_topic_cases(tmp_path):
     """The case list command should surface persisted cases."""
     db = init_database(str(tmp_path / "triangulate.db"))

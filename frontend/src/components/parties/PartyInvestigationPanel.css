@@ -1,0 +1,177 @@
+.party-investigation-panel {
+    padding: 12px 16px;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(0, 0, 0, 0.15);
+}
+
+.investigation-stats {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 12px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.stat-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+}
+
+.stat-item.supporting {
+    color: #22c55e;
+}
+
+.stat-item.contesting {
+    color: #ef4444;
+}
+
+.stat-item.unique {
+    color: #60a5fa;
+}
+
+.stat-value {
+    font-weight: 700;
+}
+
+.stat-label {
+    color: var(--text-secondary);
+}
+
+.stance-section,
+.concerns-section,
+.priorities-section,
+.claims-section {
+    margin-bottom: 12px;
+}
+
+.stance-section:last-child,
+.concerns-section:last-child,
+.priorities-section:last-child,
+.claims-section:last-child {
+    margin-bottom: 0;
+}
+
+.stance-section h5,
+.concerns-section h5,
+.priorities-section h5,
+.claims-section h5 {
+    margin: 0 0 6px 0;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-secondary);
+}
+
+.stance-text {
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.concerns-list,
+.priorities-list {
+    margin: 0;
+    padding-left: 18px;
+    font-size: 13px;
+    line-height: 1.6;
+}
+
+.claims-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.claim-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    font-size: 12px;
+    padding: 6px 8px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 4px;
+}
+
+.claim-item.supporting {
+    color: #22c55e;
+}
+
+.claim-item.contested {
+    color: #ef4444;
+}
+
+.claim-item span {
+    color: var(--text-primary);
+    line-height: 1.4;
+}
+
+/* Party Card Accordion */
+.party-card-accordion {
+    overflow: hidden;
+}
+
+.party-card-accordion.expanded {
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+.accordion-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding: 12px 16px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--text-primary);
+    text-align: left;
+}
+
+.accordion-header:hover {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.header-content {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.stance-indicator {
+    width: 4px;
+    height: 24px;
+    border-radius: 2px;
+}
+
+.stance-indicator.stance-for {
+    background: #22c55e;
+}
+
+.stance-indicator.stance-against {
+    background: #ef4444;
+}
+
+.stance-indicator.stance-neutral {
+    background: #9ca3af;
+}
+
+.stance-indicator.stance-mixed {
+    background: #fbbf24;
+}
+
+.party-name {
+    font-weight: 600;
+    font-size: 14px;
+}
+
+.investigation-summary {
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+.accordion-content {
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+}

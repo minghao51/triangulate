@@ -36,6 +36,10 @@ RETRYABLE_PHRASES = {
     "request failed",
     "connection error",
     "empty response",
+    "inappropriate content",
+    "content moderation",
+    "safety policy",
+    "bad request",
 }
 
 
@@ -253,6 +257,12 @@ async def call_structured_llm(
         raw_content = response.get("choices", [{}])[0].get("message", {}).get(
             "content", ""
         )
+        if not raw_content:
+            logger.warning(
+                "Empty response from LLM for %s. Response: %s",
+                schema.__name__,
+                response,
+            )
         payload = extract_json_payload(raw_content)
         parsed = schema.model_validate(payload)
         return {
@@ -263,7 +273,12 @@ async def call_structured_llm(
             "raw_response_excerpt": raw_content[:400],
         }
     except (json.JSONDecodeError, ValidationError, Exception) as exc:
-        logger.warning("Structured LLM call failed for %s: %s", schema.__name__, exc)
+        logger.warning(
+            "Structured LLM call failed for %s: %s (raw_content=%r)",
+            schema.__name__,
+            exc,
+            raw_content[:200] if raw_content else "<empty>",
+        )
         parse_status = "fallback"
         if fallback is None:
             raise

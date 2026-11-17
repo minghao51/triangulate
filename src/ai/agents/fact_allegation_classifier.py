@@ -4,50 +4,14 @@ import logging
 from typing import Any
 import os
 
+from src.ai.prompts import get_prompt
 from src.ai.schemas import FactAllegationResultSchema
 from src.ai.utils import call_structured_llm, make_agent_envelope
+from src.ai.agents._fallback import FallbackEngine
 
 logger = logging.getLogger(__name__)
 
-FACT_ALLEGATION_CLASSIFIER_PROMPT = """You are an expert analyst who distinguishes between objective FACTS and subjective ALLEGATIONS.
-
-Given this claim from a news article:
-Claim: "{claim}"
-
-Context:
-- Article: {article_title}
-- Source: {source_name}
-
-Your task:
-Classify this claim as either FACT or ALLEGATION based on the following criteria:
-
-**FACT** - Observable events that occurred:
-- Past tense actions that were completed
-- Verifiable occurrences with specific dates/times
-- Official announcements or signed agreements
-- Events that can be independently verified
-- Examples: "The summit was held in Geneva", "195 countries signed the agreement"
-
-**ALLEGATION** - Interpretations, predictions, statements of intent:
-- Future tense statements (pledges, promises, plans)
-- Opinions, interpretations, or subjective judgments
-- Statements of intent that may not be fulfilled
-- Predictions or projections
-- Examples: "China pledged to meet targets", "Most significant climate action", "Environmental groups praised"
-
-Output format (JSON):
-{{
-  "claim": "{claim}",
-  "classification": "FACT" | "ALLEGATION",
-  "reasoning": "Brief explanation of why this is a FACT or ALLEGATION",
-  "confidence": 0.0-1.0,
-  "indicators": {{
-    "factual_elements": ["element1", "element2"],
-    "allegation_elements": ["element1", "element2"]
-  }}
-}}
-
-Provide the classification:"""
+_fallback_classification = FallbackEngine.fact_classification_strategy
 
 
 async def classify_fact_vs_allegation(
@@ -90,8 +54,11 @@ async def classify_fact_vs_allegation(
         article_title = context.get("article", {}).get("title", "")
         source_name = context.get("article", {}).get("source_name", "")
 
-        prompt = FACT_ALLEGATION_CLASSIFIER_PROMPT.format(
-            claim=claim_text, article_title=article_title, source_name=source_name
+        prompt = get_prompt(
+            "FACT_ALLEGATION_CLASSIFIER",
+            claim=claim_text,
+            article_title=article_title,
+            source_name=source_name,
         )
 
         logger.info(f"Classifying claim as FACT or ALLEGATION: {claim_text[:60]}...")
@@ -119,88 +86,3 @@ async def classify_fact_vs_allegation(
             fallback_used=True,
         )
         return result if include_metadata else result["output"]
-
-
-def _fallback_classification(claim: dict[str, Any]) -> dict[str, Any]:
-    """Rule-based fallback when LLM unavailable.
-
-    Uses simple keyword and tense analysis.
-
-    Args:
-        claim: Claim dictionary
-
-    Returns:
-        Dictionary with classification result
-    """
-    claim_text = claim.get("claim", "").lower()
-
-    # Indicators of allegations (future tense, intent, opinion)
-    allegation_indicators = [
-        "will ",
-        "shall ",
-        "pledged",
-        "promised",
-        "plans to",
-        "expects to",
-        "should",
-        "could",
-        "would",
-        "might",
-        "may",
-        "believes",
-        "thinks",
-        "significant",
-        "important",
-        "historic",
-        "landmark",  # subjective adjectives
-        "praised",
-        "criticized",
-        "condemned",  # reactions
-    ]
-
-    # Indicators of facts (past tense, verifiable)
-    fact_indicators = [
-        "was ",
-        "were ",
-        "occurred",
-        "happened",
-        "signed",
-        "announced",
-        "agreement was",
-        "meeting was",
-        "summit was",
-        "gathered",
-    ]
-
-    # Check indicators
-    allegation_count = sum(
-        1 for indicator in allegation_indicators if indicator in claim_text
-    )
-    fact_count = sum(1 for indicator in fact_indicators if indicator in claim_text)
-
-    classification = "FACT"
-    reasoning = "Rule-based classification"
-
-    if allegation_count > fact_count:
-        classification = "ALLEGATION"
-        reasoning = "Contains allegation indicators (future tense, opinion, or intent)"
-    elif fact_count > 0:
-        classification = "FACT"
-        reasoning = "Contains factual indicators (past tense, verifiable action)"
-    else:
-        # Default to allegation when uncertain
-        classification = "ALLEGATION"
-        reasoning = "Uncertain - defaulting to ALLEGATION"
-
-    return {
-        "claim": claim.get("claim", ""),
-        "classification": classification,
-        "reasoning": reasoning,
-        "confidence": 0.6,
-        "indicators": {
-            "factual_elements": [ind for ind in fact_indicators if ind in claim_text],
-            "allegation_elements": [
-                ind for ind in allegation_indicators if ind in claim_text
-            ],
-        },
-    }

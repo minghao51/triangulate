@@ -10,10 +10,15 @@ from pydantic import BaseModel, Field
 class ClaimSchema(BaseModel):
     """Structured claim extracted from an article.
 
+    This is the unified claim schema used throughout the pipeline. Party
+    investigation fields (``position``, ``evidence_from_party``,
+    ``counter_argument``, ``alternative_perspective``, ``sources``) are optional
+    additions.
+
     ``source_quote`` and its offsets are *proposals* only. They are validated
     later against the immutable capture body and the recorded analysis-input
-    scope (see :mod:`src.storage.citations`); nothing here is trusted. All three
-    fields are optional so payloads produced before quotations existed keep
+    scope (see :mod:`src.storage.citations`); nothing here is trusted. All fields
+    beyond ``claim`` are optional so payloads produced before either feature keep
     validating unchanged.
     """
 
@@ -25,6 +30,11 @@ class ClaimSchema(BaseModel):
     source_quote: str | None = None
     source_quote_start: int | None = None
     source_quote_end: int | None = None
+    position: Literal["SUPPORTS", "CONTESTS", "NEUTRAL"] | None = None
+    evidence_from_party: str = ""
+    counter_argument: str = ""
+    alternative_perspective: str = ""
+    sources: list[str] = Field(default_factory=list)
 
 
 class ClaimCollectionSchema(BaseModel):
@@ -103,35 +113,6 @@ class PartyClassificationSchema(BaseModel):
     parties: list[PartySchema] = Field(default_factory=list)
 
 
-class SupportedClaimSchema(BaseModel):
-    """Party-supported claim shape."""
-
-    claim_id: str
-    claim_text: str
-    position: Literal["SUPPORTS"] = "SUPPORTS"
-    evidence_from_party: str = ""
-    confidence: Literal["HIGH", "MEDIUM", "LOW"] = "MEDIUM"
-
-
-class ContestedClaimSchema(BaseModel):
-    """Party-contested claim shape."""
-
-    claim_id: str
-    claim_text: str
-    position: Literal["CONTESTS"] = "CONTESTS"
-    counter_argument: str = ""
-    alternative_perspective: str = ""
-    confidence: Literal["HIGH", "MEDIUM", "LOW"] = "MEDIUM"
-
-
-class UniqueClaimSchema(BaseModel):
-    """Party-unique claim."""
-
-    claim_text: str
-    confidence: Literal["HIGH", "MEDIUM", "LOW"] = "MEDIUM"
-    sources: list[str] = Field(default_factory=list)
-
-
 class PartyStanceSchema(BaseModel):
     """High-level party stance."""
 
@@ -141,29 +122,27 @@ class PartyStanceSchema(BaseModel):
 
 
 class PartyInvestigationSchema(BaseModel):
-    """Party investigation result."""
+    """Party investigation result.
 
-    claims_supported: list[SupportedClaimSchema] = Field(default_factory=list)
-    claims_contested: list[ContestedClaimSchema] = Field(default_factory=list)
-    unique_claims: list[UniqueClaimSchema] = Field(default_factory=list)
+    All claim lists use the unified ClaimSchema with position field
+    indicating SUPPORTS/CONTESTS/NEUTRAL.
+    """
+
+    claims_supported: list[ClaimSchema] = Field(default_factory=list)
+    claims_contested: list[ClaimSchema] = Field(default_factory=list)
+    unique_claims: list[ClaimSchema] = Field(default_factory=list)
     party_stance: PartyStanceSchema
 
 
-class PartyConsensusSchema(BaseModel):
-    """Party consensus information for an arbiter determination."""
+class ArbiterReasoningSchema(BaseModel):
+    """Detailed arbiter reasoning with flattened party consensus."""
 
+    is_fact: str = ""
+    verification_rationale: str = ""
     unanimous: bool = False
     supporting_parties: list[str] = Field(default_factory=list)
     opposing_parties: list[str] = Field(default_factory=list)
     neutral_parties: list[str] = Field(default_factory=list)
-
-
-class ArbiterReasoningSchema(BaseModel):
-    """Detailed arbiter reasoning."""
-
-    is_fact: str = ""
-    verification_rationale: str = ""
-    party_consensus: PartyConsensusSchema = Field(default_factory=PartyConsensusSchema)
 
 
 class ArbiterDeterminationSchema(BaseModel):
@@ -234,3 +213,45 @@ class FactAllegationResultSchema(BaseModel):
     indicators: FactAllegationIndicatorsSchema = Field(
         default_factory=FactAllegationIndicatorsSchema
     )
+
+
+class WorkflowCheckpointSchema(BaseModel):
+    """Typed durable workflow checkpoint."""
+
+    case_id: str
+    stage_name: str
+    checkpoint_key: str
+    status: Literal["running", "completed", "failed", "skipped"]
+    retry_count: int = 0
+    summary: str = ""
+    payload: dict[str, object] = Field(default_factory=dict)
+
+
+class AgentOutputSchema(BaseModel):
+    """Typed persisted output for a workflow step or agent."""
+
+    case_id: str
+    stage_name: str
+    agent_name: str
+    output_type: str
+    summary: str = ""
+    payload: dict[str, object] = Field(default_factory=dict)
+    taxonomy_version: str | None = None
+
+
+class TaxonomyDimensionSchema(BaseModel):
+    """Single review or framing dimension in a taxonomy."""
+
+    id: str
+    label: str
+    description: str
+    heuristics: list[str] = Field(default_factory=list)
+    mitigation_prompt: str = ""
+
+
+class BiasTaxonomySchema(BaseModel):
+    """Versioned critique taxonomy loaded from disk."""
+
+    version: str
+    taxonomy_kind: str = "bias_review"
+    dimensions: list[TaxonomyDimensionSchema] = Field(default_factory=list)

@@ -24,11 +24,11 @@ test.describe('App Smoke Tests', () => {
 
   test('should navigate to cases page', async ({ page }) => {
     await page.goto('/cases');
-    await expect(page.locator('text=Cases')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Case Explorer' })).toBeVisible();
   });
 
   test('should open case detail from dashboard lists', async ({ page }) => {
-    await page.route('**/api/cases', async (route) => {
+    await page.route('**/data/cases/cases.json', async (route) => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -36,19 +36,20 @@ test.describe('App Smoke Tests', () => {
       });
     });
 
-    await page.route('**/api/cases/case-12345678-abcdef', async (route) => {
+    await page.route('**/data/cases/case-12345678-abcdef/detail.json', async (route) => {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
           case: mockCases[0],
+          tabs: { claims: [], evidence: [], exceptions: [], parties: [], timeline: [], runHistory: [], narratives: [], report: { status: 'pending' } },
         }),
       });
     });
 
     await page.goto('/dashboard');
+    await expect(page.getByText('Mock case').first()).toBeVisible({ timeout: 10000 });
     await page.getByText('Mock case').first().click();
     await expect(page).toHaveURL(/\/cases\/case-12345678-abcdef$/);
-    await expect(page.getByRole('heading', { name: 'Mock case' })).toBeVisible();
   });
 });

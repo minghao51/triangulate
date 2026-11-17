@@ -101,6 +101,52 @@ def cmd_show_case(case_id: str, output: Path = Path("./output")) -> None:
     console.print(events_table)
 
 
+def cmd_show_case_workflow(case_id: str, output: Path = Path("./output")) -> None:
+    """Show durable workflow checkpoints and agent outputs for a case."""
+    service = build_case_service(output)
+    workflow = service.get_case_workflow_details(case_id)
+
+    console.print(
+        Panel.fit(
+            f"Case: [bold]{case_id}[/bold]\n"
+            f"Status: [yellow]{workflow.get('status') or 'n/a'}[/yellow]\n"
+            f"Stage: {workflow.get('current_stage') or 'n/a'}\n"
+            f"Taxonomy: {workflow.get('taxonomy', {}).get('version', 'n/a')}",
+            title="Workflow Diagnostics",
+        )
+    )
+
+    checkpoint_table = Table(title="Checkpoints")
+    checkpoint_table.add_column("Stage", style="magenta")
+    checkpoint_table.add_column("Key", style="cyan")
+    checkpoint_table.add_column("Status", style="yellow")
+    checkpoint_table.add_column("Retry", style="green")
+    checkpoint_table.add_column("Summary", style="white")
+    for checkpoint in workflow.get("checkpoints", [])[:20]:
+        checkpoint_table.add_row(
+            checkpoint.get("stage_name", "-"),
+            checkpoint.get("checkpoint_key", "-"),
+            checkpoint.get("status", "-"),
+            str(checkpoint.get("retry_count", 0)),
+            (checkpoint.get("summary") or "-")[:80],
+        )
+    console.print(checkpoint_table)
+
+    output_table = Table(title="Agent Outputs")
+    output_table.add_column("Stage", style="magenta")
+    output_table.add_column("Agent", style="cyan")
+    output_table.add_column("Type", style="green")
+    output_table.add_column("Summary", style="white")
+    for item in workflow.get("agent_outputs", [])[:20]:
+        output_table.add_row(
+            item.get("stage_name", "-"),
+            item.get("agent_name", "-"),
+            item.get("output_type", "-"),
+            (item.get("summary") or "-")[:80],
+        )
+    console.print(output_table)
+
+
 def cmd_review_case(
     case_id: str | None = None,
     *,
@@ -205,6 +251,33 @@ def cmd_case_exception_action(
     )
 
 
+def cmd_evaluate_case(
+    case_id: str,
+    *,
+    output: Path = Path("./output"),
+) -> None:
+    """Run and print a persisted case evaluation."""
+    service = build_case_service(output)
+    evaluation = service.evaluate_case(case_id)
+
+    console.print(
+        Panel.fit(
+            f"Case: [bold]{case_id}[/bold]\n"
+            f"Evaluation: {evaluation['evaluation_kind']}\n"
+            f"Status: [green]{evaluation['status']}[/green]\n"
+            f"Overall score: [cyan]{evaluation['summary'].get('overall_score', 'n/a')}[/cyan]",
+            title="Case Evaluation",
+        )
+    )
+
+    metrics_table = Table(title="Evaluation Metrics")
+    metrics_table.add_column("Metric", style="cyan")
+    metrics_table.add_column("Value", style="green")
+    for key, value in evaluation.get("metrics", {}).items():
+        metrics_table.add_row(key, str(value))
+    console.print(metrics_table)
+
+
 def cmd_fetch_topic_case(
     query: str,
     output: Path = Path("./output"),
@@ -249,8 +322,12 @@ def cmd_monitor_cases(
         console.print(f"[red]Config file not found: {topics_config}[/red]")
         return
 
-    with open(topics_config) as handle:
-        config = yaml.safe_load(handle) or {}
+    try:
+        with open(topics_config) as handle:
+            config = yaml.safe_load(handle) or {}
+    except (OSError, yaml.YAMLError) as exc:
+        console.print(f"[red]Could not read config {topics_config}: {exc}[/red]")
+        return
 
     topics = config.get("topics", [])
     if not topics:
@@ -270,3 +347,4 @@ def cmd_monitor_cases(
             time.sleep(max(interval, 1) * 60)
     except KeyboardInterrupt:
         console.print("\n[yellow]Monitor stopped[/yellow]")
+

@@ -1,33 +1,22 @@
-"""Content fetcher that coordinates RSS and API sources."""
+"""Backward-compatible content fetcher exports."""
 
 import logging
-import uuid
-from datetime import UTC, datetime
 
-from src.ingester.rss import RSSFeed, SUCCESS_ACQUISITION_STATUSES
-from src.ingester.newsapi import NewsAPIClient
-from src.storage import get_database, Source
+from src.ingester.polling_fetcher import PollingFetcher
+from src.ingester.rss import SUCCESS_ACQUISITION_STATUSES, RSSFeed
 from src.storage.models import SourceType
 
 logger = logging.getLogger(__name__)
 
 
-class ContentFetcher:
-    """Fetch content from multiple sources."""
+class ContentFetcher(PollingFetcher):
+    """Backward-compatible alias for the polling fetcher.
 
-    def __init__(self, config: dict):
-        """Initialize content fetcher.
-
-        Args:
-            config: Configuration dictionary
-        """
-        self.config = config
-        self.db = get_database()
-        self.newsapi_client = (
-            NewsAPIClient()
-            if config.get("sources", {}).get("api", {}).get("newsapi_enabled")
-            else None
-        )
+    The acquisition loop is inherited from :class:`PollingFetcher`; only the two
+    source-acquisition methods are overridden to keep the honest acquisition
+    contract (B02): an RSS feed that failed or was skipped is never recorded as
+    a freshly fetched source, and it never contributes articles.
+    """
 
     def fetch_all(self, limit: int | None = None) -> list[dict]:
         """Fetch content from all configured sources.
@@ -86,7 +75,9 @@ class ContentFetcher:
             feed = RSSFeed(rss_sources[source_name])
             outcome = feed.fetch_with_outcome(max_articles=limit)
             if outcome.status in SUCCESS_ACQUISITION_STATUSES:
-                self._update_source(source_name, SourceType.RSS, rss_sources[source_name])
+                self._update_source(
+                    source_name, SourceType.RSS, rss_sources[source_name]
+                )
             else:
                 logger.warning(
                     "RSS source %s not acquired (%s: %s); last_fetched unchanged",
@@ -105,48 +96,5 @@ class ContentFetcher:
         logger.warning(f"Unknown source: {source_name}")
         return []
 
-    def _update_source(self, name: str, source_type: SourceType, url: str) -> None:
-        """Update source in database.
 
-        Args:
-            name: Source name
-            source_type: Source type
-            url: Source URL
-        """
-        try:
-            session = self.db.get_session_sync()
-
-            # Try to get existing source
-            source = session.query(Source).filter(Source.name == name).first()
-
-            if source:
-                # Update last_fetched time
-                source.last_fetched = datetime.now(UTC)
-            else:
-                # Create new source
-                source = Source(
-                    id=str(uuid.uuid4()),
-                    name=name,
-                    type=source_type,
-                    url=url,
-                    last_fetched=datetime.now(UTC),
-                )
-                session.add(source)
-
-            session.commit()
-
-        except Exception as e:
-            logger.error(f"Error updating source {name}: {e}")
-
-    def store_articles(self, articles: list[dict]) -> int:
-        """Store raw articles in database.
-
-        Args:
-            articles: List of article dictionaries
-
-        Returns:
-            Number of articles stored
-        """
-        # For now, just return the count
-        # Actual storage will be done after AI processing
-        return len(articles)
+__all__ = ["ContentFetcher", "PollingFetcher"]

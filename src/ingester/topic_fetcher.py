@@ -1,7 +1,8 @@
-"""Topic-based article fetcher with AI relevance scoring.
+"""Backward-compatible topic fetcher exports.
 
-This module fetches articles relevant to a specific topic from RSS feeds,
-using AI to score and filter by relevance.
+This module provides the backward-compatible ``TopicFetcher`` facade over
+``RelevanceFetcher`` together with the honest per-source acquisition records
+(B02) that the relevance fetcher does not express on its own.
 
 Acquisition honesty (B02): each source attempt produces a structured
 :class:`SourceAcquisitionOutcome` (``success_with_items``, ``success_empty``,
@@ -10,14 +11,12 @@ healthy empty feed from a timeout, a malformed feed, a missing URL or a
 manual/social seed that was never network-acquired.
 """
 
-import csv
 from dataclasses import dataclass
 from datetime import datetime
-from pathlib import Path
-from typing import Any, Optional
-from urllib.parse import urlparse
+from typing import Any
 
-from src.ai.topic_analyzer import TopicAnalyzer
+from src.ai.prompts import get_prompt
+from src.ingester.relevance_fetcher import RelevanceFetcher
 from src.ai.utils import call_llm
 from src.ingester.rss import (
     SUCCESS_ACQUISITION_STATUSES,
@@ -308,254 +307,91 @@ class SourceAcquisitionOutcome:
         }
 
 
-# Relevance scoring prompt
-RELEVANCE_SCORING_PROMPT = """
-You are an expert in content relevance analysis. Given a topic and an article,
-score how relevant the article is to the topic on a scale of 0.0 to 1.0.
+class TopicFetcher(RelevanceFetcher):
+    """Backward-compatible relevance fetcher that also reports acquisition honesty.
 
-Topic: {topic}
+    Source loading, article retrieval and relevance scoring are inherited from
+    :class:`RelevanceFetcher`; :meth:`_fetch_from_sources` and
+    :meth:`fetch_articles_by_topic` are overridden so the honest per-source
+    outcome records from B02 are attached without duplicating the fetch loop.
+    """
 
-Article:
-Title: {title}
-Source: {source}
-Content Preview: {content}
-
-Scoring criteria:
-- 0.9-1.0: Highly relevant - directly about the topic
-- 0.7-0.9: Very relevant - closely related to the topic
-- 0.5-0.7: Moderately relevant - tangentially related
-- 0.3-0.5: Somewhat relevant - mentions the topic but not focus
-- 0.0-0.3: Not relevant - barely mentions or unrelated
-
-Return ONLY a number between 0.0 and 1.0.
-"""
-
-
-class TopicFetcher:
-    """Fetch articles relevant to a topic using AI guidance."""
-
-    def __init__(self, config: dict):
-        """Initialize topic fetcher.
-
-        Args:
-            config: Configuration dictionary
-        """
-        self.config = config
-        self.analyzer = TopicAnalyzer(config)
-        self.data_dir = Path("data/source")
+    # Populated by ``_fetch_from_sources``; ``None`` means the caller supplied a
+    # legacy result without structured outcomes, which must never be reported as
+    # a complete acquisition.
+    _last_source_outcomes: list[dict[str, Any]] | None = None
+    _last_source_plan_total: int = 0
 
     async def fetch_articles_by_topic(
         self,
         query: str,
-        conflict: Optional[str] = None,
+        conflict: str | None = None,
         max_articles: int = 50,
         relevance_threshold: float = 0.3,
-        manual_links: Optional[list[str]] = None,
-        confirmed_parties: Optional[list[str]] = None,
+        manual_links: list[str] | None = None,
+        confirmed_parties: list[str] | None = None,
     ) -> dict:
-        """Fetch articles relevant to the topic.
+        """Delegate to the relevance fetcher and add honest acquisition data.
 
-        Args:
-            query: User's topic query
-            conflict: Conflict context (auto-detected if None)
-            max_articles: Maximum number of articles to fetch
-            relevance_threshold: Minimum relevance score (0-1)
-
-        Returns:
-            Dictionary with fetched articles and metadata
+        Articles, fetch exceptions and relevance scoring all come from
+        :class:`RelevanceFetcher`; this override only attaches validated
+        per-source outcome records plus coverage, so a caller can never mistake
+        an unobserved or degraded run for a complete acquisition.
         """
-        # Detect conflict if not provided
-        if conflict is None:
-            conflict = await self.analyzer.detect_conflict(query)
-
-        # Generate search queries
-        search_queries = await self.analyzer.generate_search_queries(query, conflict)
-
-        # Load sources for this conflict
-        sources = self._load_sources(conflict)
-        fetch_exceptions: list[dict[str, Any]] = []
-        if not sources:
-            fetch_exceptions.append(
-                {
-                    "type": "source_fetch_failure",
-                    "message": f"No source pack available for conflict '{conflict}'.",
-                    "severity": "high",
-                    "details": {"conflict": conflict},
-                }
-            )
-
-        # Prioritize sources
-        prioritized_sources = await self.analyzer.prioritize_sources(
+        self._last_source_outcomes = None
+        self._last_source_plan_total = 0
+        result = await super().fetch_articles_by_topic(
             query,
-            conflict,
-            sources,
+            conflict=conflict,
+            max_articles=max_articles,
+            relevance_threshold=relevance_threshold,
+            manual_links=manual_links,
+            confirmed_parties=confirmed_parties,
         )
 
-        # Fetch articles from RSS feeds
-        source_plan = self._build_source_plan(
-            prioritized_sources,
-            search_queries=search_queries,
-            confirmed_parties=confirmed_parties or [],
-        )
-
-        for link in manual_links or []:
-            source_plan.append(
-                {
-                    "name": urlparse(link).netloc.replace("www.", "") or "manual",
-                    "url": link,
-                    "source_type": "manual",
-                    "party_affiliation": "",
-                    "language": "",
-                    "credibility_tier": "user_supplied",
-                    "fetch_strategy": "manual",
-                    "queries": search_queries[:5],
-                    "confirmed_parties": confirmed_parties or [],
-                    "relevance_score": 1.0,
-                }
-            )
-
-        fetched = await self._fetch_from_sources(
-            source_plan,
-            max_articles * 2,  # Fetch more to account for filtering
-        )
-        outcomes: list[dict[str, Any]] | None
-        if isinstance(fetched, list):
-            articles = fetched
-            outcomes = None
-        else:
-            articles = fetched["articles"]
-            fetch_exceptions.extend(fetched["exceptions"])
-            raw_outcomes = fetched.get("source_outcomes")
-            outcomes = (
-                [dict(outcome) for outcome in raw_outcomes]
-                if raw_outcomes is not None
-                else None
-            )
+        outcomes = self._last_source_outcomes
+        if outcomes is None:
+            # The base class canonicalises ``source_outcomes`` from whatever the
+            # fetch path returned (including a patched ``_fetch_from_sources``);
+            # prefer those validated records over the legacy side channel.
+            inherited = result.get("source_outcomes")
+            if isinstance(inherited, list) and result.get("acquisition_observed") is True:
+                outcomes = inherited
+        requested_total = self._last_source_plan_total or 0
+        if not requested_total:
+            visible_plan = result.get("source_plan")
+            requested_total = len(visible_plan) if isinstance(visible_plan, list) else 0
+        result["source_plan_total"] = requested_total
 
         if outcomes is None:
             # A legacy/mock caller result without structured outcomes must not be
             # reported as complete, successful acquisition.
             legacy_counts = describe_source_outcomes(
-                [], requested_count=len(source_plan)
+                [], requested_count=requested_total
             )["counts"]
-            legacy_counts["articles"] = len(articles)
-            acquisition = {
-                "coverage": COVERAGE_UNKNOWN,
-                "counts": legacy_counts,
-                "observed": False,
-            }
-            sources_used: list[str] = []
-        else:
-            acquisition = describe_source_outcomes(
-                outcomes, requested_count=len(source_plan)
-            )
-            acquisition["observed"] = True
-            # ``sources_used`` derives from validated status + attempt, never
-            # from a self-declared ``succeeded`` flag.
-            sources_used = [
-                outcome["source_name"]
-                for outcome in outcomes
-                if validated_outcome_kind(outcome) in SUCCESS_ACQUISITION_STATUSES
-            ]
+            fetched = result.get("articles_fetched")
+            if isinstance(fetched, int) and not isinstance(fetched, bool):
+                legacy_counts["articles"] = fetched
+            result["source_outcomes"] = []
+            result["acquisition_coverage"] = COVERAGE_UNKNOWN
+            result["acquisition_counts"] = legacy_counts
+            result["acquisition_observed"] = False
+            result["sources_used"] = []
+            return result
 
-        # Score articles by relevance
-        scored_articles = await self._score_articles(
-            articles,
-            query,
-            relevance_threshold,
-        )
-
-        # Sort by relevance and limit
-        scored_articles.sort(key=lambda a: a.get("relevance_score", 0), reverse=True)
-        final_articles = scored_articles[:max_articles]
-
-        return {
-            "articles": final_articles,
-            "conflict": conflict,
-            "queries_generated": search_queries,
-            # Display truncation only; the full outcome set below keeps coverage.
-            "source_plan": source_plan[:20],
-            "source_plan_total": len(source_plan),
-            "source_outcomes": outcomes or [],
-            "acquisition_coverage": acquisition["coverage"],
-            "acquisition_counts": acquisition["counts"],
-            "acquisition_observed": acquisition["observed"],
-            "sources_used": sources_used,
-            "articles_fetched": len(articles),
-            "articles_processed": len(final_articles),
-            "confirmed_parties": confirmed_parties or [],
-            "manual_links": manual_links or [],
-            "fetch_exceptions": fetch_exceptions,
-        }
-
-    def _load_sources(self, conflict: str) -> list[dict]:
-        """Load media sources for a conflict.
-
-        Args:
-            conflict: Conflict folder name
-
-        Returns:
-            List of source dictionaries
-        """
-        conflict_dir = self.data_dir / conflict
-
-        if not conflict_dir.exists():
-            print(f"Warning: Conflict directory not found: {conflict_dir}")
-            return []
-
-        # Find sources CSV file
-        csv_files = list(conflict_dir.glob("*.csv"))
-        if not csv_files:
-            print(f"Warning: No CSV file found in {conflict_dir}")
-            return []
-
-        csv_file = csv_files[0]
-
-        sources = []
-        with open(csv_file, "r", encoding="utf-8") as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                sources.append({
-                    "name": row.get("name", row.get("source", "")),
-                    "url": row.get("url", row.get("rss", "")),
-                    "country": row.get("country", ""),
-                    "language": row.get("language", ""),
-                    "affiliation": row.get(
-                        "affiliation", row.get("party_affiliation", "")
-                    ),
-                    "source_type": row.get("source_type", "rss"),
-                    "credibility_tier": row.get("credibility_tier", "unknown"),
-                    "fetch_strategy": row.get("fetch_strategy", "rss"),
-                    "perspective": row.get("perspective", ""),
-                })
-
-        return sources
-
-    def _build_source_plan(
-        self,
-        sources: list[dict],
-        *,
-        search_queries: list[str],
-        confirmed_parties: list[str],
-    ) -> list[dict]:
-        """Build a source-plan that preserves acquisition intent."""
-        plan = []
-        for source in sources:
-            plan.append(
-                {
-                    "name": source.get("name", ""),
-                    "url": source.get("url", ""),
-                    "source_type": source.get("source_type", "rss"),
-                    "party_affiliation": source.get("affiliation", ""),
-                    "language": source.get("language", ""),
-                    "credibility_tier": source.get("credibility_tier", "unknown"),
-                    "fetch_strategy": source.get("fetch_strategy", "rss"),
-                    "queries": search_queries[:5],
-                    "confirmed_parties": confirmed_parties,
-                    "relevance_score": source.get("relevance_score", 0.0),
-                }
-            )
-        return plan
+        summary = describe_source_outcomes(outcomes, requested_count=requested_total)
+        result["source_outcomes"] = outcomes
+        result["acquisition_coverage"] = summary["coverage"]
+        result["acquisition_counts"] = summary["counts"]
+        result["acquisition_observed"] = True
+        # ``sources_used`` derives from validated status, never from a
+        # self-declared ``succeeded`` flag.
+        result["sources_used"] = [
+            outcome["source_name"]
+            for outcome in outcomes
+            if validated_outcome_kind(outcome) in SUCCESS_ACQUISITION_STATUSES
+        ]
+        return result
 
     async def _fetch_from_sources(
         self,
@@ -678,6 +514,10 @@ class TopicFetcher:
 
         serialized = [outcome.to_dict() for outcome in outcomes]
         summary = describe_source_outcomes(serialized, requested_count=len(sources))
+        # Hand the honest observation to ``fetch_articles_by_topic`` without
+        # re-deriving it (the relevance fetcher drops non-article keys).
+        self._last_source_outcomes = serialized
+        self._last_source_plan_total = len(sources)
         return {
             "articles": articles,
             "exceptions": exceptions,
@@ -809,100 +649,18 @@ class TopicFetcher:
             },
         }
 
-    def _build_sparse_article(
-        self, source: dict[str, Any], url: str, source_type: str
-    ) -> dict[str, Any]:
-        source_name = source.get("name") or urlparse(url).netloc.replace("www.", "") or source_type
-        content = (
-            f"{source_type.title()} source placeholder for {source_name}. "
-            f"Original URL: {url}. Queries: {', '.join(source.get('queries', [])[:3])}"
-        )
-        return {
-            "title": f"{source_type.title()} source: {source_name}",
-            "url": url,
-            "content": content,
-            "published_at": datetime.now().isoformat(),
-            "source": source_name,
-            "source_type": source_type,
-            "source_metadata": {
-                "submitted_via": "source_plan",
-                "credibility_tier": source.get("credibility_tier", "unknown"),
-                "fetch_strategy": source.get("fetch_strategy", source_type),
-                "queries": source.get("queries", []),
-                "confirmed_parties": source.get("confirmed_parties", []),
-                "source_plan_score": source.get("relevance_score", 0.0),
-            },
-        }
-
-    def _build_fetch_exception(
-        self,
-        source: dict[str, Any],
-        exception_type: str,
-        message: str,
-        *,
-        details: dict[str, Any] | None = None,
-    ) -> dict[str, Any]:
-        return {
-            "type": exception_type,
-            "message": message,
-            "severity": "high",
-            "details": {
-                "source_name": source.get("name"),
-                "source_type": source.get("source_type"),
-                "fetch_strategy": source.get("fetch_strategy"),
-                **(details or {}),
-            },
-        }
-
-    async def _score_articles(
-        self,
-        articles: list[dict],
-        query: str,
-        threshold: float,
-    ) -> list[dict]:
-        """Score articles by relevance to topic.
-
-        Args:
-            articles: List of article dictionaries
-            query: Topic query
-            threshold: Minimum relevance score
-
-        Returns:
-            Filtered and scored articles
-        """
-        scored_articles = []
-
-        for article in articles:
-            # Score relevance
-            score = await self._score_relevance(article, query)
-
-            # Filter by threshold
-            if score >= threshold:
-                article["relevance_score"] = score
-                scored_articles.append(article)
-
-        return scored_articles
-
     async def _score_relevance(
         self,
         article: dict,
         query: str,
     ) -> float:
-        """Score article's relevance to topic.
-
-        Args:
-            article: Article dictionary
-            query: Topic query
-
-        Returns:
-            Relevance score 0.0-1.0
-        """
-        # Get content preview (first 500 chars)
+        """Preserve the historical patch point for LLM scoring."""
         content = article.get("content", "")[:500]
         title = article.get("title", "")
         source = article.get("source", "")
 
-        prompt = RELEVANCE_SCORING_PROMPT.format(
+        prompt = get_prompt(
+            "RELEVANCE_SCORING",
             topic=query,
             title=title,
             source=source,
@@ -915,11 +673,10 @@ class TopicFetcher:
                 response_format="text",
                 config=self.config.get("ai", {}),
             )
-
-            # Parse score
             score = float(response.strip())
-            return max(0.0, min(1.0, score))  # Clamp to 0-1
-
+            return max(0.0, min(1.0, score))
         except Exception:
-            # Default to moderate score on error
             return 0.5
+
+
+__all__ = ["TopicFetcher", "RelevanceFetcher", "call_llm", "RSSFeed"]

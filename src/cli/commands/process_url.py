@@ -7,7 +7,7 @@ from pathlib import Path
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
-from src.ai.workflow import AIWorkflow
+from src.ai.baseline_workflow import BaselineWorkflow
 from src.ingester.url_capture import fetch_article_content
 from src.runtime import build_case_service
 
@@ -18,7 +18,7 @@ def pretty_print_results(event_data: dict):
     """Pretty print the workflow results.
 
     Args:
-        event_data: Processed event data from AIWorkflow
+        event_data: Processed event data from the AI workflow
     """
     console.print("\n[bold cyan]{'=' * 80}[/bold cyan]")
     console.print("[bold cyan]AI WORKFLOW RESULTS[/bold cyan]")
@@ -132,7 +132,7 @@ async def cmd_process_url_async(
     console.print("Processing through AI workflow...")
     console.print("This may take a minute...\n")
 
-    workflow = AIWorkflow(config)
+    workflow = BaselineWorkflow(config)
     event = await workflow.process_article(article)
 
     if not event:

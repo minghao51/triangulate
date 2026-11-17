@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import type { Party } from '../../types/backend-models';
 import { getPartiesForCase } from '../../services/api';
-import { GitMerge, Check, AlertCircle } from 'lucide-react';
+import { PartyCardAccordion } from '../../components/parties/PartyInvestigationPanel';
 import './PartiesTab.css';
 
 interface PartiesTabProps {
@@ -29,36 +29,7 @@ const PartiesTab: React.FC<PartiesTabProps> = ({ caseId, refreshToken = 0 }) => 
             <div className="parties-grid">
                 {error && <div>Failed to load parties: {error}</div>}
                 {parties.map(party => (
-                    <div key={party.id} className="party-card glass-panel">
-                        <div className={`party-stance-bar stance-${party.overallStance}`} />
-                        <div className="party-card-inner">
-                            <div className="party-card-header">
-                                <h4>{party.name}</h4>
-                                {party.isModelInferred ? (
-                                    <span className="badge badge-warning" title="Model Inferred"><AlertCircle size={12} /> Inferred</span>
-                                ) : (
-                                    <span className="badge badge-success" title="Bootstrap Confirmed"><Check size={12} /> Confirmed</span>
-                                )}
-                            </div>
-
-                            <div className="party-aliases">
-                                {party.aliases.length > 0 && <span className="alias-label">a.k.a: </span>}
-                                {party.aliases.join(', ')}
-                            </div>
-
-                            <p className="party-description">{party.description}</p>
-
-                            <div className="party-footer">
-                                <div className="party-metric">
-                                    <GitMerge size={16} className="text-secondary" />
-                                    <span>{party.associatedClaimsCount} Associated Claims</span>
-                                </div>
-                                <div className={`party-stance-badge stance-badge-${party.overallStance}`}>
-                                    Stance: {party.overallStance.toUpperCase()}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+                    <PartyCardAccordion key={party.id} party={party} />
                 ))}
             </div>
         </div>

@@ -1,11 +1,11 @@
 """Collector agent: Extract factual claims from articles."""
-
 import logging
 from dataclasses import dataclass
 from typing import Any
 import os
 from litellm import acompletion
 
+from src.ai.prompts import get_prompt
 from src.ai.schemas import (
     ClaimCollectionSchema,
     ExtractionOutcomeSchema,
@@ -17,44 +17,8 @@ logger = logging.getLogger(__name__)
 
 # Hard truncation applied to the article body before it is sent to the model.
 # Recorded on every extraction outcome so "saw a prefix" is never reported as
-# "examined the capture".
+# "examined the capture". The prompt text itself lives in ``src.ai.prompts``.
 COLLECTOR_CONTENT_LIMIT = 5000
-
-COLLECTOR_PROMPT = """You are an expert analyst specializing in extracting factual claims from news articles.
-
-Your task is to read an article and extract discrete, verifiable factual claims.
-
-For each claim, extract:
-1. The claim text (what is being asserted)
-2. Who/what is involved (people, organizations, entities)
-3. When it happened (timestamp or date)
-4. Where it happened (location)
-5. Confidence level (HIGH/MEDIUM/LOW based on source specificity)
-
-Guidelines:
-- Focus on objective facts, not opinions or predictions
-- Extract multiple claims if they exist
-- Be specific with names, dates, and locations
-- If a claim is vague, assign LOW confidence
-- Output as JSON array of claims
-
-Article to analyze:
-{title}
-
-{content}
-
-Output format (JSON array):
-[
-  {{
-    "claim": "Specific factual assertion",
-    "who": ["Entity1", "Entity2"],
-    "when": "Date or time description",
-    "where": "Location",
-    "confidence": "HIGH|MEDIUM|LOW"
-  }}
-]
-
-Extract claims:"""
 
 
 @dataclass(frozen=True)
@@ -140,7 +104,8 @@ async def collect_claims(
             )
             return result if include_metadata else []
 
-        prompt = COLLECTOR_PROMPT.format(
+        prompt = get_prompt(
+            "COLLECTOR",
             title=article.get("title", ""),
             content=supplied,
         )
@@ -151,7 +116,7 @@ async def collect_claims(
             prompt=prompt,
             schema=ClaimCollectionSchema,
             temperature=0.3,
-            max_tokens=2000,
+            max_tokens=4000,
             fallback=lambda: {"claims": _fallback_claims(article)},
             completion_func=acompletion,
         )
@@ -190,6 +155,7 @@ async def collect_claims(
             reason=f"extraction_error:{type(e).__name__}",
         )
         return result if include_metadata else []
+
 
 
 def _fallback_claims(article: dict[str, Any]) -> list[dict[str, Any]]:

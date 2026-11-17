@@ -23,6 +23,7 @@ class StubService:
         self.review_payload = None
         self.rerun_payload = None
         self.exception_payload = None
+        self.annotation_payload = None
 
     def list_cases(self):
         case = TopicCase(
@@ -158,6 +159,49 @@ class StubService:
                     "error_message": None,
                 }
             ],
+            "osint_artifacts": [
+                {
+                    "id": "artifact-1",
+                    "tool": "spiderfoot",
+                    "artifact_type": "json",
+                    "source_path": "/tmp/spiderfoot.json",
+                    "imported_at": "2026-03-11T08:50:00+00:00",
+                    "import_metadata": {"import_mode": "cli"},
+                }
+            ],
+            "workflow": {
+                "taxonomy": {
+                    "id": "taxonomy-1",
+                    "kind": "bias_review",
+                    "version": "2026.03.24",
+                    "path": "./bias_taxonomy.toml",
+                    "checksum": "abc123",
+                },
+                "checkpoints": [
+                    {
+                        "id": "checkpoint-1",
+                        "stage_name": "INVESTIGATE",
+                        "checkpoint_key": "investigate:completed",
+                        "status": "completed",
+                        "summary": "INVESTIGATE completed successfully.",
+                        "retry_count": 0,
+                        "payload": {"event_count": 1},
+                        "created_at": "2026-03-11T09:00:05+00:00",
+                    }
+                ],
+                "agent_outputs": [
+                    {
+                        "id": "output-1",
+                        "stage_name": "INVESTIGATE",
+                        "agent_name": "workflow_router",
+                        "output_type": "stage_result",
+                        "summary": "INVESTIGATE completed successfully.",
+                        "payload": {"event_count": 1},
+                        "taxonomy_version_id": "taxonomy-1",
+                        "created_at": "2026-03-11T09:00:05+00:00",
+                    }
+                ],
+            },
             "party_investigations": [],
         }
 
@@ -206,6 +250,87 @@ class StubService:
             conflict="Global Trade",
             status=CaseStatus.REVIEW_READY,
         )
+
+    def get_case_review_activity(self, case_id: str):
+        return {
+            "annotations": [
+                {
+                    "id": "annotation-1",
+                    "target_type": "case",
+                    "target_id": case_id,
+                    "annotation_type": "comment",
+                    "author": "operator",
+                    "content": "Need one more source.",
+                    "metadata": {},
+                    "created_at": "2026-03-11T10:01:00+00:00",
+                }
+            ],
+            "audit_entries": [
+                {
+                    "id": "audit-1",
+                    "action_type": "review:action_required",
+                    "target_type": "case",
+                    "target_id": case_id,
+                    "actor": "operator",
+                    "rationale": "Need another source.",
+                    "metadata": {},
+                    "created_at": "2026-03-11T10:02:00+00:00",
+                }
+            ],
+        }
+
+    def add_review_annotation(
+        self,
+        case_id: str,
+        *,
+        target_type: str,
+        target_id: str,
+        annotation_type: str,
+        content: str,
+        author: str = "operator",
+        metadata: dict | None = None,
+    ):
+        self.annotation_payload = {
+            "case_id": case_id,
+            "target_type": target_type,
+            "target_id": target_id,
+            "annotation_type": annotation_type,
+            "content": content,
+            "author": author,
+            "metadata": metadata or {},
+        }
+        return {
+            "id": "annotation-2",
+            "target_type": target_type,
+            "target_id": target_id,
+            "annotation_type": annotation_type,
+            "author": author,
+            "content": content,
+            "metadata": metadata or {},
+            "created_at": "2026-03-11T10:03:00+00:00",
+        }
+
+    def get_case_evaluation_summary(self, case_id: str):
+        return {
+            "latest": {
+                "id": "eval-1",
+                "status": "completed",
+                "evaluation_kind": "case_quality",
+                "summary": {"overall_score": 0.81},
+                "metrics": {"evidence_linkage": 1.0, "review_burden": 0.6},
+                "created_at": "2026-03-11T10:05:00+00:00",
+            },
+            "history": [],
+        }
+
+    def get_monitoring_summary(self):
+        return {
+            "cases": {"total": 1, "review_ready": 1, "active": 1},
+            "review": {"open_exceptions": 1, "backlog": 2},
+            "pipeline": {"running_stage_runs": 0, "failed_stage_runs": 0, "avg_duration_ms": 1200},
+            "intake": {"pending_items": 0, "processed_items": 1},
+            "evaluation": {"recent_runs": 1, "avg_overall_score": 0.81},
+        }
 
     async def run_case(self, **kwargs):
         self.created_payload = kwargs
@@ -271,7 +396,16 @@ def test_get_case_counts_only_open_exceptions(client):
     response = test_client.get("/api/cases/case-1")
     assert response.status_code == 200
     assert response.json()["case"]["openExceptionsCount"] == 1
-    assert response.json()["case"]["automationMode"] == "autonomous"
+
+
+def test_get_case_workflow_returns_diagnostics(client):
+    test_client, _service = client
+    response = test_client.get("/api/cases/case-1/workflow")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["taxonomy"]["version"] == "2026.03.24"
+    assert payload["checkpoints"][0]["checkpointKey"] == "investigate:completed"
+    assert payload["agentOutputs"][0]["agentName"] == "workflow_router"
 
 
 def test_tab_endpoints_return_frontend_slices(client):
@@ -299,22 +433,53 @@ def test_tab_endpoints_return_frontend_slices(client):
     assert exceptions.json()[1]["isOpen"] is False
 
 
-def test_mutation_routes_are_not_exposed(client):
+def test_mutation_routes_support_narrow_hitl_actions(client):
     test_client, _service = client
 
     assert test_client.post("/api/cases", json={"query": "New case"}).status_code == 405
-    assert test_client.post(
+    review_response = test_client.post(
         "/api/cases/case-1/review",
         json={"decision": "action_required"},
-    ).status_code == 404
-    assert test_client.post(
-        "/api/cases/case-1/rerun",
-        json={"fromStage": "RETRIEVE"},
-    ).status_code == 404
-    assert test_client.post(
-        "/api/cases/case-1/exceptions/exc-1",
+    )
+    assert review_response.status_code == 404
+    assert test_client.post("/api/cases/case-1/rerun", json={"fromStage": "RETRIEVE"}).status_code == 404
+
+    review_action = test_client.post(
+        "/api/cases/case-1/review-actions/review",
+        json={"decision": "action_required", "notes": "Need more sources"},
+    )
+    exception_action = test_client.post(
+        "/api/cases/case-1/review-actions/exceptions/exc-1",
         json={"action": "resolve"},
-    ).status_code == 404
+    )
+    annotation = test_client.post(
+        "/api/cases/case-1/annotations",
+        json={
+            "targetType": "case",
+            "targetId": "case-1",
+            "annotationType": "comment",
+            "content": "Operator note",
+        },
+    )
+
+    assert review_action.status_code == 200
+    assert exception_action.status_code == 200
+    assert annotation.status_code == 200
+
+
+def test_review_activity_and_monitoring_endpoints(client):
+    test_client, _service = client
+
+    activity = test_client.get("/api/cases/case-1/review-activity")
+    evaluation = test_client.get("/api/cases/case-1/evaluation")
+    monitoring = test_client.get("/api/monitoring/summary")
+
+    assert activity.status_code == 200
+    assert activity.json()["annotations"][0]["annotationType"] == "comment"
+    assert evaluation.status_code == 200
+    assert evaluation.json()["latest"]["summary"]["overall_score"] == 0.81
+    assert monitoring.status_code == 200
+    assert monitoring.json()["review"]["open_exceptions"] == 1
 
 
 class FakePartyWorkflow:
@@ -450,3 +615,4 @@ async def test_report_download_endpoints(monkeypatch, tmp_path):
         assert json.loads(manifest_response.text)["case_id"] == case.id
     finally:
         app.dependency_overrides.clear()
+

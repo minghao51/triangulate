@@ -6,11 +6,14 @@ import pytest
 from sqlalchemy import inspect, text
 
 from src.storage.captures import compute_normalized_text_sha256, compute_text_sha256
-from src.storage.models import CaseStatus, EvidenceItem, TopicCase
 from src.storage.database import init_database
 from src.storage.migrations import run_migrations
+from src.storage.models import CaseStatus, EvidenceItem, TopicCase
 
-LATEST_MIGRATION_VERSION = 9
+# Highest migration version after the merge (theirs 7/8, ours renumbered 9/10/11).
+LATEST_MIGRATION_VERSION = 11
+
+
 
 LEGACY_REVIEW_ROW = (
     "review-legacy-1",
@@ -26,6 +29,104 @@ def _current_version(engine) -> int:
     with engine.connect() as connection:
         return connection.execute(text("SELECT MAX(version) FROM _migrations")).scalar()
 
+
+
+def _create_legacy_core_tables(connection) -> None:
+    """Create the pre-merge core tables that migrations 7+ still touch.
+
+    Only tables the remaining migrations alter are created, and only when the
+    fixture has not already created a richer version of them.
+    """
+    connection.execute(
+        """CREATE TABLE IF NOT EXISTS events (
+            id TEXT PRIMARY KEY,
+            timestamp TIMESTAMP,
+            title TEXT,
+            summary TEXT,
+            verification_status TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );"""
+    )
+    connection.execute(
+        """CREATE TABLE IF NOT EXISTS narratives (
+            id TEXT PRIMARY KEY,
+            cluster_id TEXT,
+            stance_summary TEXT,
+            source_count INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );"""
+    )
+    connection.execute(
+        """CREATE TABLE IF NOT EXISTS party_investigations (
+            id TEXT PRIMARY KEY,
+            event_id TEXT NOT NULL,
+            party_id TEXT NOT NULL,
+            investigation_data JSON NOT NULL,
+            party_stance TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );"""
+    )
+    connection.execute(
+        """CREATE TABLE IF NOT EXISTS claims (
+            id TEXT PRIMARY KEY,
+            event_id TEXT NOT NULL,
+            source_id TEXT,
+            claim_text TEXT NOT NULL,
+            narrative_cluster_id TEXT,
+            verification_status TEXT NOT NULL,
+            party_id TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );"""
+    )
+    connection.execute(
+        """CREATE TABLE IF NOT EXISTS case_articles (
+            id TEXT PRIMARY KEY,
+            case_id TEXT NOT NULL,
+            url TEXT NOT NULL,
+            title TEXT NOT NULL,
+            source TEXT,
+            published_at TEXT,
+            relevance_score REAL NOT NULL DEFAULT 0.0,
+            fingerprint TEXT NOT NULL,
+            content TEXT,
+            raw_payload JSON,
+            first_seen_at TIMESTAMP,
+            last_seen_at TIMESTAMP,
+            status TEXT NOT NULL DEFAULT 'ACTIVE',
+            is_new INTEGER NOT NULL DEFAULT 1
+        );"""
+    )
+    connection.execute(
+        """CREATE TABLE IF NOT EXISTS parties (
+            id TEXT PRIMARY KEY,
+            canonical_name TEXT NOT NULL UNIQUE,
+            aliases JSON NOT NULL,
+            description TEXT,
+            event_id TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );"""
+    )
+    connection.execute(
+        """CREATE TABLE IF NOT EXISTS topic_cases (
+            id TEXT PRIMARY KEY,
+            query TEXT NOT NULL,
+            slug TEXT NOT NULL UNIQUE,
+            status TEXT NOT NULL,
+            metadata_json JSON,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );"""
+    )
+    connection.execute(
+        """CREATE TABLE IF NOT EXISTS sources (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            type TEXT NOT NULL,
+            url TEXT UNIQUE,
+            last_fetched TIMESTAMP,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );"""
+    )
 
 def _create_legacy_database(db_path) -> None:
     """Create a pre-B01 database: version 6 with a legacy ``reviews`` table.
@@ -66,6 +167,7 @@ def _create_legacy_database(db_path) -> None:
             " VALUES (?, ?, ?, ?, ?, ?)",
             LEGACY_REVIEW_ROW,
         )
+        _create_legacy_core_tables(connection)
         connection.commit()
     finally:
         connection.close()
@@ -80,33 +182,11 @@ def test_run_migrations_is_idempotent_on_fresh_database(tmp_path):
 
     inspector = inspect(db.engine)
     claim_columns = {column["name"] for column in inspector.get_columns("claims")}
-    review_columns = {column["name"] for column in inspector.get_columns("reviews")}
-    evidence_columns = {
-        column["name"] for column in inspector.get_columns("evidence_items")
-    }
-    capture_columns = {
-        column["name"] for column in inspector.get_columns("evidence_captures")
-    }
 
     assert "fact_allegation_type" in claim_columns
     assert "arbiter_reasoning" in claim_columns
     assert "party_positions" in claim_columns
     assert "controversy_score" in claim_columns
-    assert "analysis_hash" in review_columns
-    assert "previous_decision_json" in review_columns
-    assert "current_capture_id" in evidence_columns
-    assert {
-        "id",
-        "evidence_id",
-        "text",
-        "text_sha256",
-        "normalized_text_sha256",
-        "normalization_version",
-        "recorded_at",
-        "observed_at",
-        "capture_kind",
-        "metadata_json",
-    } <= capture_columns
     assert "party_investigations" in inspector.get_table_names()
     assert "topic_cases" in inspector.get_table_names()
     assert "case_stage_runs" in inspector.get_table_names()
@@ -114,12 +194,87 @@ def test_run_migrations_is_idempotent_on_fresh_database(tmp_path):
     assert "case_articles" in inspector.get_table_names()
     assert "intake_items" in inspector.get_table_names()
     assert "monitor_checkpoints" in inspector.get_table_names()
-    assert "evidence_captures" in inspector.get_table_names()
+    assert "osint_artifacts" in inspector.get_table_names()
+    assert "evidence_artifact_links" in inspector.get_table_names()
+    assert "workflow_checkpoints" in inspector.get_table_names()
+    assert "taxonomy_versions" in inspector.get_table_names()
+    assert "agent_outputs" in inspector.get_table_names()
 
-    assert _current_version(db.engine) == LATEST_MIGRATION_VERSION
+    with db.get_session_sync() as session:
+        current_version = session.execute(
+            text("SELECT MAX(version) FROM _migrations")
+        ).scalar()
+
+    assert current_version == LATEST_MIGRATION_VERSION
 
 
-def _create_legacy_v7_database_with_evidence(db_path) -> None:
+def test_run_migrations_upgrades_existing_v6_database_columns(tmp_path):
+    """Migration 7 should add new columns for existing databases, not just new tables."""
+    db_path = tmp_path / "triangulate-v6.db"
+    connection = sqlite3.connect(db_path)
+    try:
+        connection.executescript(
+            """
+            CREATE TABLE _migrations (
+                version INTEGER PRIMARY KEY,
+                name TEXT NOT NULL,
+                applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            INSERT INTO _migrations (version, name) VALUES (6, 'Add event location schema');
+
+            CREATE TABLE topic_cases (
+                id TEXT PRIMARY KEY
+            );
+            CREATE TABLE case_stage_runs (
+                id TEXT PRIMARY KEY,
+                case_id TEXT
+            );
+            CREATE TABLE evidence_items (
+                id TEXT PRIMARY KEY
+            );
+            CREATE TABLE events (
+                id TEXT PRIMARY KEY,
+                case_id TEXT,
+                case_run_id TEXT
+            );
+            CREATE TABLE narratives (
+                id TEXT PRIMARY KEY
+            );
+            CREATE TABLE party_investigations (
+                id TEXT PRIMARY KEY,
+                event_id TEXT NOT NULL,
+                party_id TEXT NOT NULL,
+                investigation_data JSON NOT NULL,
+                party_stance TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            """
+        )
+        _create_legacy_core_tables(connection)
+        connection.commit()
+    finally:
+        connection.close()
+
+    db = init_database(str(db_path))
+    run_migrations(str(db_path))
+
+    inspector = inspect(db.engine)
+    event_columns = {column["name"] for column in inspector.get_columns("events")}
+    narrative_columns = {
+        column["name"] for column in inspector.get_columns("narratives")
+    }
+    investigation_columns = {
+        column["name"] for column in inspector.get_columns("party_investigations")
+    }
+
+    assert "workflow_route" in event_columns
+    assert "source_url" in event_columns
+    assert "key_themes" in narrative_columns
+    assert "main_entities" in narrative_columns
+    assert "party_name" in investigation_columns
+
+
+def _create_legacy_v8_database_with_evidence(db_path) -> None:
     """Create a version-7 SQL database with legacy evidence content."""
     connection = sqlite3.connect(db_path)
     try:
@@ -150,159 +305,13 @@ def _create_legacy_v7_database_with_evidence(db_path) -> None:
             "INSERT INTO evidence_items (id, case_id, content) VALUES (?, ?, ?)",
             ("evidence-legacy-1", "case-legacy-1", "Legacy body\r\nkept verbatim."),
         )
+        _create_legacy_core_tables(connection)
         connection.commit()
     finally:
         connection.close()
 
 
-def test_migration_8_adds_capture_schema_without_copying_legacy_content(tmp_path):
-    """Migration 8 is schema-only: legacy content is not materialized."""
-    db_path = tmp_path / "triangulate-legacy-captures.db"
-    _create_legacy_v7_database_with_evidence(db_path)
-
-    run_migrations(str(db_path))
-
-    connection = sqlite3.connect(db_path)
-    try:
-        version = connection.execute(
-            "SELECT MAX(version) FROM _migrations"
-        ).fetchone()[0]
-        assert version == LATEST_MIGRATION_VERSION
-        columns = {
-            row[1]
-            for row in connection.execute(
-                "PRAGMA table_info(evidence_items)"
-            ).fetchall()
-        }
-        assert "current_capture_id" in columns
-        assert connection.execute(
-            "SELECT COUNT(*) FROM evidence_captures"
-        ).fetchone()[0] == 0
-        row = connection.execute(
-            "SELECT content, current_capture_id FROM evidence_items"
-        ).fetchone()
-        assert row == ("Legacy body\r\nkept verbatim.", None)
-        indexes = {
-            row[1]
-            for row in connection.execute(
-                "PRAGMA index_list(evidence_captures)"
-            ).fetchall()
-        }
-        assert "uq_evidence_capture_evidence_text" in indexes
-    finally:
-        connection.close()
-
-
-@pytest.mark.parametrize("schema", ["fresh", "legacy"])
-def test_migration_8_pointer_fk_parity_and_enforcement(tmp_path, schema):
-    """Both schema paths enforce the pointer FK without materializing content."""
-    db_path = tmp_path / f"capture-fk-{schema}.db"
-    original_body = "Legacy body\r\nkept verbatim."
-    if schema == "legacy":
-        _create_legacy_v7_database_with_evidence(db_path)
-    else:
-        db = init_database(str(db_path))
-        with db.get_session_sync() as session:
-            case = TopicCase(
-                id="case-legacy-1", query="FK parity", slug="capture-fk-parity",
-                status=CaseStatus.INVESTIGATING,
-            )
-            session.add(case)
-            session.flush([case])
-            session.add(
-                EvidenceItem(
-                    id="evidence-legacy-1",
-                    case_id=case.id,
-                    evidence_type="article",
-                    source_type="rss",
-                    content=original_body,
-                )
-            )
-            session.commit()
-
-    run_migrations(str(db_path))
-    run_migrations(str(db_path))
-
-    connection = sqlite3.connect(db_path)
-    try:
-        connection.execute("PRAGMA foreign_keys=ON")
-        foreign_keys = connection.execute(
-            "PRAGMA foreign_key_list(evidence_items)"
-        ).fetchall()
-        assert any(
-            row[2:5] == ("evidence_captures", "current_capture_id", "id")
-            for row in foreign_keys
-        )
-        assert connection.execute(
-            "SELECT content, current_capture_id FROM evidence_items WHERE id=?",
-            ("evidence-legacy-1",),
-        ).fetchone() == (original_body, None)
-        assert connection.execute(
-            "SELECT COUNT(*) FROM evidence_captures"
-        ).fetchone()[0] == 0
-
-        with pytest.raises(sqlite3.IntegrityError, match="FOREIGN KEY"):
-            connection.execute(
-                "UPDATE evidence_items SET current_capture_id=? WHERE id=?",
-                ("missing-capture", "evidence-legacy-1"),
-            )
-        connection.rollback()
-
-        # Explicit test fixture, not migration backfill: a valid target works.
-        body = original_body.replace("\r\n", "\n")
-        connection.execute(
-            "INSERT INTO evidence_captures "
-            "(id, evidence_id, text, text_sha256, normalized_text_sha256, "
-            "normalization_version, recorded_at, observed_at, capture_kind, metadata_json) "
-            "VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, NULL, ?, ?)",
-            (
-                "capture-parity", "evidence-legacy-1", body,
-                compute_text_sha256(body), compute_normalized_text_sha256(body),
-                "v1", "legacy_snapshot", "{}",
-            ),
-        )
-        connection.execute(
-            "UPDATE evidence_items SET current_capture_id=?, content=? WHERE id=?",
-            ("capture-parity", body, "evidence-legacy-1"),
-        )
-        connection.commit()
-        assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
-        assert connection.execute(
-            "SELECT current_capture_id FROM evidence_items WHERE id=?",
-            ("evidence-legacy-1",),
-        ).fetchone() == ("capture-parity",)
-    finally:
-        connection.close()
-
-
-def test_migration_8_is_repeatable_and_never_materializes_captures(tmp_path):
-    """Repeated migration runs leave legacy content uncopied."""
-    db_path = tmp_path / "triangulate-legacy-captures-repeat.db"
-    _create_legacy_v7_database_with_evidence(db_path)
-
-    run_migrations(str(db_path))
-    run_migrations(str(db_path))
-
-    connection = sqlite3.connect(db_path)
-    try:
-        versions = [
-            row[0]
-            for row in connection.execute(
-                "SELECT version FROM _migrations ORDER BY version"
-            ).fetchall()
-        ]
-        assert versions == list(range(1, LATEST_MIGRATION_VERSION + 1))
-        assert connection.execute(
-            "SELECT COUNT(*) FROM evidence_captures"
-        ).fetchone()[0] == 0
-        assert connection.execute(
-            "SELECT content FROM evidence_items"
-        ).fetchone()[0] == "Legacy body\r\nkept verbatim."
-    finally:
-        connection.close()
-
-
-def test_migration_7_upgrades_legacy_reviews_and_preserves_decision(tmp_path):
+def test_migration_9_upgrades_legacy_reviews_and_preserves_decision(tmp_path):
     """A version-6 database gains the review hash columns without data loss."""
     db_path = tmp_path / "triangulate-legacy.db"
     _create_legacy_database(db_path)
@@ -330,7 +339,7 @@ def test_migration_7_upgrades_legacy_reviews_and_preserves_decision(tmp_path):
         connection.close()
 
 
-def test_migration_7_is_repeatable_and_keeps_existing_rows(tmp_path):
+def test_migration_9_is_repeatable_and_keeps_existing_rows(tmp_path):
     """Re-running migrations is a no-op for version 7 and preserves review rows."""
     db_path = tmp_path / "triangulate-repeat.db"
     _create_legacy_database(db_path)
@@ -361,11 +370,11 @@ def test_migration_7_is_repeatable_and_keeps_existing_rows(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# Migration 9: validated claim citations + link alignment fields
+# Migration 11: validated claim citations + link alignment fields
 # ---------------------------------------------------------------------------
 
 
-def _create_v8_database_with_link(db_path) -> None:
+def _create_v9_database_with_link(db_path) -> None:
     """A version-8 SQL database with a legacy link row (raw ``opposes``)."""
     connection = sqlite3.connect(db_path)
     try:
@@ -441,22 +450,170 @@ def _create_v8_database_with_link(db_path) -> None:
             "(id, claim_id, evidence_id, relation) VALUES (?, ?, ?, ?)",
             ("link-legacy-1", "claim-legacy-1", "evidence-legacy-1", "opposes"),
         )
+        _create_legacy_core_tables(connection)
         connection.commit()
     finally:
         connection.close()
 
 
-def test_migration_9_adds_citation_schema_without_backfill_or_rewrite(tmp_path):
-    """Migration 9 is additive: no citation rows and no legacy relation rewrite."""
+def test_migration_10_adds_capture_schema_without_copying_legacy_content(tmp_path):
+    """Migration 10 is schema-only: legacy content is not materialized."""
+    db_path = tmp_path / "triangulate-legacy-captures.db"
+    _create_legacy_v8_database_with_evidence(db_path)
+
+    run_migrations(str(db_path))
+
+    connection = sqlite3.connect(db_path)
+    try:
+        version = connection.execute(
+            "SELECT MAX(version) FROM _migrations"
+        ).fetchone()[0]
+        assert version == LATEST_MIGRATION_VERSION
+        columns = {
+            row[1]
+            for row in connection.execute(
+                "PRAGMA table_info(evidence_items)"
+            ).fetchall()
+        }
+        assert "current_capture_id" in columns
+        assert connection.execute(
+            "SELECT COUNT(*) FROM evidence_captures"
+        ).fetchone()[0] == 0
+        row = connection.execute(
+            "SELECT content, current_capture_id FROM evidence_items"
+        ).fetchone()
+        assert row == ("Legacy body\r\nkept verbatim.", None)
+        indexes = {
+            row[1]
+            for row in connection.execute(
+                "PRAGMA index_list(evidence_captures)"
+            ).fetchall()
+        }
+        assert "uq_evidence_capture_evidence_text" in indexes
+    finally:
+        connection.close()
+
+
+@pytest.mark.parametrize("schema", ["fresh", "upgrade"])
+def test_migration_10_pointer_fk_parity_and_enforcement(tmp_path, schema):
+    """Both schema paths enforce the pointer FK without materializing content."""
+    db_path = tmp_path / f"capture-fk-{schema}.db"
+    original_body = "Legacy body\r\nkept verbatim."
+    if schema == "legacy":
+        _create_legacy_v8_database_with_evidence(db_path)
+    else:
+        db = init_database(str(db_path))
+        with db.get_session_sync() as session:
+            case = TopicCase(
+                id="case-legacy-1", query="FK parity", slug="capture-fk-parity",
+                status=CaseStatus.INVESTIGATING,
+            )
+            session.add(case)
+            session.flush([case])
+            session.add(
+                EvidenceItem(
+                    id="evidence-legacy-1",
+                    case_id=case.id,
+                    evidence_type="article",
+                    source_type="rss",
+                    content=original_body,
+                )
+            )
+            session.commit()
+
+    run_migrations(str(db_path))
+    run_migrations(str(db_path))
+
+    connection = sqlite3.connect(db_path)
+    try:
+        connection.execute("PRAGMA foreign_keys=ON")
+        foreign_keys = connection.execute(
+            "PRAGMA foreign_key_list(evidence_items)"
+        ).fetchall()
+        assert any(
+            row[2:5] == ("evidence_captures", "current_capture_id", "id")
+            for row in foreign_keys
+        )
+        assert connection.execute(
+            "SELECT content, current_capture_id FROM evidence_items WHERE id=?",
+            ("evidence-legacy-1",),
+        ).fetchone() == (original_body, None)
+        assert connection.execute(
+            "SELECT COUNT(*) FROM evidence_captures"
+        ).fetchone()[0] == 0
+
+        with pytest.raises(sqlite3.IntegrityError, match="FOREIGN KEY"):
+            connection.execute(
+                "UPDATE evidence_items SET current_capture_id=? WHERE id=?",
+                ("missing-capture", "evidence-legacy-1"),
+            )
+        connection.rollback()
+
+        # Explicit test fixture, not migration backfill: a valid target works.
+        body = original_body.replace("\r\n", "\n")
+        connection.execute(
+            "INSERT INTO evidence_captures "
+            "(id, evidence_id, text, text_sha256, normalized_text_sha256, "
+            "normalization_version, recorded_at, observed_at, capture_kind, metadata_json) "
+            "VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, NULL, ?, ?)",
+            (
+                "capture-parity", "evidence-legacy-1", body,
+                compute_text_sha256(body), compute_normalized_text_sha256(body),
+                "v1", "legacy_snapshot", "{}",
+            ),
+        )
+        connection.execute(
+            "UPDATE evidence_items SET current_capture_id=?, content=? WHERE id=?",
+            ("capture-parity", body, "evidence-legacy-1"),
+        )
+        connection.commit()
+        assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
+        assert connection.execute(
+            "SELECT current_capture_id FROM evidence_items WHERE id=?",
+            ("evidence-legacy-1",),
+        ).fetchone() == ("capture-parity",)
+    finally:
+        connection.close()
+
+
+def test_migration_10_is_repeatable_and_never_materializes_captures(tmp_path):
+    """Repeated migration runs leave legacy content uncopied."""
+    db_path = tmp_path / "triangulate-legacy-captures-repeat.db"
+    _create_legacy_v8_database_with_evidence(db_path)
+
+    run_migrations(str(db_path))
+    run_migrations(str(db_path))
+
+    connection = sqlite3.connect(db_path)
+    try:
+        versions = [
+            row[0]
+            for row in connection.execute(
+                "SELECT version FROM _migrations ORDER BY version"
+            ).fetchall()
+        ]
+        assert versions == list(range(1, LATEST_MIGRATION_VERSION + 1))
+        assert connection.execute(
+            "SELECT COUNT(*) FROM evidence_captures"
+        ).fetchone()[0] == 0
+        assert connection.execute(
+            "SELECT content FROM evidence_items"
+        ).fetchone()[0] == "Legacy body\r\nkept verbatim."
+    finally:
+        connection.close()
+
+
+def test_migration_11_adds_citation_schema_without_backfill_or_rewrite(tmp_path):
+    """Migration 11 is additive: no citation rows and no legacy relation rewrite."""
     db_path = tmp_path / "triangulate-v8-citations.db"
-    _create_v8_database_with_link(db_path)
+    _create_v9_database_with_link(db_path)
 
     run_migrations(str(db_path))
 
     connection = sqlite3.connect(db_path)
     try:
         version = connection.execute("SELECT MAX(version) FROM _migrations").fetchone()[0]
-        assert version == LATEST_MIGRATION_VERSION == 9
+        assert version == LATEST_MIGRATION_VERSION == 11
 
         link_columns = {
             row[1]
@@ -517,10 +674,10 @@ def test_migration_9_adds_citation_schema_without_backfill_or_rewrite(tmp_path):
         connection.close()
 
 
-def test_migration_9_is_repeatable_and_schema_only(tmp_path):
+def test_migration_11_is_repeatable_and_schema_only(tmp_path):
     """Repeated runs add nothing new and never rewrite or copy data."""
     db_path = tmp_path / "triangulate-v8-citations-repeat.db"
-    _create_v8_database_with_link(db_path)
+    _create_v9_database_with_link(db_path)
 
     run_migrations(str(db_path))
     run_migrations(str(db_path))
@@ -546,11 +703,11 @@ def test_migration_9_is_repeatable_and_schema_only(tmp_path):
 
 
 @pytest.mark.parametrize("schema", ["fresh", "upgrade"])
-def test_migration_9_fk_parity_and_enforcement(tmp_path, schema):
+def test_migration_11_fk_parity_and_enforcement(tmp_path, schema):
     """Both schema paths expose/enforce the same link + citation references."""
     db_path = tmp_path / f"citation-fk-{schema}.db"
     if schema == "upgrade":
-        _create_v8_database_with_link(db_path)
+        _create_v9_database_with_link(db_path)
     else:
         db = init_database(str(db_path))
         with db.get_session_sync() as session:

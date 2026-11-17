@@ -78,17 +78,17 @@ const EvidenceContent: React.FC<EvidenceContentProps> = ({ evidence }) => {
     const [expandedChecks, setExpandedChecks] = useState<Set<string>>(new Set());
     const claimFilter = searchParams.get('claim');
 
-    const toggleChecks = (id: string) => {
-        setExpandedChecks((current) => {
-            const next = new Set(current);
-            if (next.has(id)) {
-                next.delete(id);
-            } else {
-                next.add(id);
-            }
-            return next;
-        });
+    const toggleSet = (set: Set<string>, setter: (s: Set<string>) => void, id: string) => {
+        const next = new Set(set);
+        if (next.has(id)) {
+            next.delete(id);
+        } else {
+            next.add(id);
+        }
+        setter(next);
     };
+
+    const toggleChecks = (id: string) => toggleSet(expandedChecks, setExpandedChecks, id);
 
     const renderVerificationBadge = (status: Evidence['verificationStatus']) => {
         switch (status) {
@@ -175,15 +175,21 @@ const EvidenceContent: React.FC<EvidenceContentProps> = ({ evidence }) => {
 
                         <div className="evidence-footer">
                             <span className="linked-claims"><FileSearch size={14} /> {ev.linkedClaims.length} Claims</span>
-                            {ev.originUrl ? (
-                                <a href={ev.originUrl} target="_blank" rel="noreferrer" className="btn btn-secondary btn-sm">
-                                    <Link size={14} /> Source
-                                </a>
-                            ) : (
-                                <span className="btn btn-secondary btn-sm" aria-disabled="true">
-                                    <Link size={14} /> Source
-                                </span>
-                            )}
+                            {(() => {
+                                const sourceUrl = ev.originUrl || ev.canonicalUrl;
+                                if (sourceUrl) {
+                                    return (
+                                        <a href={sourceUrl} target="_blank" rel="noreferrer" className="btn btn-secondary btn-sm">
+                                            <Link size={14} /> Source
+                                        </a>
+                                    );
+                                }
+                                return (
+                                    <span className="btn btn-secondary btn-sm source-unavailable" title={ev.publisher ? `No link available for ${ev.publisher}` : "No source link available"}>
+                                        <Link size={14} /> Source
+                                    </span>
+                                );
+                            })()}
                         </div>
 
                         {ev.verificationChecks.length > 0 && (

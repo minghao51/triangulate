@@ -15,11 +15,14 @@ from src.cli.commands.process_url import cmd_process_url
 from src.cli.commands.topic import cmd_fetch_topic, cmd_interactive, cmd_monitor_start
 from src.cli.commands.cases import (
     cmd_case_exception_action,
+    cmd_evaluate_case,
     cmd_list_cases,
     cmd_show_case,
+    cmd_show_case_workflow,
     cmd_review_case,
     cmd_rerun_case,
 )
+from src.cli.commands.osint import cmd_osint_ingest, cmd_osint_stream
 from src.storage import init_database
 
 app = typer.Typer(
@@ -29,7 +32,9 @@ app = typer.Typer(
 )
 console = Console()
 case_app = typer.Typer(help="Case lifecycle commands", add_completion=False)
+osint_app = typer.Typer(help="OSINT ingestion commands", add_completion=False)
 app.add_typer(case_app, name="case")
+app.add_typer(osint_app, name="osint")
 
 # Ensure runtime directories exist before any file-backed services initialize.
 Path("logs").mkdir(exist_ok=True)
@@ -232,6 +237,17 @@ def case_show(
     cmd_show_case(case_id=case_id, output=output)
 
 
+@case_app.command("workflow")
+def case_workflow(
+    case_id: str = typer.Argument(..., help="Case ID"),
+    output: Path = typer.Option(
+        Path("./output"), "--output", "-o", help="Output directory root"
+    ),
+) -> None:
+    """Show persisted workflow checkpoints and agent outputs."""
+    cmd_show_case_workflow(case_id=case_id, output=output)
+
+
 @case_app.command("review")
 def case_review(
     case_id: str = typer.Argument(..., help="Case ID"),
@@ -279,6 +295,46 @@ def case_exception(
         notes=notes,
         output=output,
     )
+
+
+@case_app.command("evaluate")
+def case_evaluate(
+    case_id: str = typer.Argument(..., help="Case ID"),
+    output: Path = typer.Option(
+        Path("./output"), "--output", "-o", help="Output directory root"
+    ),
+) -> None:
+    """Run a lightweight evaluation over the current case state."""
+    cmd_evaluate_case(case_id=case_id, output=output)
+
+
+@osint_app.command("ingest")
+def osint_ingest(
+    tool: str = typer.Option(..., "--tool", help="Source OSINT tool name"),
+    file: Path = typer.Option(..., "--file", help="Artifact file to import"),
+    case_id: str = typer.Option(..., "--case-id", help="Case to attach the artifact to"),
+    output: Path = typer.Option(
+        Path("./output"), "--output", "-o", help="Output directory root"
+    ),
+) -> None:
+    """Import a single OSINT artifact into a case."""
+    cmd_osint_ingest(tool=tool, file=file, case_id=case_id, output=output)
+
+
+@osint_app.command("stream")
+def osint_stream(
+    tool: str = typer.Option(..., "--tool", help="Source OSINT tool name"),
+    watch: Path = typer.Option(..., "--watch", help="Directory of OSINT artifacts"),
+    case_id: str = typer.Option(..., "--case-id", help="Case to attach artifacts to"),
+    once: bool = typer.Option(
+        False, "--once", help="Import current files once instead of continuous watching"
+    ),
+    output: Path = typer.Option(
+        Path("./output"), "--output", "-o", help="Output directory root"
+    ),
+) -> None:
+    """Import all OSINT artifacts currently present in a watch directory."""
+    cmd_osint_stream(tool=tool, watch=watch, case_id=case_id, once=once, output=output)
 
 
 @app.command()

@@ -1589,16 +1589,26 @@ def test_new_routes_reject_mutation_methods(
     assert client.get(resolved).status_code == 200
 
 
-def test_no_mutating_http_route_exists() -> None:
-    mutating = []
-    for route in app.routes:
-        methods = getattr(route, "methods", None)
-        if not methods:
-            continue
-        extra = set(methods) - {"GET", "HEAD", "OPTIONS"}
-        if extra:
-            mutating.append((getattr(route, "path", ""), sorted(extra)))
-    assert mutating == []
+def test_inspector_routes_are_get_only() -> None:
+    """E03 inspector endpoints never mutate; review/annotation writes are separate.
+
+    The merged application also exposes explicit review/annotation mutation
+    routes (a different feature). E03's contract is that *inspector* GET paths
+    stay read-only and create nothing, so those are asserted individually here.
+    """
+    inspector_paths = (
+        "/api/cases/{case_id}/citations/{citation_id}",
+        "/api/cases/{case_id}/claims/{claim_id}",
+        "/api/cases/{case_id}/evidence/{evidence_id}",
+        "/api/cases/{case_id}/evidence/{evidence_id}/captures/{capture_id}",
+    )
+    methods_by_path = {
+        getattr(route, "path", ""): set(getattr(route, "methods", set()))
+        for route in app.routes
+    }
+    for path in inspector_paths:
+        assert path in methods_by_path, path
+        assert methods_by_path[path] <= {"GET", "HEAD", "OPTIONS"}, path
 
 
 # ---------------------------------------------------------------------------

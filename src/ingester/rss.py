@@ -4,11 +4,11 @@ import logging
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import Enum
-from typing import Any
+from typing import Any, cast
 
 import feedparser
 from httpx import TimeoutException
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 
 logger = logging.getLogger(__name__)
 
@@ -145,11 +145,15 @@ class FeedAcquisitionOutcome:
 
 # Try to import trafilatura for better content extraction
 try:
-    from trafilatura import fetch_url, extract
+    from trafilatura import extract, fetch_url
 
     TRAFILATURA_AVAILABLE = True
 except ImportError:
     TRAFILATURA_AVAILABLE = False
+    # Explicit placeholders keep the guarded call sites analysable without
+    # suppressing the type checker; the availability flags gate every use.
+    extract = cast(Any, None)
+    fetch_url = cast(Any, None)
     logger.warning("trafilatura not available, using basic RSS content only")
 
 # Try to import BeautifulSoup for fallback
@@ -159,7 +163,22 @@ try:
     BS4_AVAILABLE = True
 except ImportError:
     BS4_AVAILABLE = False
+    BeautifulSoup = cast(Any, None)
     logger.warning("beautifulsoup4 not available")
+
+
+RSS_FEED_PATTERNS = [
+    "/feed",
+    "/feed/",
+    "/rss",
+    "/rss/",
+    "/atom.xml",
+    "/feed.xml",
+    "/rss.xml",
+    "/feed/rss",
+    "/news/feed",
+    "/articles/feed",
+]
 
 
 class RSSFeed:
@@ -175,6 +194,24 @@ class RSSFeed:
         self.url = url
         self.timeout = timeout
         self.source_name = urlparse(url).netloc.replace("www.", "") or url
+
+    def _try_discover_rss_feeds(self, base_url: str) -> list[str]:
+        """Try to discover RSS feed URLs from a website.
+
+        Args:
+            base_url: Base website URL
+
+        Returns:
+            List of potential RSS feed URLs to try
+        """
+        feeds = []
+        parsed = urlparse(base_url)
+        base = f"{parsed.scheme}://{parsed.netloc}"
+
+        for pattern in RSS_FEED_PATTERNS:
+            feeds.append(urljoin(base, pattern))
+
+        return feeds
 
     def fetch(self, max_articles: int = 50) -> list[dict]:
         """Fetch articles from RSS feed.
@@ -195,48 +232,95 @@ class RSSFeed:
     def fetch_with_outcome(self, max_articles: int = 50) -> FeedAcquisitionOutcome:
         """Fetch articles and report a structured acquisition outcome.
 
+        The configured URL is always attempted first. A site URL that is not
+        recognisable as a feed falls back to the conventional feed locations
+        discovered by :meth:`_try_discover_rss_feeds`; discovery never upgrades
+        the outcome of the requested URL, so a site without a working feed is
+        still reported as a failure.
+
         Args:
             max_articles: Maximum number of entries to parse
 
         Returns:
             A :class:`FeedAcquisitionOutcome` describing what actually happened.
         """
-        logger.info(f"Fetching RSS feed: {self.url}")
+        outcome = self._acquire_url(self.url, max_articles)
+        if outcome.reason not in self._DISCOVERY_REASONS:
+            return outcome
+
+        # The requested URL did not look like a feed: try the conventional feed
+        # locations on the same site. Only a genuine acquisition wins; otherwise
+        # the requested URL's own honest failure is reported.
+        for candidate in self._discover_candidate_feeds():
+            if candidate == self.url:
+                continue
+            candidate_outcome = self._acquire_url(candidate, max_articles)
+            if candidate_outcome.status in SUCCESS_ACQUISITION_STATUSES:
+                logger.info(
+                    f"Using discovered feed URL {candidate} for {self.url}"
+                )
+                return candidate_outcome
+
+        return outcome
+
+    def _discover_candidate_feeds(self) -> list[str]:
+        """Conventional feed URLs for the configured site; best-effort only."""
         try:
-            feed = feedparser.parse(self.url)
+            candidates = self._try_discover_rss_feeds(self.url)
+        except Exception as exc:
+            logger.debug(f"RSS feed discovery failed for {self.url}: {exc}")
+            return []
+        if not isinstance(candidates, list):
+            return []
+        return [candidate for candidate in candidates if isinstance(candidate, str)]
+
+    def _acquire_url(self, feed_url: str, max_articles: int) -> FeedAcquisitionOutcome:
+        """Parse and classify a single candidate feed URL."""
+        logger.info(f"Fetching RSS feed: {feed_url}")
+        try:
+            feed = feedparser.parse(feed_url)
         except TimeoutException as exc:
-            logger.error(f"Timeout fetching RSS feed: {self.url}")
+            logger.error(f"Timeout fetching RSS feed: {feed_url}")
             return FeedAcquisitionOutcome(
-                source_url=self.url,
+                source_url=feed_url,
                 status=AcquisitionStatus.FAILED.value,
                 error=str(exc) or "timeout",
                 reason="timeout",
             )
         except Exception as exc:
-            logger.error(f"Error fetching RSS feed {self.url}: {exc}")
+            logger.error(f"Error fetching RSS feed {feed_url}: {exc}")
             return FeedAcquisitionOutcome(
-                source_url=self.url,
+                source_url=feed_url,
                 status=AcquisitionStatus.FAILED.value,
                 error=str(exc),
                 reason="transport_error",
             )
 
         try:
-            return self._classify_feed(feed, max_articles)
+            return self._classify_feed(feed, max_articles, source_url=feed_url)
         except Exception as exc:
             # Classification is part of the acquisition attempt: a malformed
             # parser result must not raise through the legacy ``fetch() -> list``
             # wrapper, and must never look like a fresh success.
-            logger.error(f"Error classifying RSS feed {self.url}: {exc}")
+            logger.error(f"Error classifying RSS feed {feed_url}: {exc}")
             return FeedAcquisitionOutcome(
-                source_url=self.url,
+                source_url=feed_url,
                 status=AcquisitionStatus.FAILED.value,
                 error=str(exc),
                 reason="parse_error",
             )
 
-    def _classify_feed(self, feed: Any, max_articles: int) -> FeedAcquisitionOutcome:
+    # Failure reasons that mean "this URL is not a usable feed" rather than
+    # "the network/endpoint failed"; only those justify feed discovery.
+    _DISCOVERY_REASONS = frozenset(
+        {"unrecognized_feed", "malformed_feed", "entries_unparseable"}
+    )
+
+    def _classify_feed(
+        self, feed: Any, max_articles: int, source_url: str | None = None
+    ) -> FeedAcquisitionOutcome:
         """Classify a feedparser result as success, failure or skipped."""
+        feed_url = source_url or self.url
         http_status = _coerce_http_status(feed_field(feed, "status"))
         bozo = bool(feed_field(feed, "bozo", False))
         bozo_exception = feed_field(feed, "bozo_exception")
@@ -251,7 +335,7 @@ class RSSFeed:
         selected_entries = list(raw_entries)[:max_articles]
 
         base: dict[str, Any] = {
-            "source_url": self.url,
+            "source_url": feed_url,
             "source_name": self.source_name,
             "http_status": http_status,
             "bozo": bozo,
@@ -260,7 +344,7 @@ class RSSFeed:
             "feed_version": feed_version,
         }
         bozo_warning = (
-            f"Feed parsing warning for {self.url}: {bozo_exception}" if bozo else None
+            f"Feed parsing warning for {feed_url}: {bozo_exception}" if bozo else None
         )
         if bozo_warning:
             logger.warning(bozo_warning)
@@ -308,7 +392,7 @@ class RSSFeed:
         degraded = bool(parse_failures) or bool(bozo and articles)
 
         if articles:
-            logger.info(f"Fetched {len(articles)} articles from {self.url}")
+            logger.info(f"Fetched {len(articles)} articles from {feed_url}")
             return FeedAcquisitionOutcome(
                 status=AcquisitionStatus.SUCCESS_WITH_ITEMS.value,
                 articles=articles,
@@ -333,7 +417,7 @@ class RSSFeed:
         if entries_seen == 0:
             if feed_version is not None:
                 logger.info(
-                    f"Feed {self.url} returned no entries "
+                    f"Feed {feed_url} returned no entries "
                     f"({feed_version} feed, healthy empty)"
                 )
                 return FeedAcquisitionOutcome(
@@ -385,8 +469,9 @@ class RSSFeed:
             return ""
 
         try:
-            # Try trafilatura first
-            downloaded = fetch_url(url, timeout=self.timeout)
+            # Try trafilatura first. ``fetch_url`` (trafilatura 2.x) takes no
+            # ``timeout`` argument; it applies its own download settings.
+            downloaded = fetch_url(url)
             if downloaded:
                 result = extract(
                     downloaded,

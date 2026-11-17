@@ -102,6 +102,25 @@ class ClaimEvidenceLinkDTO(BaseModel):
     diagnosticReason: str | None = None
 
 
+class PartyConsensusDTO(BaseModel):
+    unanimous: bool
+    supportingParties: list[str] = Field(default_factory=list)
+    opposingParties: list[str] = Field(default_factory=list)
+    neutralParties: list[str] = Field(default_factory=list)
+
+
+class ArbiterReasoningDTO(BaseModel):
+    isFact: str
+    verificationRationale: str
+    partyConsensus: PartyConsensusDTO
+
+
+class SourceStanceBreakdown(BaseModel):
+    agreedSources: list[str] = Field(default_factory=list)
+    disagreedSources: list[str] = Field(default_factory=list)
+    didntReportSources: list[str] = Field(default_factory=list)
+
+
 class ClaimDTO(BaseModel):
     id: str
     text: str
@@ -116,7 +135,10 @@ class ClaimDTO(BaseModel):
     # The claims table stores no verification provenance, so the honest value is
     # ``unknown`` unless stored evidence proves a legacy row.
     verificationProvenance: str = "unknown"
+    arbiterReasoning: ArbiterReasoningDTO | None = None
+    partyPositions: dict[str, Literal["for", "against", "neutral"]] = Field(default_factory=dict)
     evidence: list[ClaimEvidenceLinkDTO] = Field(default_factory=list)
+    sourceStanceBreakdown: SourceStanceBreakdown = Field(default_factory=SourceStanceBreakdown)
 
 
 class EvidenceVerificationCheckDTO(BaseModel):
@@ -127,6 +149,22 @@ class EvidenceVerificationCheckDTO(BaseModel):
     notes: str | None = None
     verifiedBy: str | None = None
     verifiedAt: str | None = None
+
+
+class EvidenceArtifactDTO(BaseModel):
+    id: str
+    tool: str
+    artifactType: str
+    sourcePath: str
+    relation: str
+    importedAt: str | None = None
+
+
+class EvidenceLineageDTO(BaseModel):
+    caseId: str
+    eventId: str | None = None
+    caseArticleId: str | None = None
+    origin: str
 
 
 class EvidenceDTO(BaseModel):
@@ -142,6 +180,8 @@ class EvidenceDTO(BaseModel):
     # Pointer to the immutable current capture; the body is never inlined.
     currentCaptureId: str | None = None
     linkedClaims: list[str] = Field(default_factory=list)
+    lineage: EvidenceLineageDTO | None = None
+    artifacts: list[EvidenceArtifactDTO] = Field(default_factory=list)
     verificationChecks: list[EvidenceVerificationCheckDTO] = Field(default_factory=list)
 
 
@@ -155,6 +195,52 @@ class ExceptionDTO(BaseModel):
     isOpen: bool
 
 
+class ReviewAnnotationDTO(BaseModel):
+    id: str
+    targetType: str
+    targetId: str
+    annotationType: str
+    author: str
+    content: str
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    createdAt: str | None = None
+
+
+class ReviewAuditEntryDTO(BaseModel):
+    id: str
+    actionType: str
+    targetType: str
+    targetId: str
+    actor: str
+    rationale: str | None = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    createdAt: str | None = None
+
+
+class ReviewActivityDTO(BaseModel):
+    annotations: list[ReviewAnnotationDTO] = Field(default_factory=list)
+    auditEntries: list[ReviewAuditEntryDTO] = Field(default_factory=list)
+
+
+class ReviewActionRequest(BaseModel):
+    decision: str
+    notes: str | None = None
+
+
+class ExceptionActionRequest(BaseModel):
+    action: str
+    notes: str | None = None
+
+
+class AnnotationCreateRequest(BaseModel):
+    targetType: str
+    targetId: str
+    annotationType: str
+    content: str
+    author: str = "operator"
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
 class PartyDTO(BaseModel):
     id: str
     name: str
@@ -163,6 +249,9 @@ class PartyDTO(BaseModel):
     overallStance: Literal["for", "against", "neutral", "mixed"]
     isModelInferred: bool
     associatedClaimsCount: int
+    investigationData: dict[str, Any] | None = None
+    claimsSupported: int = 0
+    claimsContested: int = 0
 
 
 class TimelineEventDTO(BaseModel):
@@ -175,6 +264,8 @@ class TimelineEventDTO(BaseModel):
     locationCountryCode: str | None = None
     locationLat: float | None = None
     locationLon: float | None = None
+    workflowRoute: str | None = None
+    sourceUrl: str | None = None
 
 
 class RunHistoryItemDTO(BaseModel):
@@ -195,6 +286,8 @@ class NarrativeDTO(BaseModel):
     stanceSummary: str
     sourceCount: int
     claimCount: int = 0
+    keyThemes: list[str] = Field(default_factory=list)
+    mainEntities: list[str] = Field(default_factory=list)
 
 
 class ReportDTO(BaseModel):
@@ -202,6 +295,73 @@ class ReportDTO(BaseModel):
     markdownPath: str | None = None
     markdownContent: str | None = None
     manifestPath: str | None = None
+
+
+class OsintArtifactDTO(BaseModel):
+    id: str
+    tool: str
+    artifactType: str
+    sourcePath: str
+    importedAt: str | None = None
+    importMetadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class TaxonomyDTO(BaseModel):
+    id: str
+    kind: str
+    version: str
+    path: str | None = None
+    checksum: str
+
+
+class WorkflowCheckpointDTO(BaseModel):
+    id: str
+    stageName: str
+    checkpointKey: str
+    status: str
+    summary: str | None = None
+    retryCount: int = 0
+    payload: dict[str, Any] = Field(default_factory=dict)
+    createdAt: str | None = None
+
+
+class AgentOutputDTO(BaseModel):
+    id: str
+    stageName: str
+    agentName: str
+    outputType: str
+    summary: str | None = None
+    payload: dict[str, Any] = Field(default_factory=dict)
+    taxonomyVersionId: str | None = None
+    createdAt: str | None = None
+
+
+class WorkflowDiagnosticsDTO(BaseModel):
+    taxonomy: TaxonomyDTO | None = None
+    checkpoints: list[WorkflowCheckpointDTO] = Field(default_factory=list)
+    agentOutputs: list[AgentOutputDTO] = Field(default_factory=list)
+
+
+class EvaluationResultDTO(BaseModel):
+    id: str
+    status: str
+    evaluationKind: str
+    summary: dict[str, Any] = Field(default_factory=dict)
+    metrics: dict[str, Any] = Field(default_factory=dict)
+    createdAt: str | None = None
+
+
+class EvaluationSummaryDTO(BaseModel):
+    latest: EvaluationResultDTO
+    history: list[EvaluationResultDTO] = Field(default_factory=list)
+
+
+class MonitoringSummaryDTO(BaseModel):
+    cases: dict[str, Any] = Field(default_factory=dict)
+    review: dict[str, Any] = Field(default_factory=dict)
+    pipeline: dict[str, Any] = Field(default_factory=dict)
+    intake: dict[str, Any] = Field(default_factory=dict)
+    evaluation: dict[str, Any] = Field(default_factory=dict)
 
 
 class CaseTabs(BaseModel):
@@ -212,6 +372,8 @@ class CaseTabs(BaseModel):
     timeline: list[TimelineEventDTO] = Field(default_factory=list)
     runHistory: list[RunHistoryItemDTO] = Field(default_factory=list)
     narratives: list[NarrativeDTO] = Field(default_factory=list)
+    osintArtifacts: list[OsintArtifactDTO] = Field(default_factory=list)
+    workflow: WorkflowDiagnosticsDTO = Field(default_factory=WorkflowDiagnosticsDTO)
     report: ReportDTO
 
 
