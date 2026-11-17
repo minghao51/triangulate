@@ -55,8 +55,17 @@ skip the missing DDL (the manager records versions, not schemas), producing sche
 divergence. Integration therefore requires **renumbering** one line's migrations
 and re-verifying fresh *and* legacy upgrades, not a text merge.
 
-Current state: the work is preserved on the local `main` and pushed to the
-review branch `feature/evidence-workbench-e02-e03`; `origin/main` is untouched.
+**Resolved 2026-11-15:** the divergence was integrated on branch
+`integration/evidence-e03` (push `fae837e`). Conflict resolution renumbered this
+line's migrations 7/8/9 → **9/10/11** so the remote's 7 (OSINT provenance) and 8
+(review audit/evaluation) keep their identities (schema history 1..11, no version
+collision); models keep the `Mapped[...]` typing plus the merged tables/columns;
+service/http/frontend/ingester are unions of both features. Integration also fixed
+trafilatura 2.x `fetch_url` (no `timeout` argument), geopy typing, optional taxonomy
+loading and the shared `CaseRunContext`. Gates after the merge: backend **418
+passed / 9 deselected**, Ruff clean; frontend `npm run check` and `npm test --
+--run` (72 tests). `origin/main` remains at `bd49b8a`; the integration branch is the
+one to review/merge.
 Decide the integration route before any further ticket: (a) merge `origin/main`
 into a local integration branch, renumber this line's migrations to 10/11/12,
 resolve the overlapping frontend/ingester/service conflicts and re-run the full
