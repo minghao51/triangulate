@@ -1,9 +1,29 @@
 # Comparison navigation and panels (P03)
 
-Date: 2026-11-18. Status: **implemented and committed at `4226856`, pending Release B review**. Contract:
+Date: 2026-11-18. Status: **implemented at `4226856` and accepted as the Release B gate on
+2026-11-18**. Contract:
 [specification](../plans/20261114-evidence-workbench-specification.md) §6, ticket
 [P03](../plans/20261114-evidence-workbench-worker-plan.md). Depends on P02 and
 E04. No backend behaviour changed in this ticket.
+
+## Release B acceptance review
+
+The parent reviewed the P03 diff against §6, then re-ran the frontend and backend
+gates and repeated a focused isolated browser check against a synthetic temporary
+DB/config. Confirmed: normal Compare navigation; URL-pinned default captures that
+survive reload; source panels with publisher, capture kind/ID, code-point length,
+SHA-256, recorded analysis scope and provisional publisher key; shared/left-only/
+right-only rows whose caveat says one-sided extraction is coverage, not omission
+or disagreement; contradiction only from a validated `contradicts`; dependency
+banner using “not independent evidence” and “absence … does not prove
+independence”; passage deep link into the E04 inspector with one validated
+highlight and Back returning to the pinned compare URL; explicit historical
+unavailability for an old capture with no current-link substitution; distinct
+404 state that substitutes no other case; mobile 390×844 stacking; keyboard
+traversal from the source to the capture select; 47 backend GETs and 0 non-GET
+requests; 0 console errors on the happy path (the deliberate 404 probe logged only
+the two expected 404 resource loads). No false support/confirmation wording was
+found. Runtime evidence: `/tmp/triangulate-p03-browser.20261118T104309Z`.
 
 ## Navigation and URL
 

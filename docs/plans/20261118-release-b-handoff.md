@@ -1,8 +1,11 @@
 # Release B handoff: P03 review and Release C (R01–V01)
 
-Date: 2026-11-18. Status: **Release A accepted; P01/P02/P03 delivered and
-committed; Release B acceptance is the first action in the new thread.** This
-document is self-contained for a fresh agent. Contract authority remains the
+Date: 2026-11-18. Status: **Release A and Release B are accepted. P01/P02/P03
+were reviewed and accepted on 2026-11-18; the review evidence is recorded in the
+[worker plan](20261114-evidence-workbench-worker-plan.md) §7 and
+[comparison UI](../architecture/20261118-comparison-ui.md). This document is now
+the Release C (R01–V01) handoff.** It remains self-contained for a fresh agent.
+Contract authority remains the
 [specification](20261114-evidence-workbench-specification.md) and the
 [worker plan](20261114-evidence-workbench-worker-plan.md).
 
@@ -14,7 +17,8 @@ document is self-contained for a fresh agent. Contract authority remains the
 | Release A | Accepted: B00–B03, E01–E04; E04 = `8ee32eb` |
 | P01 | `e95bfb2` — conservative source dependency groups |
 | P02 | `4d93c12` — deterministic comparison read API |
-| P03 | `4226856` — comparison navigation and panels; **Release B review pending** |
+| P03 | `4226856` — comparison navigation and panels; **Release B reviewed and accepted 2026-11-18** |
+| Next ticket | **R01 — grouped invocation identity (not started)** |
 | Migrations | 1..11 (7 OSINT, 8 review audit/evaluation, 9 review hash, 10 captures, 11 citations) |
 | Frontend gate | `npm run check` green; `npm test -- --run` = **107 tests / 12 files** |
 | Backend gate | **456 passed, 9 deselected**; Ruff clean |
@@ -27,17 +31,18 @@ P01/P02/P03 docs:
 - [comparison read API](../architecture/20261118-comparison-read-api.md)
 - [comparison UI](../architecture/20261118-comparison-ui.md)
 
-## 2. First actions in the new thread
+## 2. First actions in the new thread (completed for Release B)
 
-1. Read this handoff, the worker plan and specification §5–§11.
-2. Review the P03 commit/diff (`git show 4226856`) and the three P01–P03
-   architecture docs. P03 is an implementation commit, not a recorded Release B
-   acceptance.
-3. Re-run the gates (commands in §7). Confirm the P03 browser evidence in §4 or
-   repeat the focused browser check with a temporary DB/config.
-4. If accepted, record Release B acceptance in the worker plan and commit the
-   documentation. **Only then start R01.** If changes are needed, fix P03 first;
-   do not start R01 on an unaccepted UI baseline.
+1. ~~Read this handoff, the worker plan and specification §5–§11.~~ Done.
+2. ~~Review the P03 commit/diff (`git show 4226856`) and the three P01–P03
+   architecture docs.~~ Done; no blocker found, no P03 fix required.
+3. ~~Re-run the gates (§7) and repeat the focused browser check with a temporary
+   DB/config.~~ Done on 2026-11-18: frontend check green, 107 tests / 12 files,
+   backend 456 passed / 9 deselected (disposable copy), Ruff clean. Focused
+   browser check passed with 47 backend GETs, 0 non-GET and 0 happy-path console
+   errors; runtime evidence at `/tmp/triangulate-p03-browser.20261118T104309Z`.
+4. ~~Record Release B acceptance in the worker plan and commit the documentation.~~
+   Recorded. **R01 is now the only active ticket.**
 5. One bounded ticket at a time, parent diff review after each. Do not start R02
    before R01 is reviewed.
 
@@ -79,21 +84,22 @@ Previous browser evidence (isolated session, temp DB/config):
 - console **0 errors**; comparison/evidence requests GET-only
 - browser and both servers closed
 
-## 4. Release B review checklist
+## 4. Release B review checklist (completed 2026-11-18)
 
-- [ ] P01 policy matches §5: URL normalization, explicit/provisional publisher
+- [x] P01 policy matches §5: URL normalization, explicit/provisional publisher
       identity, 200-non-whitespace copy threshold, deterministic groups, honest
       unknown/independence states.
-- [ ] P02 matches §6: different evidence IDs, pinned capture validation, exact
+- [x] P02 matches §6: different evidence IDs, pinned capture validation, exact
       signature pairing, explicit contradiction only, old-capture no-substitution,
       copy warnings, pagination, GET-only.
-- [ ] P03 matches §6 UI: normal navigation, URL persistence, both passages
+- [x] P03 matches §6 UI: normal navigation, URL persistence, both passages
       reachable, partial/duplicate caveats visible, trustworthy wording,
       keyboard/mobile/error states.
-- [ ] No false support/confirmation signals; reported-by is not corroboration.
-- [ ] `npm run check`, `npm test -- --run`, backend disposable-copy suite and
+- [x] No false support/confirmation signals; reported-by is not corroboration.
+- [x] `npm run check`, `npm test -- --run`, backend disposable-copy suite and
       Ruff all pass.
-- [ ] Record acceptance; P03 remains the Release B gate.
+- [x] Acceptance recorded in the worker plan §7 and the comparison UI doc; P03
+      remains the Release B gate.
 
 ## 5. Remaining work map
 
