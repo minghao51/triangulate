@@ -100,6 +100,8 @@ class MigrationManager:
                 self._apply_claim_citation_schema(session)
             elif migration.version == 12:
                 self._apply_investigation_run_schema(session)
+            elif migration.version == 13:
+                self._apply_case_writer_ownership_schema(session)
             else:
                 # Apply migration SQL
                 session.execute(text(migration.up_sql))
@@ -674,6 +676,38 @@ class MigrationManager:
             text(
                 "CREATE INDEX IF NOT EXISTS ix_investigation_runs_trigger "
                 "ON investigation_runs (trigger)"
+            )
+        )
+
+    def _apply_case_writer_ownership_schema(self, session) -> None:
+        """Add nullable case-writer ownership fields (R02).
+
+        Schema only: legacy cases keep no active owner, no row is rewritten and
+        no writer is claimed by the migration.
+        """
+        inspector = inspect(session.bind)
+        existing_tables = set(inspector.get_table_names())
+        if "topic_cases" not in existing_tables:
+            raise ValueError("Migration 13 requires the topic_cases table to exist")
+        existing_columns = {
+            column["name"] for column in inspector.get_columns("topic_cases")
+        }
+        for column_name, column_type in {
+            "owner_token": "TEXT",
+            "owner_kind": "TEXT",
+            "owner_ref_id": "TEXT",
+            "owner_claimed_at": "TIMESTAMP",
+        }.items():
+            if column_name not in existing_columns:
+                session.execute(
+                    text(
+                        f"ALTER TABLE topic_cases ADD COLUMN {column_name} {column_type}"
+                    )
+                )
+        session.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_topic_cases_owner_token "
+                "ON topic_cases (owner_token)"
             )
         )
 
@@ -1484,6 +1518,19 @@ MIGRATIONS: list[Migration] = [
         CREATE INDEX IF NOT EXISTS ix_investigation_runs_trigger ON investigation_runs (trigger);
         CREATE INDEX IF NOT EXISTS ix_case_stage_runs_investigation_run_id ON case_stage_runs (investigation_run_id);
         CREATE INDEX IF NOT EXISTS ix_events_investigation_run_id ON events (investigation_run_id);
+        """,
+        down="""
+        """,
+    ),
+    Migration(
+        version=13,
+        name="Add case writer ownership fields",
+        up="""
+        ALTER TABLE topic_cases ADD COLUMN owner_token TEXT;
+        ALTER TABLE topic_cases ADD COLUMN owner_kind TEXT;
+        ALTER TABLE topic_cases ADD COLUMN owner_ref_id TEXT;
+        ALTER TABLE topic_cases ADD COLUMN owner_claimed_at TIMESTAMP;
+        CREATE INDEX IF NOT EXISTS ix_topic_cases_owner_token ON topic_cases (owner_token);
         """,
         down="""
         """,

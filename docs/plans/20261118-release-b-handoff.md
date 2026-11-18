@@ -1,10 +1,10 @@
 # Release B handoff: P03 review and Release C (R01–V01)
 
-Date: 2026-11-18. Status: **Release A and Release B are accepted. P01/P02/P03
-were reviewed and accepted on 2026-11-18; the review evidence is recorded in the
-[worker plan](20261114-evidence-workbench-worker-plan.md) §7 and
-[comparison UI](../architecture/20261118-comparison-ui.md). This document is now
-the Release C (R01–V01) handoff.** It remains self-contained for a fresh agent.
+Date: 2026-11-18. Status: **Release A and Release B are accepted; R01 is
+committed and R02 is delivered and verified with its diff review pending.** The
+review evidence is recorded in the [worker plan](20261114-evidence-workbench-worker-plan.md)
+§7 and the comparison/case-writer architecture docs. This document is the
+Release C (R01–V01) handoff. It remains self-contained for a fresh agent.
 Contract authority remains the
 [specification](20261114-evidence-workbench-specification.md) and the
 [worker plan](20261114-evidence-workbench-worker-plan.md).
@@ -13,16 +13,17 @@ Contract authority remains the
 
 | Item | State |
 |---|---|
-| Local `main` | P03 `4226856` plus this handoff commit — **ahead of `origin/main` by 6 commits, not pushed** |
+| Local `main` | Ahead of `origin/main` by the Release B acceptance, R01 and this R02 documentation commit — **not pushed** |
 | Release A | Accepted: B00–B03, E01–E04; E04 = `8ee32eb` |
 | P01 | `e95bfb2` — conservative source dependency groups |
 | P02 | `4d93c12` — deterministic comparison read API |
 | P03 | `4226856` — comparison navigation and panels; **Release B reviewed and accepted 2026-11-18** |
-| R01 | delivered/verified 2026-11-18 (working tree, not committed) — grouped invocation identity; migration 12; **diff review pending** |
-| Next ticket | **R02 — case writer admission, fencing and explicit recovery (not started)** |
-| Migrations | 1..12 (7 OSINT, 8 review audit/evaluation, 9 review hash, 10 captures, 11 citations, 12 grouped investigation runs) |
+| R01 | `ed8459f` — grouped invocation identity; migration 12; committed |
+| R02 | delivered/verified 2026-11-18 (working tree) — case writer admission/fencing + CLI interrupt; migration 13; **diff review pending** |
+| Next ticket | **R03 — snapshots, deltas and historical readers (not started)** |
+| Migrations | 1..13 (7 OSINT, 8 review audit/evaluation, 9 review hash, 10 captures, 11 citations, 12 grouped investigation runs, 13 case writer ownership) |
 | Frontend gate | `npm run check` green; `npm test -- --run` = **107 tests / 12 files** |
-| Backend gate | **462 passed, 9 deselected**; Ruff clean |
+| Backend gate | **475 passed, 9 deselected**; Ruff clean |
 | Scratch files | 382 removed after archive at `/tmp/triangulate-scratch-archive-20261118T005339Z.tar.gz` (382/382 verified, sha256 `6a38b51c41a7542819f30d23bddc0a83ebb07f8b9eda943df69e554314bad4e5`); no untracked scratch files remain |
 | Production data | untouched; B02 test-database incident remains disclosed |
 
@@ -43,10 +44,9 @@ P01/P02/P03 docs:
    browser check passed with 47 backend GETs, 0 non-GET and 0 happy-path console
    errors; runtime evidence at `/tmp/triangulate-p03-browser.20261118T104309Z`.
 4. ~~Record Release B acceptance in the worker plan and commit the documentation.~~
-   Recorded (`aaa4f16`). R01 was then delivered in the working tree and verified;
-   **review its diff before starting R02**.
-5. One bounded ticket at a time, parent diff review after each. Do not start R02
-   before R01 is reviewed.
+   Recorded (`aaa4f16`). R01 was delivered, verified and committed (`ed8459f`).
+5. R02 was delivered and verified (migration 13). **Review its diff before
+   starting R03.** One bounded ticket at a time, parent diff review after each.
 
 ## 3. P03 delivered behaviour
 
@@ -105,12 +105,12 @@ Previous browser evidence (isolated session, temp DB/config):
 
 ## 5. Remaining work map
 
-Because R01 is delivered, the default remaining order after its diff review is
-**R02 → R03 → R04 → S01 → S02 → V01**. S01 depends on E02/E03 and is technically
-independent of the R lane, but shared storage/event-store writers mean one
-application-code writer at a time; the default order avoids races.
+Because R01 and R02 are delivered, the default remaining order after the R02
+diff review is **R03 → R04 → S01 → S02 → V01**. S01 depends on E02/E03 and is
+technically independent of the R lane, but shared storage/event-store writers
+mean one application-code writer at a time; the default order avoids races.
 
-### R01 — Grouped invocation identity (internal only) — **delivered, review pending**
+### R01 — Grouped invocation identity (internal only) — **delivered and committed**
 
 Delivered in the working tree on 2026-11-18 (migration 12, not committed): one
 `InvestigationRun` per `run_case` with per-case sequence, trigger, requested start
@@ -138,7 +138,27 @@ The original R01 scope (now delivered) was:
 - **Do not deploy/use grouped runs before R02 fencing and R03 finalization.**
   Migration/legacy regression tests required.
 
-### R02 — Case writer admission, fencing and explicit recovery
+### R02 — Case writer admission, fencing and explicit recovery — **delivered and verified**
+
+Delivered in the working tree on 2026-11-18 (migration 13): nullable `owner_token`,
+`owner_kind`, `owner_ref_id` and `owner_claimed_at` on `topic_cases`, plus
+`src/storage/write_guard.py` primitives. Case preparation, the ownership claim and
+the grouped-run row commit atomically; every case-bound stage start/commit/failure,
+pause and finalization validates the token, so an interrupt during awaited work
+rolls back events, artifacts, diagnostics, checkpoints and report pointers.
+Case-bound intake holds the claim across analysis; review/exception/annotation/
+evaluation/OSINT writes use short claim/write/validate/release transactions; direct
+case-bound event writes reject a foreign active owner. `case owner` shows the active
+kind/reference without the token; `case interrupt` requires a reason, explicit
+confirmation and a matching reference/token, atomically clears ownership and marks
+the running invocation `INTERRUPTED`. HTTP conflicts return 409. Explicit non-claims:
+process death leaves a claim until the operator interrupts; no elapsed-time or
+GET-side recovery; external direct-SQL scripts remain unfenced. Full gate **475
+passed, 9 deselected**, Ruff clean; see the worker plan §7 and
+[case-writer architecture](../architecture/20261118-case-writer-fencing.md).
+Review the diff before starting R03.
+
+The original R02 scope (now delivered) was:
 
 - Small transactional guard/owner fields; protect `run_case`/rerun/monitor stage
   writes, case-bound intake/URL intake, `_process_intake_item`, `review_case`,
@@ -256,13 +276,17 @@ uv run ruff check src tests --output-format concise
 ## 8. Known caveats
 
 - P03 is committed and **accepted as Release B** (2026-11-18).
-- R01 is implemented in the working tree (migration 12) and verified; its diff
-  still needs owner/parent review before R02 starts.
-- Local `main` is 7 commits ahead of `origin/main` (including the Release B
-  acceptance commit) and has not been pushed.
-- Grouped runs are recorded but **not yet used** for change/delta semantics; R02
-  fencing and R03 finalization must land first. R01 does not claim
-  concurrency-safe sequence allocation.
+- R01 is committed (`ed8459f`, migration 12). R02 is implemented in the working
+  tree (migration 13) and verified; its diff still needs owner/parent review
+  before R03 starts.
+- Local `main` is ahead of `origin/main` (Release B acceptance, R01 and this R02
+  documentation commit) and has not been pushed.
+- Grouped runs are recorded but **not yet used** for change/delta semantics; R03
+  finalization must land first. R02 now makes run sequence allocation and case
+  writes single-writer-admitted, but does not add snapshots.
+- A process death can leave a case ownership claim until an operator runs
+  `triangulate case interrupt` (explicit CLI recovery); there is no elapsed-time
+  or GET-side recovery, and external direct-SQL scripts remain unfenced.
 - The scratch archive is in `/tmp` and is not durable across a machine cleanup;
   copy it somewhere durable if the old one-offs must be retained.
 - P02 test fixtures now expose `seed_workbench(tmp_path)` for browser seeding;
@@ -275,34 +299,35 @@ uv run ruff check src tests --output-format concise
 - No `.pi-lens.json` ignore file was added; the scratch-file cascade is gone
   because the files were archived/removed.
 
-## 9. Paste-ready R02 dispatch brief
+## 9. Paste-ready R03 dispatch brief
 
 ```text
-Implement ticket R02 from docs/plans/20261114-evidence-workbench-worker-plan.md
+Implement ticket R03 from docs/plans/20261114-evidence-workbench-worker-plan.md
 (contract: docs/plans/20261114-evidence-workbench-specification.md §7).
-Start by reading docs/plans/20261118-release-b-handoff.md, the R01 architecture
-doc (docs/architecture/20261118-investigation-runs.md) and the delivered R01
-diff, and confirm the Release B acceptance is recorded (P03 4226856).
+Start by reading docs/plans/20261118-release-b-handoff.md, the R01/R02
+architecture docs (grouped investigation runs, case-writer fencing) and the
+delivered R02 diff, and confirm R01/R02 ownership semantics are in place.
 
-Scope: small transactional case-writer guard/owner fields; admit and validate the
-owner token in every case-bound write transaction (including after awaited work);
-protect run_case/rerun/monitor stage writes, case-bound intake/URL intake,
-_process_intake_item, review_case, update_exception_status and direct case-bound
-store_event_in_db callers. Enumerate actual call sites before editing; helper
-methods inherit the caller's token and must not acquire conflicting nested owners;
-purely unassigned intake is outside the guard. Add an explicit CLI-only interrupt
-that requires matching owner/run ID, reason and confirmation, atomically marks the
-invocation interrupted and invalidates ownership; old tokens cannot commit after a
-new writer starts. No elapsed-time or GET-side recovery. Keep legacy direct-SQL
-scripts explicitly unsupported/unfenced.
+Scope: CaseSnapshot model/migration; src/cases/history.py; run finalization;
+snapshot-aware inspector/comparison readers; run-specific report output; new GET
+contracts and tests. Freeze baseline selection; carry known origin stage/run IDs;
+exclude volatile fields; immutable capture/citation/relationship references and
+before/after claim text so removed live claims stay viewable. Follow the §7
+file/DB finalization protocol exactly: temp sibling report dir → flush/rename →
+guarded success/snapshot/delta/artifact/pointer transaction. File failure cannot
+produce success; DB failure may leave an unreferenced directory but no published
+pointer/baseline. Failed/paused runs never advance the successful baseline; no
+false article removals, fallback/no-content retraction or invented actor
+attribution. Snapshot selectors that are unsupported must fail explicitly.
 
-R01 is internal-only: do not add snapshots/deltas, grouped-run HTTP endpoints or
-change semantics. Do not modify production DB/data/logs, unrelated features,
-existing HTTP mutation boundaries or other tickets' files. Use the disposable
-backend copy for tests and temporary DBs; allocate the next migration number from
-the then-current registry. Stop and report blockers rather than expanding scope.
+Do not add the R04 changes UI, S01 search, production deployment, grouped-run
+mutation endpoints or unrelated features. Use the disposable backend copy and
+temporary DBs; allocate the next migration number from the then-current registry.
+Respect the case owner token in the finalization transaction. Stop and report
+blockers rather than expanding scope.
 
-Return: behaviour delivered; exact files/symbols changed; protected-path test
-matrix; real migration/test output; full backend suite and Ruff; remaining risks.
-Do not call partial work done.
+Return: behaviour delivered; exact files/symbols/contracts changed; migration and
+reader semantics; real tests (first/changed/partial/scoped/failed/paused,
+file/DB failure); full backend suite and Ruff; remaining risks. Do not call
+partial work done.
 ```

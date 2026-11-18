@@ -10,8 +10,8 @@ from src.storage.database import init_database
 from src.storage.migrations import run_migrations
 from src.storage.models import CaseStatus, EvidenceItem, TopicCase
 
-# Highest migration version after R01 added grouped investigation runs.
-LATEST_MIGRATION_VERSION = 12
+# Highest migration version after R02 added case-writer ownership fields.
+LATEST_MIGRATION_VERSION = 13
 
 
 
@@ -290,6 +290,85 @@ def test_migration_12_adds_grouped_runs_without_rewriting_stage_history(tmp_path
 
 
 
+def _create_legacy_v12_database_with_case(db_path) -> None:
+    """Create a version-12 database whose cases have no writer-owner fields."""
+    connection = sqlite3.connect(db_path)
+    try:
+        connection.executescript(
+            """
+            CREATE TABLE _migrations (
+                version INTEGER PRIMARY KEY,
+                name TEXT NOT NULL,
+                applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            """
+        )
+        for version in range(1, 13):
+            connection.execute(
+                "INSERT INTO _migrations (version, name) VALUES (?, ?)",
+                (version, f"legacy migration {version}"),
+            )
+        connection.execute(
+            """CREATE TABLE topic_cases (
+                id TEXT PRIMARY KEY,
+                query TEXT NOT NULL,
+                slug TEXT NOT NULL UNIQUE,
+                status TEXT NOT NULL,
+                metadata_json JSON
+            )"""
+        )
+        connection.execute(
+            "INSERT INTO topic_cases (id, query, slug, status, metadata_json)"
+            " VALUES ('case-legacy-r02', 'Legacy query', 'legacy-query',"
+            " 'REVIEW_READY', '{}')"
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+
+def test_migration_13_adds_case_owner_fields_without_claiming(tmp_path):
+    """A version-12 database gains nullable owner fields; no writer is claimed."""
+    db_path = tmp_path / "triangulate-legacy-v12.db"
+    _create_legacy_v12_database_with_case(db_path)
+
+    run_migrations(str(db_path))
+    run_migrations(str(db_path))
+
+    connection = sqlite3.connect(db_path)
+    try:
+        version = connection.execute(
+            "SELECT MAX(version) FROM _migrations"
+        ).fetchone()[0]
+        assert version == LATEST_MIGRATION_VERSION
+
+        columns = {
+            row[1]
+            for row in connection.execute("PRAGMA table_info(topic_cases)").fetchall()
+        }
+        assert {
+            "owner_token",
+            "owner_kind",
+            "owner_ref_id",
+            "owner_claimed_at",
+        } <= columns
+
+        row = connection.execute(
+            "SELECT id, query, slug, status, owner_token, owner_kind,"
+            " owner_ref_id, owner_claimed_at FROM topic_cases"
+        ).fetchone()
+        assert row[:4] == (
+            "case-legacy-r02",
+            "Legacy query",
+            "legacy-query",
+            "REVIEW_READY",
+        )
+        # Migration 13 claims no writer and invents no ownership.
+        assert row[4:] == (None, None, None, None)
+    finally:
+        connection.close()
+
+
 def test_run_migrations_is_idempotent_on_fresh_database(tmp_path):
     """Fresh ORM-created databases should not fail when migrations run."""
     db_path = tmp_path / "triangulate.db"
@@ -323,6 +402,15 @@ def test_run_migrations_is_idempotent_on_fresh_database(tmp_path):
     }
     assert "investigation_run_id" in event_columns
     assert "investigation_run_id" in stage_run_columns
+    topic_case_columns = {
+        column["name"] for column in inspector.get_columns("topic_cases")
+    }
+    assert {
+        "owner_token",
+        "owner_kind",
+        "owner_ref_id",
+        "owner_claimed_at",
+    } <= topic_case_columns
 
     with db.get_session_sync() as session:
         current_version = session.execute(

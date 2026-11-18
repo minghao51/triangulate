@@ -10,11 +10,12 @@ import re
 import statistics
 import time
 import uuid
+from contextlib import nullcontext
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import or_
+from sqlalchemy import or_, select
 
 from src.ai.taxonomy import sync_bias_taxonomy
 from src.ai.workflow import AIWorkflow
@@ -54,6 +55,7 @@ from src.storage import (
     CaseStageName,
     CaseStageRun,
     CaseStatus,
+    CaseWriterConflict,
     EvidenceItem,
     EvidenceVerificationCheck,
     Event,
@@ -63,6 +65,11 @@ from src.storage import (
     InvestigationRunStatus,
     InvestigationRunTrigger,
     MonitorCheckpoint,
+    OWNER_KIND_ANNOTATION,
+    OWNER_KIND_EXCEPTION,
+    OWNER_KIND_INTAKE,
+    OWNER_KIND_REVIEW,
+    OWNER_KIND_RUN,
     Narrative,
     Party,
     PartyInvestigation,
@@ -70,9 +77,17 @@ from src.storage import (
     ReviewStatus,
     StageStatus,
     TopicCase,
+    case_write_admission,
+    claim_case_ownership,
     get_database,
+    invalidate_case_ownership,
+    new_writer_token,
+    read_case_owner,
+    release_case_ownership,
+    validate_case_ownership,
 )
 from src.storage.event_store import store_event_in_db
+from src.storage.write_guard import OWNER_KIND_EVALUATION, OWNER_KIND_EVIDENCE
 from src.cases._support import CaseRunContext
 from src.cases._persistence import _persist_workflow_diagnostics
 from src.cases.evidence import (
@@ -423,85 +438,97 @@ class TopicCaseService:
         """Persist captured articles to the intake queue."""
         session = get_database().get_session_sync()
         try:
+            admission = nullcontext()
             if case_id is not None:
                 case = session.query(TopicCase).filter(TopicCase.id == case_id).first()
                 if case is None:
                     raise ValueError(f"Case {case_id} not found")
-
-            queued: list[IntakeItem] = []
-            now = _utcnow()
-            for article in articles:
-                normalized_url = (
-                    article.get("url")
-                    or article.get("link")
-                    or article.get("origin_url")
+                # Admission only for case-bound intake; unassigned intake is not
+                # a case writer and stays outside the guard.
+                admission = case_write_admission(
+                    session, case_id, kind=OWNER_KIND_INTAKE
                 )
-                fingerprint = _fingerprint_article(
-                    {
-                        "url": normalized_url or "",
-                        "title": article.get("title", ""),
-                        "source": article.get("source") or article.get("source_name", ""),
+
+            with admission:
+                queued: list[IntakeItem] = []
+                now = _utcnow()
+                for article in articles:
+                    normalized_url = (
+                        article.get("url")
+                        or article.get("link")
+                        or article.get("origin_url")
+                    )
+                    fingerprint = _fingerprint_article(
+                        {
+                            "url": normalized_url or "",
+                            "title": article.get("title", ""),
+                            "source": article.get("source") or article.get("source_name", ""),
+                        }
+                    )
+                    existing = (
+                        session.execute(
+                            select(IntakeItem)
+                            .where(
+                                IntakeItem.case_id == case_id,
+                                IntakeItem.fingerprint == fingerprint,
+                            )
+                            .order_by(IntakeItem.created_at.desc())
+                        )
+                        .scalars()
+                        .first()
+                    )
+
+                    payload = {
+                        **article,
+                        "url": normalized_url,
+                        "link": normalized_url,
                     }
-                )
-                existing = (
-                    session.query(IntakeItem)
-                    .filter(
-                        IntakeItem.case_id == case_id,
-                        IntakeItem.fingerprint == fingerprint,
-                    )
-                    .order_by(IntakeItem.created_at.desc())
-                    .first()
-                )
+                    if existing is None:
+                        existing = IntakeItem(
+                            id=str(uuid.uuid4()),
+                            case_id=case_id,
+                            url=normalized_url,
+                            title=article.get("title") or "Untitled Article",
+                            source_name=article.get("source") or article.get("source_name"),
+                            published_at=str(
+                                article.get("published_at") or article.get("timestamp") or ""
+                            ),
+                            fingerprint=fingerprint,
+                            content=article.get("content"),
+                            capture_type=capture_type,
+                            source_type=article.get("source_type", "rss"),
+                            raw_payload=payload,
+                            intake_status="PENDING",
+                            first_seen_at=now,
+                            last_seen_at=now,
+                        )
+                        session.add(existing)
+                    else:
+                        existing.url = normalized_url or existing.url
+                        existing.title = article.get("title") or existing.title
+                        existing.source_name = (
+                            article.get("source") or article.get("source_name") or existing.source_name
+                        )
+                        existing.published_at = str(
+                            article.get("published_at")
+                            or article.get("timestamp")
+                            or existing.published_at
+                            or ""
+                        )
+                        existing.content = article.get("content", existing.content)
+                        existing.capture_type = capture_type
+                        existing.source_type = article.get("source_type", existing.source_type)
+                        existing.raw_payload = payload
+                        existing.last_seen_at = now
+                        if existing.intake_status == "FAILED":
+                            existing.intake_status = "PENDING"
+                            existing.error_message = None
+                            existing.processed_at = None
+                            existing.processed_event_id = None
+                    queued.append(existing)
 
-                payload = {
-                    **article,
-                    "url": normalized_url,
-                    "link": normalized_url,
-                }
-                if existing is None:
-                    existing = IntakeItem(
-                        id=str(uuid.uuid4()),
-                        case_id=case_id,
-                        url=normalized_url,
-                        title=article.get("title") or "Untitled Article",
-                        source_name=article.get("source") or article.get("source_name"),
-                        published_at=str(
-                            article.get("published_at") or article.get("timestamp") or ""
-                        ),
-                        fingerprint=fingerprint,
-                        content=article.get("content"),
-                        capture_type=capture_type,
-                        source_type=article.get("source_type", "rss"),
-                        raw_payload=payload,
-                        intake_status="PENDING",
-                        first_seen_at=now,
-                        last_seen_at=now,
-                    )
-                    session.add(existing)
-                else:
-                    existing.url = normalized_url or existing.url
-                    existing.title = article.get("title") or existing.title
-                    existing.source_name = (
-                        article.get("source") or article.get("source_name") or existing.source_name
-                    )
-                    existing.published_at = str(
-                        article.get("published_at")
-                        or article.get("timestamp")
-                        or existing.published_at
-                        or ""
-                    )
-                    existing.content = article.get("content", existing.content)
-                    existing.capture_type = capture_type
-                    existing.source_type = article.get("source_type", existing.source_type)
-                    existing.raw_payload = payload
-                    existing.last_seen_at = now
-                    if existing.intake_status == "FAILED":
-                        existing.intake_status = "PENDING"
-                        existing.error_message = None
-                        existing.processed_at = None
-                        existing.processed_event_id = None
-                queued.append(existing)
-
+            # Commit after admission released ownership: claim, writes,
+            # validation and release persist atomically.
             session.commit()
             return queued
         finally:
@@ -574,8 +601,35 @@ class TopicCaseService:
         case_id: str | None = None,
         trigger: InvestigationRunTrigger | None = None,
     ) -> TopicCase:
+        effective_trigger = trigger or (
+            InvestigationRunTrigger.MONITOR
+            if monitor_mode
+            else InvestigationRunTrigger.INITIAL
+        )
+        owner_token = new_writer_token()
+        investigation_run_id = str(uuid.uuid4())
+        run_started_at = _utcnow()
+        parameters = {
+            "query": query,
+            "conflict": conflict,
+            "confirmedParties": list(confirmed_parties or []),
+            "manualLinks": list(manual_links or []),
+            "maxArticles": max_articles,
+            "relevanceThreshold": relevance_threshold,
+            "importance": importance,
+            "monitorMode": monitor_mode,
+            "startStage": start_stage.value,
+            "automationMode": automation_mode,
+            "resumeExistingCase": case_id is not None,
+            "trigger": effective_trigger.value,
+        }
+
         session = get_database().get_session_sync()
+        predecessor_run_id: str | None = None
         try:
+            # Case preparation, admission and grouped-run creation are one
+            # transaction: a conflicting writer cannot observe half-applied case
+            # mutations, and no run row exists without an owner token.
             case = self._get_or_create_case(
                 session,
                 query=query,
@@ -584,134 +638,146 @@ class TopicCaseService:
                 importance=importance,
                 monitor_mode=monitor_mode,
             )
+            session.flush()
+            claim_case_ownership(
+                session,
+                case.id,
+                token=owner_token,
+                kind=OWNER_KIND_RUN,
+                ref_id=investigation_run_id,
+            )
+            predecessor_run_id = self._create_investigation_run(
+                session,
+                case_id=case.id,
+                run_id=investigation_run_id,
+                trigger=effective_trigger,
+                start_stage=start_stage,
+                parameters=parameters,
+                started_at=run_started_at,
+            )
             session.commit()
             case_id_value = case.id
+        except Exception:
+            session.rollback()
+            raise
         finally:
             session.close()
 
         case = self._reload_case(case_id_value)
-        effective_trigger = trigger or (
-            InvestigationRunTrigger.MONITOR
-            if monitor_mode
-            else InvestigationRunTrigger.INITIAL
-        )
         context = CaseRunContext(
             case=case,
-            run_started_at=_utcnow(),
+            run_started_at=run_started_at,
             output_dir=(output_dir or self.output_root) / "cases" / case.slug,
             run_trigger=effective_trigger.value,
             requested_start_stage=start_stage,
+            owner_token=owner_token,
+            investigation_run_id=investigation_run_id,
+            predecessor_run_id=predecessor_run_id,
         )
         if start_stage != CaseStageName.BOOTSTRAP:
             self._hydrate_context_from_case(context)
 
-        context.investigation_run_id = self._start_investigation_run(
-            context,
-            trigger=effective_trigger,
-            start_stage=start_stage,
-            parameters={
-                "query": query,
-                "conflict": conflict,
-                "confirmedParties": list(confirmed_parties or []),
-                "manualLinks": list(manual_links or []),
-                "maxArticles": max_articles,
-                "relevanceThreshold": relevance_threshold,
-                "importance": importance,
-                "monitorMode": monitor_mode,
-                "startStage": start_stage.value,
-                "automationMode": automation_mode,
-                "resumeExistingCase": case_id is not None,
-                "trigger": effective_trigger.value,
-            },
-        )
-
-        effective_automation_mode = _normalize_automation_mode(
-            automation_mode
-            or context.case.routing_mode
-            or (context.case.metadata_json or {}).get("bootstrap", {}).get("automation_mode")
-        )
-        execution_automation_mode = _execution_automation_mode(
-            automation_mode
-            or context.case.routing_mode
-            or (context.case.metadata_json or {}).get("bootstrap", {}).get("automation_mode")
-        )
-
-        requested_index = STAGE_ORDER.index(start_stage)
-        paused_stage: CaseStageName | None = None
         try:
-            for stage in STAGE_ORDER[requested_index:]:
-                if stage == CaseStageName.BOOTSTRAP:
-                    await self._stage_bootstrap(
-                        context,
-                        conflict=conflict,
-                        confirmed_parties=confirmed_parties or [],
-                        manual_links=manual_links or [],
-                        automation_mode=effective_automation_mode,
-                    )
-                elif stage == CaseStageName.RETRIEVE:
-                    await self._stage_retrieve(
-                        context,
-                        conflict=conflict,
-                        confirmed_parties=confirmed_parties or [],
-                        manual_links=manual_links or [],
-                        max_articles=max_articles,
-                        relevance_threshold=relevance_threshold,
-                        monitor_mode=monitor_mode,
-                    )
-                elif stage == CaseStageName.TRIAGE:
-                    await self._stage_triage(
-                        context, max_articles=max_articles, monitor_mode=monitor_mode
-                    )
-                elif stage == CaseStageName.INVESTIGATE:
-                    await self._stage_investigate(context)
-                elif stage == CaseStageName.ARBITRATE:
-                    await self._stage_arbitrate(context, monitor_mode=monitor_mode)
-                elif stage == CaseStageName.REPORT:
-                    await self._stage_report(context)
+            effective_automation_mode = _normalize_automation_mode(
+                automation_mode
+                or context.case.routing_mode
+                or (context.case.metadata_json or {}).get("bootstrap", {}).get("automation_mode")
+            )
+            execution_automation_mode = _execution_automation_mode(
+                automation_mode
+                or context.case.routing_mode
+                or (context.case.metadata_json or {}).get("bootstrap", {}).get("automation_mode")
+            )
 
-                if context.case.status == CaseStatus.FAILED:
-                    break
+            requested_index = STAGE_ORDER.index(start_stage)
+            paused_stage: CaseStageName | None = None
+            try:
+                for stage in STAGE_ORDER[requested_index:]:
+                    if stage == CaseStageName.BOOTSTRAP:
+                        await self._stage_bootstrap(
+                            context,
+                            conflict=conflict,
+                            confirmed_parties=confirmed_parties or [],
+                            manual_links=manual_links or [],
+                            automation_mode=effective_automation_mode,
+                        )
+                    elif stage == CaseStageName.RETRIEVE:
+                        await self._stage_retrieve(
+                            context,
+                            conflict=conflict,
+                            confirmed_parties=confirmed_parties or [],
+                            manual_links=manual_links or [],
+                            max_articles=max_articles,
+                            relevance_threshold=relevance_threshold,
+                            monitor_mode=monitor_mode,
+                        )
+                    elif stage == CaseStageName.TRIAGE:
+                        await self._stage_triage(
+                            context, max_articles=max_articles, monitor_mode=monitor_mode
+                        )
+                    elif stage == CaseStageName.INVESTIGATE:
+                        await self._stage_investigate(context)
+                    elif stage == CaseStageName.ARBITRATE:
+                        await self._stage_arbitrate(context, monitor_mode=monitor_mode)
+                    elif stage == CaseStageName.REPORT:
+                        await self._stage_report(context)
 
-                if self._should_pause_after_stage(
-                    context.case,
-                    stage_name=stage,
-                    automation_mode=execution_automation_mode,
-                ):
-                    self._pause_case_for_manual_action(
-                        context.case.id,
+                    if context.case.status == CaseStatus.FAILED:
+                        break
+
+                    if self._should_pause_after_stage(
+                        context.case,
                         stage_name=stage,
                         automation_mode=execution_automation_mode,
-                    )
-                    context.case = self._reload_case(context.case.id)
-                    paused_stage = stage
-                    break
-        except Exception as exc:
-            # Record the failed invocation before propagating: an unexpected
-            # error outside a stage transaction must not leave a RUNNING run or
-            # imply successful coverage. A bookkeeping failure must not mask the
-            # original error.
-            try:
-                self._finalize_investigation_run(
-                    context,
-                    forced_status=InvestigationRunStatus.FAILED,
-                    forced_coverage=InvestigationCoverage.FAILED,
-                    error={
-                        "message": str(exc),
-                        "stage": (
-                            context.case.current_stage.value
-                            if context.case.current_stage is not None
-                            else None
-                        ),
-                    },
-                )
-            except Exception:
-                logger.exception(
-                    "Failed to record grouped-run failure for case %s",
+                    ):
+                        self._pause_case_for_manual_action(
+                            context.case.id,
+                            stage_name=stage,
+                            automation_mode=execution_automation_mode,
+                            owner_token=context.owner_token,
+                        )
+                        context.case = self._reload_case(context.case.id)
+                        paused_stage = stage
+                        break
+            except CaseWriterConflict:
+                # The writer was superseded (for example by an explicit CLI
+                # interrupt). The interrupt writer owns the terminal run state;
+                # do not overwrite it with a failure record.
+                logger.warning(
+                    "Case %s run %s was superseded by another writer; stopping",
                     context.case.id,
+                    context.investigation_run_id,
                 )
-            raise
+                raise
+            except Exception as exc:
+                # Record the failed invocation before propagating: an unexpected
+                # error outside a stage transaction must not leave a RUNNING run or
+                # imply successful coverage. A bookkeeping failure must not mask
+                # the original error.
+                try:
+                    self._finalize_investigation_run(
+                        context,
+                        forced_status=InvestigationRunStatus.FAILED,
+                        forced_coverage=InvestigationCoverage.FAILED,
+                        error={
+                            "message": str(exc),
+                            "stage": (
+                                context.case.current_stage.value
+                                if context.case.current_stage is not None
+                                else None
+                            ),
+                        },
+                    )
+                except Exception:
+                    logger.exception(
+                        "Failed to record grouped-run failure for case %s",
+                        context.case.id,
+                    )
+                raise
 
-        self._finalize_investigation_run(context, paused_stage=paused_stage)
+            self._finalize_investigation_run(context, paused_stage=paused_stage)
+        finally:
+            self._end_case_ownership(context.case.id, context.owner_token)
         return self._reload_case(context.case.id)
 
     async def rerun_case(
@@ -750,6 +816,100 @@ class TopicCaseService:
             trigger=InvestigationRunTrigger.RERUN,
         )
 
+    def get_case_owner(self, case_id: str) -> dict[str, Any]:
+        """Read the current case-writer owner for operator diagnostics.
+
+        Read-only and token-free: the CLI uses this to discover the active
+        kind/reference before an explicit interrupt.
+        """
+        session = get_database().get_session_sync()
+        try:
+            case = (
+                session.execute(select(TopicCase).where(TopicCase.id == case_id))
+                .scalars()
+                .first()
+            )
+            if case is None:
+                raise ValueError(f"Case {case_id} not found")
+            return read_case_owner(session, case_id).summary
+        finally:
+            session.close()
+
+    def interrupt_case(
+        self,
+        case_id: str,
+        *,
+        run_id: str | None = None,
+        token: str | None = None,
+        reason: str,
+        confirmed: bool = False,
+    ) -> dict[str, Any]:
+        """Explicit CLI-only interrupt of the active case writer (R02).
+
+        Requires a reason, explicit confirmation and a matching owner reference
+        or token. Atomically clears ownership and marks the owning investigation
+        run INTERRUPTED in one transaction. It does **not** stop the process: the
+        superseded writer's later case-bound commits fail validation. There is
+        no elapsed-time or GET-side recovery.
+        """
+        cleaned_reason = (reason or "").strip()
+        if not cleaned_reason:
+            raise ValueError("An interrupt reason is required")
+        if not confirmed:
+            raise ValueError("Interruption requires explicit confirmation")
+        if not run_id and not token:
+            raise ValueError(
+                "Provide the active owner reference (--run-id) or --token"
+            )
+        session = get_database().get_session_sync()
+        try:
+            case = (
+                session.execute(select(TopicCase).where(TopicCase.id == case_id))
+                .scalars()
+                .first()
+            )
+            if case is None:
+                raise ValueError(f"Case {case_id} not found")
+            interrupted = invalidate_case_ownership(
+                session,
+                case_id,
+                expected_token=token,
+                expected_ref_id=run_id,
+            )
+            run = None
+            if interrupted.kind == OWNER_KIND_RUN and interrupted.ref_id:
+                run = (
+                    session.execute(
+                        select(InvestigationRun).where(
+                            InvestigationRun.id == interrupted.ref_id,
+                            InvestigationRun.case_id == case_id,
+                        )
+                    )
+                    .scalars()
+                    .first()
+                )
+                if run is not None and run.status == InvestigationRunStatus.RUNNING:
+                    run.status = InvestigationRunStatus.INTERRUPTED
+                    run.completed_at = _utcnow()
+                    run.error_json = {
+                        "reason": cleaned_reason,
+                        "interruptedAt": _utcnow().isoformat(),
+                        "interruptedKind": interrupted.kind,
+                    }
+            session.commit()
+            return {
+                "caseId": case_id,
+                "interrupted": interrupted.summary,
+                "runId": run.id if run is not None else None,
+                "runStatus": run.status.value if run is not None else None,
+                "reason": cleaned_reason,
+            }
+        except Exception:
+            session.rollback()
+            raise
+        finally:
+            session.close()
+
     def review_case(
         self, case_id: str, decision: str, notes: str | None = None
     ) -> TopicCase:
@@ -767,45 +927,48 @@ class TopicCaseService:
             )
 
             normalized = decision.lower()
-            if normalized == "approve":
-                open_exceptions = self._get_open_exceptions(case.metadata_json or {})
-                if open_exceptions:
-                    unresolved = ", ".join(sorted({item["type"] for item in open_exceptions}))
-                    raise ValueError(
-                        f"Case {case_id} still has unresolved exceptions: {unresolved}"
-                    )
-                case.status = CaseStatus.APPROVED
-                target_status = ReviewStatus.APPROVED
-            elif normalized == "reject":
-                case.status = CaseStatus.REJECTED
-                target_status = ReviewStatus.REJECTED
-            elif normalized in {"action_required", "exception"}:
-                case.status = CaseStatus.REVIEW_READY
-                target_status = ReviewStatus.ACTION_REQUIRED
-            else:
-                case.status = CaseStatus.REVIEW_READY
-                target_status = None
+            # Review is a case-bound write: admit/validate/release inside the
+            # same transaction so an active run rejects it at admission.
+            with case_write_admission(session, case_id, kind=OWNER_KIND_REVIEW):
+                if normalized == "approve":
+                    open_exceptions = self._get_open_exceptions(case.metadata_json or {})
+                    if open_exceptions:
+                        unresolved = ", ".join(sorted({item["type"] for item in open_exceptions}))
+                        raise ValueError(
+                            f"Case {case_id} still has unresolved exceptions: {unresolved}"
+                        )
+                    case.status = CaseStatus.APPROVED
+                    target_status = ReviewStatus.APPROVED
+                elif normalized == "reject":
+                    case.status = CaseStatus.REJECTED
+                    target_status = ReviewStatus.REJECTED
+                elif normalized in {"action_required", "exception"}:
+                    case.status = CaseStatus.REVIEW_READY
+                    target_status = ReviewStatus.ACTION_REQUIRED
+                else:
+                    case.status = CaseStatus.REVIEW_READY
+                    target_status = None
 
-            if target_status is not None:
-                for review in reviews:
-                    review.status = target_status
-                    review.reviewed_at = _utcnow()
-                    # Bind the decision to the analysis revision it reviewed so
-                    # a later rewrite only invalidates a materially changed one.
-                    review_event_id: Any = review.event_id
-                    bind_review_decision(
-                        review,
-                        compute_event_analysis_hash(session, review_event_id),
-                    )
+                if target_status is not None:
+                    for review in reviews:
+                        review.status = target_status
+                        review.reviewed_at = _utcnow()
+                        # Bind the decision to the analysis revision it reviewed so
+                        # a later rewrite only invalidates a materially changed one.
+                        review_event_id: Any = review.event_id
+                        bind_review_decision(
+                            review,
+                            compute_event_analysis_hash(session, review_event_id),
+                        )
 
-            case.last_reviewed_at = _utcnow()
-            case.review_notes = notes
-            case.metadata_json = self._resolve_case_exceptions(
-                case.metadata_json or {}, decision=normalized, notes=notes
-            )
-            case.open_review_items = self._compute_open_review_items(
-                case.metadata_json, reviews
-            )
+                case.last_reviewed_at = _utcnow()
+                case.review_notes = notes
+                case.metadata_json = self._resolve_case_exceptions(
+                    case.metadata_json or {}, decision=normalized, notes=notes
+                )
+                case.open_review_items = self._compute_open_review_items(
+                    case.metadata_json, reviews
+                )
             session.commit()
             return case
         finally:
@@ -829,37 +992,42 @@ class TopicCaseService:
             if normalized_action not in {"resolve", "defer", "reopen"}:
                 raise ValueError(f"Unsupported exception action: {action}")
 
-            exception_queue = []
-            found = False
-            for item in (case.metadata_json or {}).get("exception_queue", []):
-                normalized = self._coerce_exception(item)
-                if normalized["id"] == exception_id:
-                    found = True
-                    if normalized_action == "resolve":
-                        normalized["status"] = "resolved"
-                    elif normalized_action == "defer":
-                        normalized["status"] = "deferred"
-                    else:
-                        normalized["status"] = "open"
-                    normalized["updated_at"] = _utcnow().isoformat()
-                    if notes:
-                        normalized["resolution_notes"] = notes
-                exception_queue.append(normalized)
+            with case_write_admission(session, case_id, kind=OWNER_KIND_EXCEPTION):
+                exception_queue = []
+                found = False
+                for item in (case.metadata_json or {}).get("exception_queue", []):
+                    normalized = self._coerce_exception(item)
+                    if normalized["id"] == exception_id:
+                        found = True
+                        if normalized_action == "resolve":
+                            normalized["status"] = "resolved"
+                        elif normalized_action == "defer":
+                            normalized["status"] = "deferred"
+                        else:
+                            normalized["status"] = "open"
+                        normalized["updated_at"] = _utcnow().isoformat()
+                        if notes:
+                            normalized["resolution_notes"] = notes
+                    exception_queue.append(normalized)
 
-            if not found:
-                raise ValueError(f"Exception {exception_id} not found for case {case_id}")
+                if not found:
+                    raise ValueError(
+                        f"Exception {exception_id} not found for case {case_id}"
+                    )
 
-            metadata_json = dict(case.metadata_json or {})
-            metadata_json["exception_queue"] = exception_queue
-            case.metadata_json = metadata_json
-            reviews = (
-                session.query(Review)
-                .join(Event, Review.event_id == Event.id)
-                .filter(Event.case_id == case_id)
-                .all()
-            )
-            case.open_review_items = self._compute_open_review_items(metadata_json, reviews)
-            case.updated_at = _utcnow()
+                metadata_json = dict(case.metadata_json or {})
+                metadata_json["exception_queue"] = exception_queue
+                case.metadata_json = metadata_json
+                reviews = (
+                    session.query(Review)
+                    .join(Event, Review.event_id == Event.id)
+                    .filter(Event.case_id == case_id)
+                    .all()
+                )
+                case.open_review_items = self._compute_open_review_items(
+                    metadata_json, reviews
+                )
+                case.updated_at = _utcnow()
             session.commit()
             return case
         finally:
@@ -1001,12 +1169,48 @@ class TopicCaseService:
 
     async def _process_intake_item(self, intake_id: str) -> bool:
         session = get_database().get_session_sync()
+        owner_token: str | None = None
+        owner_case_id: str | None = None
         try:
             item = session.query(IntakeItem).filter(IntakeItem.id == intake_id).first()
             if item is None:
                 return False
+
+            case = None
+            bootstrap_metadata: dict[str, Any] = {}
+            if item.case_id:
+                case = session.query(TopicCase).filter(TopicCase.id == item.case_id).first()
+                if case is None:
+                    item.intake_status = "FAILED"
+                    item.error_message = f"Case {item.case_id} not found"
+                    session.commit()
+                    return False
+                bootstrap_metadata = dict(case.metadata_json or {})
+
             item.intake_status = "PROCESSING"
             item.error_message = None
+            if item.case_id:
+                # Case-bound intake holds the case claim across the awaited
+                # analysis work; a conflicting run/review/exception writer is
+                # rejected instead of interleaving case writes.
+                owner_token = new_writer_token()
+                owner_case_id = item.case_id
+                try:
+                    claim_case_ownership(
+                        session,
+                        owner_case_id,
+                        token=owner_token,
+                        kind=OWNER_KIND_INTAKE,
+                        ref_id=item.id,
+                    )
+                except CaseWriterConflict:
+                    session.rollback()
+                    logger.warning(
+                        "Intake item %s rejected: case %s is owned by another writer",
+                        intake_id,
+                        owner_case_id,
+                    )
+                    return False
             session.commit()
 
             article_payload = dict(item.raw_payload or {})
@@ -1016,22 +1220,25 @@ class TopicCaseService:
             article_payload.setdefault("url", item.url)
             article_payload.setdefault("source_name", item.source_name or "")
             article_payload.setdefault("published_at", item.published_at)
-            article_payload.setdefault("timestamp", item.published_at or _utcnow().isoformat())
+            article_payload.setdefault(
+                "timestamp", item.published_at or _utcnow().isoformat()
+            )
             article_payload.setdefault("source_type", item.source_type)
 
             if item.case_id:
-                case = session.query(TopicCase).filter(TopicCase.id == item.case_id).first()
-                if case is None:
-                    item.intake_status = "FAILED"
-                    item.error_message = f"Case {item.case_id} not found"
-                    session.commit()
-                    return False
                 case_article = self._ensure_case_article_from_intake(session, item)
+                if owner_token:
+                    validate_case_ownership(
+                        session,
+                        item.case_id,
+                        owner_token,
+                        operation="intake_article",
+                    )
                 session.commit()
                 event = await self._process_case_article(case, case_article)
                 create_review = True
                 confirmed_parties = (
-                    (case.metadata_json or {}).get("bootstrap", {}).get(
+                    bootstrap_metadata.get("bootstrap", {}).get(
                         "confirmed_parties", []
                     )
                 )
@@ -1043,18 +1250,33 @@ class TopicCaseService:
             if event is None:
                 item.intake_status = "FAILED"
                 item.error_message = "No claims extracted from intake item"
+                if owner_token and owner_case_id:
+                    validate_case_ownership(
+                        session,
+                        owner_case_id,
+                        owner_token,
+                        operation="intake_failure",
+                    )
                 session.commit()
                 return False
 
             stored = store_event_in_db(
                 event,
                 case_id=item.case_id,
+                owner_token=owner_token,
                 create_review=create_review,
                 confirmed_parties=confirmed_parties,
             )
             if not stored:
                 item.intake_status = "FAILED"
                 item.error_message = "Failed to persist processed event"
+                if owner_token and owner_case_id:
+                    validate_case_ownership(
+                        session,
+                        owner_case_id,
+                        owner_token,
+                        operation="intake_failure",
+                    )
                 session.commit()
                 return False
 
@@ -1067,18 +1289,46 @@ class TopicCaseService:
             if item.case_id:
                 self._refresh_case_metrics(session, item.case_id)
 
+            if owner_token and owner_case_id:
+                validate_case_ownership(
+                    session,
+                    owner_case_id,
+                    owner_token,
+                    operation="intake_commit",
+                )
             session.commit()
             return True
+        except CaseWriterConflict:
+            # Explicitly superseded: leave the item retriable instead of
+            # inventing a failure while another writer owns the case.
+            session.rollback()
+            logger.warning(
+                "Intake item %s was superseded by an explicit interrupt", intake_id
+            )
+            return False
         except Exception as exc:
+            session.rollback()
             logger.exception("Failed to process intake item %s", intake_id)
             failing = session.query(IntakeItem).filter(IntakeItem.id == intake_id).first()
             if failing is not None:
                 failing.intake_status = "FAILED"
                 failing.error_message = str(exc)
-                session.commit()
+                try:
+                    if owner_token and owner_case_id:
+                        validate_case_ownership(
+                            session,
+                            owner_case_id,
+                            owner_token,
+                            operation="intake_failure",
+                        )
+                    session.commit()
+                except CaseWriterConflict:
+                    session.rollback()
             return False
         finally:
             session.close()
+            if owner_token and owner_case_id:
+                self._end_case_ownership(owner_case_id, owner_token)
 
     def _ensure_case_article_from_intake(
         self, session, intake_item: IntakeItem
@@ -1886,6 +2136,7 @@ class TopicCaseService:
                 case_id=context.case.id,
                 case_run_id=stage_run.id,
                 investigation_run_id=context.investigation_run_id,
+                owner_token=context.owner_token,
                 create_review=True,
                 confirmed_parties=confirmed_parties,
                 session=session,
@@ -2188,6 +2439,7 @@ class TopicCaseService:
             workflow_name=workflow_name,
             model_used=model_used,
             investigation_run_id=context.investigation_run_id,
+            owner_token=context.owner_token,
         )
 
         try:
@@ -2261,6 +2513,13 @@ class TopicCaseService:
                     ),
                     retry_count=stage_run.retry_count or 0,
                 )
+                # Fencing: an interrupt/takeover after awaited work must make this
+                # stage transaction fail before it commits. A direct private stage
+                # seam with no owner token is not a guarded writer entry point.
+                if context.owner_token is not None:
+                    validate_case_ownership(
+                        session, context.case.id, context.owner_token, operation="stage"
+                    )
                 session.commit()
                 context.case = case
                 context.stage_outcomes.append(
@@ -2285,6 +2544,10 @@ class TopicCaseService:
                 raise
             finally:
                 session.close()
+        except CaseWriterConflict:
+            # Superseded writer: the interrupt already recorded the terminal run
+            # state. Do not pretend the stage failed or overwrite that record.
+            raise
         except Exception as exc:
             logger.exception("Case stage %s failed", stage_name.value)
             session = get_database().get_session_sync()
@@ -2336,6 +2599,13 @@ class TopicCaseService:
                     ],
                 )
                 case.metadata_json = metadata_json
+                if context.owner_token is not None:
+                    validate_case_ownership(
+                        session,
+                        context.case.id,
+                        context.owner_token,
+                        operation="stage_failure",
+                    )
                 session.commit()
                 context.case = case
                 context.stage_outcomes.append(
@@ -2359,57 +2629,71 @@ class TopicCaseService:
             return []
         return STAGE_ORDER[STAGE_ORDER.index(stage) :]
 
-    def _start_investigation_run(
+    def _create_investigation_run(
         self,
-        context: CaseRunContext,
+        session,
         *,
+        case_id: str,
+        run_id: str,
         trigger: InvestigationRunTrigger,
         start_stage: CaseStageName,
         parameters: dict[str, Any],
-    ) -> str:
-        """Create the RUNNING grouped record before the first stage attempt.
+        started_at: datetime,
+    ) -> str | None:
+        """Add the RUNNING grouped record inside the caller's transaction.
 
-        The per-case sequence/predecessor are read in the same session as the
-        insert. R01 does not claim concurrency-safe sequence allocation: R02
-        owns case write admission and fencing, so a concurrent invocation is a
-        known gap of this internal-only ticket, not a supported mode.
+        The caller has already claimed case ownership, so reading the previous
+        sequence and inserting the next run cannot race another run (R02). No
+        commit happens here: case preparation, the claim and this row commit
+        together.
         """
+        previous = (
+            session.execute(
+                select(InvestigationRun)
+                .where(InvestigationRun.case_id == case_id)
+                .order_by(InvestigationRun.sequence.desc())
+            )
+            .scalars()
+            .first()
+        )
+        sequence = (previous.sequence + 1) if previous is not None else 1
+        try:
+            parameter_snapshot = json.loads(json.dumps(parameters, default=str))
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                "Investigation run parameters must be JSON-serializable"
+            ) from exc
+        run = InvestigationRun(
+            id=run_id,
+            case_id=case_id,
+            sequence=sequence,
+            trigger=trigger,
+            requested_start_stage=start_stage,
+            parameter_snapshot=parameter_snapshot,
+            predecessor_run_id=previous.id if previous is not None else None,
+            status=InvestigationRunStatus.RUNNING,
+            # No snapshot/coverage claim until the invocation actually ends.
+            coverage=InvestigationCoverage.UNKNOWN,
+            coverage_details={},
+            started_at=started_at,
+        )
+        session.add(run)
+        return run.predecessor_run_id
+
+    def _end_case_ownership(self, case_id: str, token: str | None) -> None:
+        """Release a long-lived case claim; never mask the run outcome."""
+        if not token:
+            return
         session = get_database().get_session_sync()
         try:
-            case = (
-                session.query(TopicCase)
-                .filter(TopicCase.id == context.case.id)
-                .first()
-            )
-            if case is None:
-                raise RuntimeError(f"Case {context.case.id!r} is missing")
-            previous = (
-                session.query(InvestigationRun)
-                .filter(InvestigationRun.case_id == context.case.id)
-                .order_by(InvestigationRun.sequence.desc())
-                .first()
-            )
-            sequence = (previous.sequence + 1) if previous is not None else 1
-            run = InvestigationRun(
-                id=str(uuid.uuid4()),
-                case_id=context.case.id,
-                sequence=sequence,
-                trigger=trigger,
-                requested_start_stage=start_stage,
-                parameter_snapshot=json.loads(
-                    json.dumps(parameters, default=str)
-                ),
-                predecessor_run_id=previous.id if previous is not None else None,
-                status=InvestigationRunStatus.RUNNING,
-                # No snapshot/coverage claim until the invocation actually ends.
-                coverage=InvestigationCoverage.UNKNOWN,
-                coverage_details={},
-                started_at=context.run_started_at,
-            )
-            session.add(run)
-            context.predecessor_run_id = run.predecessor_run_id
-            session.commit()
-            return run.id
+            if release_case_ownership(session, case_id, token):
+                session.commit()
+            else:
+                # Superseded (for example interrupted): nothing to release.
+                session.rollback()
+        except Exception:
+            session.rollback()
+            logger.exception("Failed to release case ownership for %s", case_id)
         finally:
             session.close()
 
@@ -2574,6 +2858,13 @@ class TopicCaseService:
             run.error_json = (
                 json.loads(json.dumps(error, default=str)) if error else None
             )
+            # Finalize only while this invocation still owns the case.
+            validate_case_ownership(
+                session,
+                context.case.id,
+                context.owner_token,
+                operation="run_finalization",
+            )
             session.commit()
         finally:
             session.close()
@@ -2588,12 +2879,18 @@ class TopicCaseService:
         workflow_name: str | None,
         model_used: str | None,
         investigation_run_id: str | None = None,
+        owner_token: str | None = None,
     ) -> None:
         session = get_database().get_session_sync()
         try:
             case = session.query(TopicCase).filter(TopicCase.id == case_id).first()
             if case is None:
                 raise RuntimeError(f"Case {case_id!r} is missing")
+            # A superseded writer cannot create its next stage attempt.
+            if owner_token is not None:
+                validate_case_ownership(
+                    session, case_id, owner_token, operation="stage_start"
+                )
             attempt = (
                 session.query(CaseStageRun)
                 .filter(
@@ -2754,12 +3051,16 @@ class TopicCaseService:
         *,
         stage_name: CaseStageName,
         automation_mode: str,
+        owner_token: str | None = None,
     ) -> None:
         session = get_database().get_session_sync()
         try:
             case = session.query(TopicCase).filter(TopicCase.id == case_id).first()
             if case is None:
                 raise RuntimeError(f"Case {case_id!r} is missing")
+            validate_case_ownership(
+                session, case_id, owner_token, operation="pause"
+            )
             metadata_json = dict(case.metadata_json or {})
             metadata_json["manual_gate"] = {
                 "stage": stage_name.value,
@@ -3373,6 +3674,10 @@ class TopicCaseService:
                 content=content.strip(),
                 metadata_json=metadata or {},
             )
+            annotation_owner = new_writer_token()
+            claim_case_ownership(
+                session, case_id, token=annotation_owner, kind=OWNER_KIND_ANNOTATION
+            )
             session.add(annotation)
             self._record_audit_entry(
                 session,
@@ -3384,6 +3689,10 @@ class TopicCaseService:
                 rationale=content.strip(),
                 metadata=metadata or {},
             )
+            validate_case_ownership(
+                session, case_id, annotation_owner, operation="annotation"
+            )
+            release_case_ownership(session, case_id, annotation_owner)
             session.commit()
             return {
                 "id": annotation.id,
@@ -3523,6 +3832,10 @@ class TopicCaseService:
                 output_version=detail["case"].get("updated_at"),
                 taxonomy_version_id=active_taxonomy.id if active_taxonomy else None,
             )
+            evaluation_owner = new_writer_token()
+            claim_case_ownership(
+                session, case_id, token=evaluation_owner, kind=OWNER_KIND_EVALUATION
+            )
             session.add(evaluation)
             self._record_audit_entry(
                 session,
@@ -3534,6 +3847,10 @@ class TopicCaseService:
                 rationale="Generated evaluation run for current case state.",
                 metadata={"evaluation_kind": evaluation_kind, "overall_score": overall_score},
             )
+            validate_case_ownership(
+                session, case_id, evaluation_owner, operation="evaluation"
+            )
+            release_case_ownership(session, case_id, evaluation_owner)
             session.commit()
             return {
                 "id": evaluation.id,
@@ -3709,6 +4026,10 @@ class TopicCaseService:
                 .first()
             )
             artifact_kind = artifact_type or raw_payload.get("artifact_type") or source_path.suffix.lstrip(".") or "file"
+            osint_owner = new_writer_token()
+            claim_case_ownership(
+                session, case_id, token=osint_owner, kind=OWNER_KIND_EVIDENCE
+            )
             if existing_artifact is None:
                 existing_artifact = OsintArtifact(
                     id=str(uuid.uuid4()),
@@ -3856,6 +4177,10 @@ class TopicCaseService:
             metadata["osint_summary"] = osint_summary
             case.metadata_json = metadata
             self._refresh_case_metrics(session, case_id)
+            validate_case_ownership(
+                session, case_id, osint_owner, operation="osint_import"
+            )
+            release_case_ownership(session, case_id, osint_owner)
             session.commit()
             return {
                 "artifact_id": existing_artifact.id,

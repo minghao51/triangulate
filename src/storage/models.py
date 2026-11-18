@@ -320,6 +320,14 @@ class TopicCase(Base):
     event_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     open_review_items: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    # R02 single-writer admission/fencing. The token is claimed atomically before
+    # a case-bound writer starts and validated in every case-bound write
+    # transaction; ``owner_ref_id`` names the investigation run or intake item.
+    # All fields are nullable so legacy rows simply have no active owner.
+    owner_token: Mapped[str | None] = mapped_column(String, index=True)
+    owner_kind: Mapped[str | None] = mapped_column(String)
+    owner_ref_id: Mapped[str | None] = mapped_column(String)
+    owner_claimed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
     updated_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), default=utc_now, onupdate=utc_now, index=True

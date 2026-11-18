@@ -7,11 +7,11 @@ from pathlib import Path
 
 from rich.console import Console
 from rich.panel import Panel
-from rich.prompt import Prompt
+from rich.prompt import Confirm, Prompt
 from rich.table import Table
 
 from src.runtime import build_case_service
-from src.storage import CaseStageName, CaseStatus
+from src.storage import CaseStageName, CaseStatus, CaseWriterConflict
 
 console = Console()
 
@@ -210,7 +210,11 @@ def cmd_review_case(
             "d": "defer",
         }[decision]
 
-    reviewed = service.review_case(case["id"], decision, notes)
+    try:
+        reviewed = service.review_case(case["id"], decision, notes)
+    except CaseWriterConflict as exc:
+        console.print(f"[red]{exc}[/red]")
+        return
     console.print(f"[green]Case updated: {reviewed.status.value}[/green]")
 
 
@@ -223,7 +227,13 @@ def cmd_rerun_case(
     """Rerun an existing case from a specific stage."""
     service = build_case_service(output)
     stage = CaseStageName[from_stage.upper()]
-    case = asyncio.run(service.rerun_case(case_id, start_stage=stage, output_dir=output))
+    try:
+        case = asyncio.run(
+            service.rerun_case(case_id, start_stage=stage, output_dir=output)
+        )
+    except CaseWriterConflict as exc:
+        console.print(f"[red]{exc}[/red]")
+        return
     console.print(
         f"[green]Case {case.id} rerun complete[/green] "
         f"({case.status.value} / {case.current_stage.value if case.current_stage else 'n/a'})"
@@ -240,14 +250,94 @@ def cmd_case_exception_action(
 ) -> None:
     """Update a persisted case exception."""
     service = build_case_service(output)
-    updated = service.update_exception_status(
-        case_id,
-        exception_id,
-        action=action,
-        notes=notes,
-    )
+    try:
+        updated = service.update_exception_status(
+            case_id,
+            exception_id,
+            action=action,
+            notes=notes,
+        )
+    except CaseWriterConflict as exc:
+        console.print(f"[red]{exc}[/red]")
+        return
     console.print(
         f"[green]Exception {exception_id} updated for case {updated.id}[/green]"
+    )
+
+
+def cmd_get_case_owner(
+    case_id: str,
+    *,
+    output: Path = Path("./output"),
+) -> None:
+    """Print the active case writer (kind/reference/time, never the token)."""
+    service = build_case_service(output)
+    try:
+        owner = service.get_case_owner(case_id)
+    except ValueError as exc:
+        console.print(f"[red]{exc}[/red]")
+        return
+    if not owner.get("kind"):
+        console.print(f"[green]Case {case_id} has no active writer[/green]")
+        return
+    table = Table(title=f"Case writer: {case_id}")
+    table.add_column("Field", style="cyan")
+    table.add_column("Value", style="white")
+    table.add_row("kind", str(owner.get("kind")))
+    table.add_row("reference", str(owner.get("refId") or "n/a"))
+    table.add_row("claimed at", str(owner.get("claimedAt") or "unknown"))
+    console.print(table)
+    console.print(
+        "[dim]The owner token is not displayed. Use the reference with "
+        "`case interrupt`.[/dim]"
+    )
+
+
+def cmd_interrupt_case(
+    case_id: str,
+    *,
+    run_id: str | None,
+    token: str | None,
+    reason: str,
+    yes: bool = False,
+    output: Path = Path("./output"),
+) -> None:
+    """Explicitly interrupt the active case writer (CLI-only recovery)."""
+    if not (reason or "").strip():
+        console.print("[red]An interrupt reason is required[/red]")
+        return
+    if not run_id and not token:
+        console.print(
+            "[red]Provide the active owner reference (--run-id) or --token[/red]"
+        )
+        return
+    if not yes:
+        confirmed = Confirm.ask(
+            f"Interrupt the active writer on case {case_id}? "
+            "The old writer will be unable to commit further case writes.",
+            default=False,
+        )
+        if not confirmed:
+            console.print("[yellow]Interrupt aborted[/yellow]")
+            return
+    service = build_case_service(output)
+    try:
+        result = service.interrupt_case(
+            case_id,
+            run_id=run_id,
+            token=token,
+            reason=reason,
+            confirmed=True,
+        )
+    except (CaseWriterConflict, ValueError) as exc:
+        console.print(f"[red]Interrupt rejected: {exc}[/red]")
+        return
+    interrupted = result.get("interrupted") or {}
+    target = result.get("runId") or interrupted.get("refId") or "active writer"
+    console.print(
+        f"[green]Interrupted {target}[/green] "
+        f"(kind: {interrupted.get('kind')}, reason: {result.get('reason')}). "
+        "Later case-bound commits from the old writer will fail ownership validation."
     )
 
 
@@ -292,18 +382,22 @@ def cmd_fetch_topic_case(
     """Run the canonical topic case pipeline."""
     del format  # Reports are always emitted as part of the case bundle.
     service = build_case_service(output)
-    case = asyncio.run(
-        service.run_case(
-            query=query,
-            output_dir=output,
-            conflict=conflict,
-            confirmed_parties=confirmed_parties,
-            manual_links=manual_links,
-            max_articles=max_articles,
-            relevance_threshold=relevance_threshold,
-            automation_mode=automation_mode,
+    try:
+        case = asyncio.run(
+            service.run_case(
+                query=query,
+                output_dir=output,
+                conflict=conflict,
+                confirmed_parties=confirmed_parties,
+                manual_links=manual_links,
+                max_articles=max_articles,
+                relevance_threshold=relevance_threshold,
+                automation_mode=automation_mode,
+            )
         )
-    )
+    except CaseWriterConflict as exc:
+        console.print(f"[red]{exc}[/red]")
+        return
     console.print(f"[green]Case ready:[/green] {case.id}")
     console.print(f"[green]Status:[/green] {case.status.value}")
     console.print(f"[green]Report:[/green] {case.report_path or 'n/a'}")

@@ -18,6 +18,7 @@ The active documentation tree is organized by purpose instead of by date.
 - [Delivered comparison read API](architecture/20261118-comparison-read-api.md): P02 two-capture alignment, historical no-substitution, dependency warnings and GET-only contract
 - [Delivered comparison UI](architecture/20261118-comparison-ui.md): P03 Compare tab, URL-pinned selection, panels/alignment, error/mobile/keyboard states; Release B accepted
 - [Delivered grouped investigation runs](architecture/20261118-investigation-runs.md): R01 invocation identity, status/coverage derivation, origin references and migration 12 (internal foundation)
+- [Delivered case writer admission and fencing](architecture/20261118-case-writer-fencing.md): R02 owner-token admission, protected-path validation, CLI interrupt, migration 13 and residual risks
 - [E02 pass B handoff](plans/20261115-e02-pass-b-handoff.md): self-contained continuation brief for quotation integration, fallback protection, aggregates and review hashes
 - [E04 handoff](plans/20261115-e04-handoff.md): self-contained brief for the evidence inspector and deep links (Release A gate) — what exists from E03, scope, acceptance, gates, safety rules
 - [Product comparison and enhancement roadmap](plans/20261114-product-enhancement-roadmap.md): comparable web apps and proposed priorities; not approved implementation

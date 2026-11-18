@@ -16,6 +16,8 @@ from src.cli.commands.topic import cmd_fetch_topic, cmd_interactive, cmd_monitor
 from src.cli.commands.cases import (
     cmd_case_exception_action,
     cmd_evaluate_case,
+    cmd_get_case_owner,
+    cmd_interrupt_case,
     cmd_list_cases,
     cmd_show_case,
     cmd_show_case_workflow,
@@ -275,6 +277,49 @@ def case_rerun(
 ) -> None:
     """Rerun a case from a specific stage."""
     cmd_rerun_case(case_id=case_id, from_stage=from_stage, output=output)
+
+
+@case_app.command("owner")
+def case_owner(
+    case_id: str = typer.Argument(..., help="Case ID"),
+    output: Path = typer.Option(
+        Path("./output"), "--output", "-o", help="Output directory root"
+    ),
+) -> None:
+    """Show the active case writer (kind/reference/time, never the token)."""
+    cmd_get_case_owner(case_id=case_id, output=output)
+
+
+@case_app.command("interrupt")
+def case_interrupt(
+    case_id: str = typer.Argument(..., help="Case ID"),
+    run_id: str | None = typer.Option(
+        None,
+        "--run-id",
+        help="Active owner reference (investigation run ID or intake item ID)",
+    ),
+    token: str | None = typer.Option(
+        None, "--token", help="Active owner token, for explicit operator recovery"
+    ),
+    reason: str = typer.Option(
+        ..., "--reason", "-r", help="Why the active writer is being interrupted"
+    ),
+    yes: bool = typer.Option(
+        False, "--yes", "-y", help="Skip the confirmation prompt"
+    ),
+    output: Path = typer.Option(
+        Path("./output"), "--output", "-o", help="Output directory root"
+    ),
+) -> None:
+    """Explicitly interrupt the active case writer (CLI-only recovery)."""
+    cmd_interrupt_case(
+        case_id=case_id,
+        run_id=run_id,
+        token=token,
+        reason=reason,
+        yes=yes,
+        output=output,
+    )
 
 
 @case_app.command("exception")

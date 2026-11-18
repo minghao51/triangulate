@@ -69,6 +69,8 @@ class CaseRunContext:
     predecessor_run_id: str | None = None
     # Per-stage outcomes recorded by ``_execute_stage`` for honest run coverage.
     stage_outcomes: list[dict[str, Any]] = field(default_factory=list)
+    # R02 case writer token for this invocation (``None`` for direct stage calls).
+    owner_token: str | None = None
 
 
 def _utcnow() -> datetime:

@@ -1,6 +1,7 @@
 """Review command: Interactive human review of pending events."""
 
 import logging
+from contextlib import nullcontext
 from datetime import UTC, datetime
 from typing import Any
 
@@ -8,8 +9,18 @@ from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
 from rich.prompt import Prompt
+from sqlalchemy import select
 
-from src.storage import get_database, Event, Claim, Review, ReviewStatus
+from src.storage import (
+    CaseWriterConflict,
+    OWNER_KIND_REVIEW,
+    Event,
+    Claim,
+    Review,
+    ReviewStatus,
+    case_write_admission,
+    get_database,
+)
 from src.storage.review_state import (
     bind_review_decision,
     compute_event_analysis_hash,
@@ -119,20 +130,43 @@ def review_event(event: Event, session) -> None:
     ).lower()
 
     # Update review based on choice
-    review = session.query(Review).filter(Review.event_id == event.id).first()
+    review = (
+        session.execute(select(Review).where(Review.event_id == event.id))
+        .scalars()
+        .first()
+    )
 
-    if choice == "a":
-        review.status = ReviewStatus.APPROVED
-        review.reviewed_at = datetime.now(UTC)
-        bind_cli_decision(session, event, review)
-        session.commit()
-        console.print("[green]Event approved[/green]\n")
-    elif choice == "r":
-        review.status = ReviewStatus.REJECTED
-        review.reviewed_at = datetime.now(UTC)
-        bind_cli_decision(session, event, review)
-        session.commit()
-        console.print("[red]Event rejected[/red]\n")
+    if choice in {"a", "r"} and review is None:
+        console.print(
+            "[yellow]No review record exists for this event; nothing updated[/yellow]"
+        )
+        return
+
+    if choice in {"a", "r"} and review is not None:
+        # A CLI decision is a case-bound review write when the event belongs to a
+        # case: claim admission just around the decision, not while prompting.
+        admission = (
+            case_write_admission(session, event.case_id, kind=OWNER_KIND_REVIEW)
+            if event.case_id
+            else nullcontext()
+        )
+        try:
+            with admission:
+                if choice == "a":
+                    review.status = ReviewStatus.APPROVED
+                else:
+                    review.status = ReviewStatus.REJECTED
+                review.reviewed_at = datetime.now(UTC)
+                bind_cli_decision(session, event, review)
+            session.commit()
+        except CaseWriterConflict as exc:
+            session.rollback()
+            console.print(f"[red]{exc}[/red]")
+            return
+        if choice == "a":
+            console.print("[green]Event approved[/green]\n")
+        else:
+            console.print("[red]Event rejected[/red]\n")
     elif choice == "e":
         # For now, just approve
         console.print("[yellow]Edit feature coming soon[/yellow]")

@@ -42,6 +42,10 @@ from src.storage.review_state import (
     reconcile_review_with_analysis,
 )
 from src.storage.captures import build_capture_metadata, record_evidence_capture
+from src.storage.write_guard import (
+    CaseWriterConflict,
+    validate_or_allow_legacy_writer,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -303,6 +307,7 @@ def store_event_in_db(
     case_id: str | None = None,
     case_run_id: str | None = None,
     investigation_run_id: str | None = None,
+    owner_token: str | None = None,
     create_review: bool = True,
     confirmed_parties: list[str] | None = None,
     session: Session | None = None,
@@ -319,6 +324,12 @@ def store_event_in_db(
     roll back a whole event batch.
     """
     if session is not None:
+        if case_id is not None:
+            # Caller-owned transaction: fail early if this writer was superseded.
+            # The caller still validates immediately before its own commit.
+            validate_or_allow_legacy_writer(
+                session, case_id, owner_token, operation="event"
+            )
         _write_event(
             session,
             event_data,
@@ -332,6 +343,10 @@ def store_event_in_db(
 
     own_session = get_database().get_session_sync()
     try:
+        if case_id is not None:
+            validate_or_allow_legacy_writer(
+                own_session, case_id, owner_token, operation="event"
+            )
         _write_event(
             own_session,
             event_data,
@@ -341,8 +356,17 @@ def store_event_in_db(
             create_review=create_review,
             confirmed_parties=confirmed_parties,
         )
+        if case_id is not None:
+            # Revalidate in the same transaction immediately before commit.
+            validate_or_allow_legacy_writer(
+                own_session, case_id, owner_token, operation="event"
+            )
         own_session.commit()
         return True
+    except CaseWriterConflict:
+        # Never convert a fencing rejection into a legacy ``False`` result.
+        own_session.rollback()
+        raise
     except Exception as exc:
         own_session.rollback()
         logger.error("Error storing event %s: %s", event_data.get("id"), exc)

@@ -5,10 +5,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, JSONResponse
 
 from src.cases import TopicCaseService
+from src.storage import CaseWriterConflict
 from src.cases.comparison import (
     DEFAULT_COMPARISON_LIMIT,
     MAX_COMPARISON_LIMIT,
@@ -430,6 +431,14 @@ def download_case_report_manifest(
 
 def create_app() -> FastAPI:
     app = FastAPI(title="Triangulate API", version="0.1.0")
+
+    @app.exception_handler(CaseWriterConflict)
+    async def _case_writer_conflict(
+        _request: Request, exc: CaseWriterConflict
+    ) -> JSONResponse:
+        # A conflicting case-bound write is a state conflict, not a server error.
+        return JSONResponse(status_code=409, content={"detail": str(exc)})
+
     app.include_router(router)
     return app
 
