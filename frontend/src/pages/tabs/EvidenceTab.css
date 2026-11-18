@@ -89,9 +89,18 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
+    gap: 0.5rem;
     border-top: 1px solid var(--border-subtle);
     padding-top: 1rem;
     margin-top: auto;
+}
+
+.evidence-card-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    flex-wrap: wrap;
+    justify-content: flex-end;
 }
 
 .linked-claims {

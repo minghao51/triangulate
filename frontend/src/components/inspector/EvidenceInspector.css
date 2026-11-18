@@ -1,0 +1,315 @@
+.evidence-inspector {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    padding: 1.25rem;
+    border: 1px solid var(--border-subtle);
+    border-left: 4px solid var(--accent-primary);
+    border-radius: 8px;
+    background: var(--bg-surface-hover);
+}
+
+.inspector-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+}
+
+.inspector-heading {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    line-height: 1.4;
+}
+
+.inspector-heading:focus {
+    outline: 2px solid var(--accent-primary);
+    outline-offset: 4px;
+    border-radius: 2px;
+}
+
+.inspector-section {
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+    border-top: 1px solid var(--border-subtle);
+    padding-top: 0.9rem;
+}
+
+.inspector-section h4 {
+    margin: 0;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.inspector-claim-text {
+    margin: 0;
+    padding: 0.75rem 0.9rem;
+    border-left: 3px solid var(--border-strong, var(--border-subtle));
+    background: rgba(255, 255, 255, 0.03);
+    color: var(--text-primary);
+    font-size: 0.9375rem;
+    line-height: 1.55;
+}
+
+.inspector-banner {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    padding: 0.75rem 0.9rem;
+    border: 1px solid var(--status-warning);
+    border-radius: 6px;
+    color: var(--text-primary);
+    font-size: 0.875rem;
+    line-height: 1.5;
+}
+
+.inspector-fields {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 0.5rem 1rem;
+    align-items: start;
+}
+
+.inspector-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    min-width: 0;
+}
+
+.inspector-field-label {
+    font-size: 0.6875rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
+}
+
+.inspector-field-value {
+    font-size: 0.8125rem;
+    color: var(--text-primary);
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+}
+
+.inspector-field-value a {
+    color: var(--accent-primary);
+    text-decoration: underline;
+    overflow-wrap: anywhere;
+}
+
+.inspector-relation {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    padding: 0.6rem 0.75rem;
+    border: 1px solid var(--border-subtle);
+    border-radius: 6px;
+}
+
+.inspector-relation-label {
+    font-size: 0.6875rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
+}
+
+.inspector-relation strong {
+    color: var(--text-primary);
+    font-size: 0.875rem;
+}
+
+.inspector-diagnostic {
+    margin: 0;
+    color: var(--text-tertiary);
+    font-size: 0.75rem;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+}
+
+.inspector-note {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 0.75rem;
+    line-height: 1.5;
+}
+
+.inspector-alignment {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+}
+
+.inspector-alignment strong {
+    color: var(--text-primary);
+    font-size: 0.875rem;
+}
+
+.inspector-quote blockquote {
+    margin: 0.25rem 0 0;
+    padding: 0.5rem 0.75rem;
+    border-left: 3px solid var(--accent-primary);
+    background: rgba(255, 255, 255, 0.03);
+    color: var(--text-primary);
+    font-size: 0.875rem;
+    line-height: 1.5;
+}
+
+.inspector-inline-action {
+    align-self: flex-start;
+}
+
+.inspector-related-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.inspector-related-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    padding: 0.65rem 0.75rem;
+    border: 1px solid var(--border-subtle);
+    border-radius: 6px;
+}
+
+.inspector-related-buttons {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.inspector-related-buttons .btn[aria-current='true'] {
+    border-color: var(--accent-primary);
+}
+
+.inspector-captures {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.inspector-capture {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    padding: 0.5rem 0.75rem;
+    text-align: left;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--border-subtle);
+    border-radius: 6px;
+    color: var(--text-primary);
+    cursor: pointer;
+}
+
+.inspector-capture:hover {
+    border-color: var(--accent-primary);
+}
+
+.inspector-capture.is-selected {
+    border-color: var(--accent-primary);
+    box-shadow: inset 0 0 0 1px var(--accent-primary);
+}
+
+.inspector-capture-kind {
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.inspector-capture code {
+    font-size: 0.6875rem;
+    color: var(--text-secondary);
+}
+
+.inspector-capture-meta {
+    font-size: 0.6875rem;
+    color: var(--text-tertiary);
+}
+
+.inspector-window {
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+}
+
+.inspector-window-status {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    align-items: center;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+}
+
+.inspector-window-actions {
+    display: flex;
+    gap: 0.25rem;
+    flex-wrap: wrap;
+}
+
+.inspector-window-actions .btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.inspector-capture-text {
+    margin: 0;
+    padding: 0.9rem;
+    max-height: 28rem;
+    overflow: auto;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    background: rgba(0, 0, 0, 0.22);
+    border: 1px solid var(--border-subtle);
+    border-radius: 6px;
+    color: var(--text-primary);
+    font-family: var(--font-mono, monospace);
+    font-size: 0.8125rem;
+    line-height: 1.6;
+}
+
+.inspector-capture-text mark {
+    background: var(--status-warning, #f2c94c);
+    color: #16181d;
+    padding: 0.05rem 0.1rem;
+    border-radius: 2px;
+}
+
+.inspector-state {
+    display: flex;
+    gap: 0.6rem;
+    align-items: flex-start;
+    padding: 0.75rem 0.9rem;
+    border: 1px solid var(--border-subtle);
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.02);
+    color: var(--text-secondary);
+    font-size: 0.8125rem;
+    line-height: 1.5;
+}
+
+.inspector-state p {
+    margin: 0.35rem 0 0;
+}
+
+.inspector-state--error {
+    border-color: var(--status-danger);
+    color: var(--text-primary);
+}
+
+.inspector-state-actions {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+    flex-wrap: wrap;
+}

@@ -1,8 +1,11 @@
 import React, { useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import type { Evidence } from '../../types/backend-models';
 import { getEvidenceForCase } from '../../services/api';
+import { buildInspectorUrl } from '../../services/deep-links';
+import { EvidenceInspector } from '../../components/inspector/EvidenceInspector';
+import { safeExternalUrl } from '../../components/inspector/inspector-utils';
 import { ShieldCheck, ShieldAlert, FileSearch, Link, ChevronDown, ChevronRight, ClipboardCheck } from 'lucide-react';
 import './EvidenceTab.css';
 
@@ -21,12 +24,6 @@ interface EvidenceTabProps {
  * a component keyed by case so it cannot leak across cases.
  */
 const EvidenceTab: React.FC<EvidenceTabProps> = ({ caseId, refreshToken = 0 }) => {
-    const { data, isLoading, error, refetch } = useQuery({
-        queryKey: ['evidence', caseId, refreshToken],
-        queryFn: () => getEvidenceForCase(caseId),
-        enabled: !!caseId,
-    });
-
     if (!caseId) {
         return (
             <div className="evidence-tab-container p-base">
@@ -35,20 +32,37 @@ const EvidenceTab: React.FC<EvidenceTabProps> = ({ caseId, refreshToken = 0 }) =
         );
     }
 
+    return (
+        <div className="evidence-tab-container p-base">
+            {/* The inspector is independent of the evidence list request, so a
+                frozen citation deep link still resolves while the list loads. */}
+            <EvidenceInspector caseId={caseId} />
+            <EvidenceList caseId={caseId} refreshToken={refreshToken} />
+        </div>
+    );
+};
+
+const EvidenceList: React.FC<EvidenceTabProps> = ({ caseId, refreshToken = 0 }) => {
+    const { data, isLoading, error, refetch } = useQuery({
+        queryKey: ['evidence', caseId, refreshToken],
+        queryFn: () => getEvidenceForCase(caseId),
+        enabled: !!caseId,
+    });
+
     if (isLoading) {
         return (
-            <div className="evidence-tab-container p-base">
+            <>
                 <div className="evidence-toolbar">
                     <h3>Evidence Gallery</h3>
                 </div>
                 <div className="evidence-state" role="status">Loading evidence…</div>
-            </div>
+            </>
         );
     }
 
     if (error) {
         return (
-            <div className="evidence-tab-container p-base">
+            <>
                 <div className="evidence-toolbar">
                     <h3>Evidence Gallery</h3>
                 </div>
@@ -61,18 +75,20 @@ const EvidenceTab: React.FC<EvidenceTabProps> = ({ caseId, refreshToken = 0 }) =
                         Retry
                     </button>
                 </div>
-            </div>
+            </>
         );
     }
 
-    return <EvidenceContent key={caseId} evidence={data ?? []} />;
+    return <EvidenceContent key={caseId} caseId={caseId} evidence={data ?? []} />;
 };
 
 interface EvidenceContentProps {
+    caseId: string;
     evidence: Evidence[];
 }
 
-const EvidenceContent: React.FC<EvidenceContentProps> = ({ evidence }) => {
+const EvidenceContent: React.FC<EvidenceContentProps> = ({ caseId, evidence }) => {
+    const navigate = useNavigate();
     const [searchParams] = useSearchParams();
     const [credibilityFilter, setCredibilityFilter] = useState<CredibilityFilter>('all');
     const [expandedChecks, setExpandedChecks] = useState<Set<string>>(new Set());
@@ -175,21 +191,40 @@ const EvidenceContent: React.FC<EvidenceContentProps> = ({ evidence }) => {
 
                         <div className="evidence-footer">
                             <span className="linked-claims"><FileSearch size={14} /> {ev.linkedClaims.length} Claims</span>
-                            {(() => {
-                                const sourceUrl = ev.originUrl || ev.canonicalUrl;
-                                if (sourceUrl) {
+                            <div className="evidence-card-actions">
+                                <button
+                                    type="button"
+                                    className="btn btn-secondary btn-sm"
+                                    onClick={() =>
+                                        navigate(
+                                            buildInspectorUrl(caseId, {
+                                                claimId: claimFilter,
+                                                evidenceId: ev.id,
+                                                captureId: ev.currentCaptureId ?? null,
+                                            })
+                                        )
+                                    }
+                                >
+                                    <FileSearch size={14} /> Inspect source
+                                </button>
+                                {(() => {
+                                    const sourceUrl =
+                                        safeExternalUrl(ev.originUrl) ??
+                                        safeExternalUrl(ev.canonicalUrl);
+                                    if (sourceUrl) {
+                                        return (
+                                            <a href={sourceUrl} target="_blank" rel="noopener noreferrer" className="btn btn-secondary btn-sm">
+                                                <Link size={14} /> Source
+                                            </a>
+                                        );
+                                    }
                                     return (
-                                        <a href={sourceUrl} target="_blank" rel="noreferrer" className="btn btn-secondary btn-sm">
+                                        <span className="btn btn-secondary btn-sm source-unavailable" title={ev.publisher ? `No link available for ${ev.publisher}` : "No source link available"}>
                                             <Link size={14} /> Source
-                                        </a>
+                                        </span>
                                     );
-                                }
-                                return (
-                                    <span className="btn btn-secondary btn-sm source-unavailable" title={ev.publisher ? `No link available for ${ev.publisher}` : "No source link available"}>
-                                        <Link size={14} /> Source
-                                    </span>
-                                );
-                            })()}
+                                })()}
+                            </div>
                         </div>
 
                         {ev.verificationChecks.length > 0 && (

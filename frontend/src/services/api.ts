@@ -1,8 +1,12 @@
 import type {
   CaseDetail,
+  CaptureWindow,
+  CitationDetail,
   Claim,
+  ClaimDetail,
   ClaimsOverview,
   Evidence,
+  EvidenceDetail,
   EvaluationSummary,
   Exception,
   MonitoringSummary,
@@ -14,6 +18,9 @@ import type {
   TimelineEvent,
   TopicCase,
 } from '../types/backend-models';
+import { ApiError } from './api-error';
+
+export { ApiError, isNotFound, isUnprocessable } from './api-error';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '';
 const USE_STATIC_DATA = !API_BASE_URL || API_BASE_URL === '';
@@ -66,8 +73,15 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   });
 
   if (!response.ok) {
-    const detail = await response.text();
-    throw new Error(detail || `Request failed with status ${response.status}`);
+    const rawDetail = await response.text();
+    let detail = rawDetail;
+    try {
+      const parsed = JSON.parse(rawDetail) as { detail?: unknown };
+      if (typeof parsed?.detail === 'string') detail = parsed.detail;
+    } catch {
+      // Non-JSON error bodies keep their raw text.
+    }
+    throw new ApiError(detail || `Request failed with status ${response.status}`, response.status);
   }
 
   return response.json() as Promise<T>;
@@ -86,6 +100,47 @@ export const getClaimsForCase = async (caseId: string): Promise<Claim[]> =>
 
 export const getEvidenceForCase = async (caseId: string): Promise<Evidence[]> =>
   request(`/api/cases/${caseId}/evidence`);
+
+/** E03 inspector readers (GET-only). */
+export const getClaimDetail = async (
+  caseId: string,
+  claimId: string
+): Promise<ClaimDetail> =>
+  request(`/api/cases/${encodeURIComponent(caseId)}/claims/${encodeURIComponent(claimId)}`);
+
+export const getEvidenceDetail = async (
+  caseId: string,
+  evidenceId: string
+): Promise<EvidenceDetail> =>
+  request(
+    `/api/cases/${encodeURIComponent(caseId)}/evidence/${encodeURIComponent(evidenceId)}`
+  );
+
+export const getCitationDetail = async (
+  caseId: string,
+  citationId: string
+): Promise<CitationDetail> =>
+  request(
+    `/api/cases/${encodeURIComponent(caseId)}/citations/${encodeURIComponent(citationId)}`
+  );
+
+/** One bounded code-point window of an immutable capture. */
+export const getCaptureWindow = async (
+  caseId: string,
+  evidenceId: string,
+  captureId: string,
+  options: { start?: number; length?: number } = {}
+): Promise<CaptureWindow> => {
+  const params = new URLSearchParams();
+  if (typeof options.start === 'number') params.set('start', String(options.start));
+  if (typeof options.length === 'number') params.set('length', String(options.length));
+  const query = params.toString();
+  return request(
+    `/api/cases/${encodeURIComponent(caseId)}/evidence/${encodeURIComponent(
+      evidenceId
+    )}/captures/${encodeURIComponent(captureId)}${query ? `?${query}` : ''}`
+  );
+};
 
 export const getExceptionsForCase = async (caseId: string): Promise<Exception[]> =>
   request(`/api/cases/${caseId}/exceptions`);

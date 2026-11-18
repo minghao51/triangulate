@@ -25,6 +25,7 @@ import {
   submitCaseReviewAction,
 } from '../services/api';
 import { useCaseStore } from '../stores/case-store';
+import { buildInspectorUrl } from '../services/deep-links';
 import Button from '../components/design-system/Button';
 import Card from '../components/design-system/Card';
 import { CardHeader, CardTitle, CardBody } from '../components/design-system/Card';
@@ -56,6 +57,7 @@ const CaseIntelligenceCenter: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const currentPath = location.pathname.split('/').pop() || '';
+  const citationParam = new URLSearchParams(location.search).get('citation');
 
   const { setActiveCase, setCaseDetail, clearActiveCase } = useCaseStore();
 
@@ -88,6 +90,13 @@ const CaseIntelligenceCenter: React.FC = () => {
 
   // Release the shared store when leaving the case workspace entirely.
   useEffect(() => () => clearActiveCase(), [clearActiveCase]);
+
+  // A frozen `?citation=` link always lands on the evidence inspector, even if
+  // it was opened on the case root or another tab.
+  useEffect(() => {
+    if (!id || !citationParam || currentPath === 'evidence') return;
+    navigate(buildInspectorUrl(id, { citationId: citationParam }), { replace: true });
+  }, [id, citationParam, currentPath, navigate]);
 
   const tabs: TabConfig[] = [
     { id: 'overview', label: 'Overview', icon: <FileText size={16} />, path: '' },

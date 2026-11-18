@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import type { Claim, NarrativeCluster, SourceStanceBreakdown as SourceStanceBreakdownType } from '../../types/backend-models';
 import { getClaimsOverviewForCase } from '../../services/api';
+import { buildClaimEvidenceUrl, buildCitationUrl } from '../../services/deep-links';
+import { alignmentLabel, relationLabel } from '../../components/inspector/inspector-utils';
 import { ShieldAlert, ThumbsUp, ThumbsDown, GitCommit, ChevronDown, ChevronRight, ChevronUp, Layers, Minus } from 'lucide-react';
 import { ClaimDetailPanel } from '../../components/claims/ClaimDetailPanel';
 import './ClaimsTab.css';
@@ -332,9 +334,7 @@ const ClaimRow: React.FC<ClaimRowProps> = ({ claim, caseId, navigate, isExpanded
                 <button
                     type="button"
                     className="btn btn-secondary"
-                    onClick={() =>
-                        navigate(`/cases/${caseId}/evidence?claim=${encodeURIComponent(claim.id)}`)
-                    }
+                    onClick={() => navigate(buildClaimEvidenceUrl(caseId, claim.id))}
                 >
                     Inspect Evidence
                 </button>
@@ -342,9 +342,72 @@ const ClaimRow: React.FC<ClaimRowProps> = ({ claim, caseId, navigate, isExpanded
 
             {isExpanded && (
                 <div id={detailId}>
+                    <ClaimPassageLinks claim={claim} caseId={caseId} navigate={navigate} />
                     <ClaimDetailPanel claim={claim} />
                 </div>
             )}
+        </div>
+    );
+};
+
+interface ClaimPassageLinksProps {
+    claim: Claim;
+    caseId: string;
+    navigate: ReturnType<typeof useNavigate>;
+}
+
+/**
+ * Per-link passage entry points, rendered only in the expanded claim row.
+ * Citations get a frozen deep link; unvalidated links fall back to the
+ * claim-filtered evidence list instead of pretending a passage exists.
+ */
+const ClaimPassageLinks: React.FC<ClaimPassageLinksProps> = ({ claim, caseId, navigate }) => {
+    const links = claim.evidence ?? [];
+    if (links.length === 0) {
+        return null;
+    }
+
+    return (
+        <div className="claim-passages" aria-label="Linked evidence passages">
+            <h4>Linked sources</h4>
+            <ul className="claim-passage-list">
+                {links.map((link, index) => {
+                    const citationId = link.citationId;
+                    return (
+                        <li key={link.id || `${citationId ?? 'link'}-${index}`} className="claim-passage-item">
+                            <div className="claim-passage-meta">
+                                <strong>{relationLabel(link.effectiveRelation ?? 'uncertain')}</strong>
+                                <span>{alignmentLabel(link.alignmentStatus ?? 'not_provided')}</span>
+                            </div>
+                            {link.quote ? (
+                                <blockquote className="claim-passage-quote">{link.quote}</blockquote>
+                            ) : (
+                                <p className="claim-passage-missing">
+                                    No validated quotation is stored for this source link.
+                                </p>
+                            )}
+                            <div className="claim-passage-actions">
+                                <button
+                                    type="button"
+                                    className="btn btn-secondary btn-sm"
+                                    onClick={() => navigate(buildClaimEvidenceUrl(caseId, claim.id))}
+                                >
+                                    Inspect sources
+                                </button>
+                                {citationId && (
+                                    <button
+                                        type="button"
+                                        className="btn btn-ghost btn-sm"
+                                        onClick={() => navigate(buildCitationUrl(caseId, citationId))}
+                                    >
+                                        Open frozen citation
+                                    </button>
+                                )}
+                            </div>
+                        </li>
+                    );
+                })}
+            </ul>
         </div>
     );
 };
