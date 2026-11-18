@@ -76,8 +76,9 @@ reachable by requesting successive windows; nothing is clamped or resynthesized.
   separately from source alignment; it never claims `model`/`human`/reviewer
   confirmation. `"legacy_unknown"` appears only when every attachment is provably
   pre-E02 shaped (no citation/capture, `not_provided`, no assessment provenance).
-- No snapshot/historical selectors (R03), no depends-on-P01 source groups, no
-  comparison, run or search endpoints — those are P01/P02/R03/S02.
+- No snapshot/historical selectors (R03), no comparison, run or search endpoints —
+  those are P02/R03/S02. P01 source groups now live in the separate
+  [source dependency groups](20261118-source-dependency-groups.md) read model.
 
 ## Verification
 

@@ -22,6 +22,7 @@ from .mappers import (
     map_evaluation_summary,
     map_monitoring_summary,
     map_review_activity,
+    map_source_summary,
 )
 from .schemas import (
     AnnotationCreateRequest,
@@ -39,6 +40,7 @@ from .schemas import (
     ReviewActionRequest,
     ReviewActivityDTO,
     ReviewAnnotationDTO,
+    SourceSummaryDTO,
     WorkflowDiagnosticsDTO,
 )
 
@@ -126,6 +128,38 @@ def get_case_claim_detail(
             detail=f"Claim {claim_id} not found for case {case_id}",
         )
     return map_claim_detail(payload)
+
+
+def _resolve_claim_selector(
+    claim_id: str | None, claim_id_snake: str | None
+) -> str | None:
+    """Resolve the optional claim selector or reject conflicting aliases."""
+    if claim_id is not None and claim_id_snake is not None and claim_id != claim_id_snake:
+        raise HTTPException(
+            status_code=422,
+            detail="Conflicting claimId and claim_id selectors were supplied",
+        )
+    return claim_id if claim_id is not None else claim_id_snake
+
+
+@router.get("/api/cases/{case_id}/sources", response_model=SourceSummaryDTO)
+def get_case_sources(
+    case_id: str,
+    claim_id: str | None = Query(default=None, alias="claimId"),
+    claim_id_snake: str | None = Query(default=None, alias="claim_id"),
+    service: TopicCaseService = Depends(get_case_service),
+) -> SourceSummaryDTO:
+    """Observed publishers and dependency groups (P01, read-only)."""
+    selector = _resolve_claim_selector(claim_id, claim_id_snake)
+    payload = service.get_source_summary(case_id, claim_id=selector)
+    if payload is None:
+        if selector is not None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Claim {selector} not found for case {case_id}",
+            )
+        raise HTTPException(status_code=404, detail=f"Case {case_id} not found")
+    return map_source_summary(payload)
 
 
 @router.get("/api/cases/{case_id}/evidence")

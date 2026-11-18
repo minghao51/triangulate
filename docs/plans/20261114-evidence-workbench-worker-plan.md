@@ -1,6 +1,6 @@
 # Evidence workbench: DeepSeek v4.1 implementation handoff
 
-Date: 2026-11-14. Last verified: 2026-11-18. Status: **Release A is accepted** (B00–B03, E01–E04). E04 landed as `8ee32eb`; frontend `npm run check` and **93 tests in 11 files**, backend **418 passed / 9 deselected**, Ruff clean. Migration history is 1..11 (7 OSINT, 8 review audit/evaluation, 9 review hash, 10 captures, 11 citations). **Next ticket: P01 — conservative source dependency groups** (handoff: [Release A acceptance and P01 handoff](20261118-release-a-acceptance-and-p01-handoff.md)). Release B continues P01 → P02 → P03 with a review stop after P03; the B02 database incident remains disclosed**.
+Date: 2026-11-14. Last verified: 2026-11-18. Status: **Release A is accepted** (B00–B03, E01–E04) and **P01 is delivered** (deterministic source dependency groups, 447 backend tests). E04 landed as `8ee32eb`; frontend `npm run check` and **93 tests in 11 files**; backend **447 passed / 9 deselected**, Ruff clean. Migration history is 1..11 (7 OSINT, 8 review audit/evaluation, 9 review hash, 10 captures, 11 citations). **Next ticket: P02 — deterministic comparison read API**, then P03. Release B ends after P03 with a review stop; the B02 database incident remains disclosed**.
 
 Contract authority: [implementation specification](20261114-evidence-workbench-specification.md). Context: [roadmap](20261114-product-enhancement-roadmap.md), [audit](../reference/20261114-setup-and-maintenance-audit.md), [architecture](../architecture/20261114-current-architecture.md).
 

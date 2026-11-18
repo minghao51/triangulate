@@ -40,7 +40,12 @@ from .schemas import (
     PartyDTO,
     ReportDTO,
     RunHistoryItemDTO,
+    PublisherCountDTO,
+    SourceDependencyGroupDTO,
+    SourceMemberDTO,
+    SourcePolicyDTO,
     SourceStanceBreakdown,
+    SourceSummaryDTO,
     TaxonomyDTO,
     TimelineEventDTO,
     WorkflowCheckpointDTO,
@@ -793,5 +798,82 @@ def map_claims_overview(detail: dict[str, Any]) -> ClaimsOverviewResponse:
         narratives=[
             _map_narrative_with_claims(item, claims)
             for item in detail.get("narratives", [])
+        ],
+    )
+
+def _map_source_member(item: dict[str, Any]) -> SourceMemberDTO:
+    return SourceMemberDTO(
+        evidenceId=item["evidence_id"],
+        publisher=item.get("publisher"),
+        publisherKey=item.get("publisher_key"),
+        publisherKeyProvisional=bool(item.get("publisher_key_provisional")),
+        host=item.get("host"),
+        originUrl=item.get("origin_url"),
+        canonicalUrl=item.get("canonical_url"),
+        sourceUrl=item.get("source_url"),
+        caseArticleId=item.get("case_article_id"),
+        explicitOriginKey=item.get("explicit_origin_key"),
+        captureId=item.get("capture_id"),
+        captureKind=item.get("capture_kind"),
+        captureTextSha256=item.get("capture_text_sha256"),
+        captureNormalizedTextSha256=item.get("capture_normalized_text_sha256"),
+        captureCharLength=item.get("capture_char_length"),
+        recordedAt=item.get("recorded_at"),
+        observedAt=item.get("observed_at"),
+        copyFingerprint=item.get("copy_fingerprint"),
+        copyNonWhitespaceCount=item.get("copy_non_whitespace_count", 0),
+        dependencyReasons=item.get("dependency_reasons") or [],
+    )
+
+
+def map_source_summary(payload: dict[str, Any]) -> SourceSummaryDTO:
+    """Map one source dependency summary (case- or claim-scoped)."""
+    policy = payload.get("policy") or {}
+    return SourceSummaryDTO(
+        caseId=payload["case_id"],
+        scope=payload.get("scope") or "case",
+        claimId=payload.get("claim_id"),
+        claimSignature=payload.get("claim_signature"),
+        evidenceCount=payload.get("evidence_count", 0),
+        distinctPublisherCount=payload.get("distinct_publisher_count", 0),
+        dependencyGroupCount=payload.get("dependency_group_count", 0),
+        unknownPublisherCount=payload.get("unknown_publisher_count", 0),
+        independenceStatus=payload.get("independence_status") or "unknown",
+        policy=SourcePolicyDTO(
+            version=policy.get("version", "source-dependency-policy-v1"),
+            urlNormalization=policy.get("url_normalization") or [],
+            publisherIdentity=policy.get("publisher_identity") or [],
+            dependencyEdges=policy.get("dependency_edges") or [],
+            textFingerprint=policy.get("text_fingerprint", "text-fingerprint-v1"),
+            textFingerprintNormalization=policy.get(
+                "text_fingerprint_normalization", ""
+            ),
+            minCopyNonWhitespaceCodePoints=policy.get(
+                "min_copy_non_whitespace_code_points", 200
+            ),
+            limitations=policy.get("limitations") or [],
+        ),
+        publisherCounts=[
+            PublisherCountDTO(
+                publisherKey=item["publisher_key"],
+                publisher=item.get("publisher"),
+                evidenceCount=item.get("evidence_count", 0),
+                dependencyGroupCount=item.get("dependency_group_count", 0),
+                provisional=bool(item.get("provisional")),
+            )
+            for item in payload.get("publisher_counts", [])
+        ],
+        groups=[
+            SourceDependencyGroupDTO(
+                id=group["id"],
+                reasons=group.get("reasons") or [],
+                publisherKeys=group.get("publisher_keys") or [],
+                evidenceCount=group.get("evidence_count", 0),
+                members=[
+                    _map_source_member(member)
+                    for member in group.get("members", [])
+                ],
+            )
+            for group in payload.get("groups", [])
         ],
     )

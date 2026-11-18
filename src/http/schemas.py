@@ -519,5 +519,80 @@ class EvidenceDetailDTO(EvidenceSourceDTO):
     relatedClaims: list[EvidenceClaimReferenceDTO] = Field(default_factory=list)
 
 
+class SourcePolicyDTO(BaseModel):
+    """Published methodology for source dependency grouping (policy v1)."""
+
+    version: str
+    urlNormalization: list[str] = Field(default_factory=list)
+    publisherIdentity: list[str] = Field(default_factory=list)
+    dependencyEdges: list[str] = Field(default_factory=list)
+    textFingerprint: str
+    textFingerprintNormalization: str
+    minCopyNonWhitespaceCodePoints: int = 200
+    limitations: list[str] = Field(default_factory=list)
+
+
+class SourceMemberDTO(BaseModel):
+    """One evidence/capture record inside a dependency group."""
+
+    evidenceId: str
+    publisher: str | None = None
+    publisherKey: str | None = None
+    publisherKeyProvisional: bool = False
+    host: str | None = None
+    originUrl: str | None = None
+    canonicalUrl: str | None = None
+    sourceUrl: str | None = None
+    caseArticleId: str | None = None
+    explicitOriginKey: str | None = None
+    captureId: str | None = None
+    captureKind: str | None = None
+    captureTextSha256: str | None = None
+    captureNormalizedTextSha256: str | None = None
+    captureCharLength: int | None = None
+    recordedAt: str | None = None
+    observedAt: str | None = None
+    copyFingerprint: str | None = None
+    copyNonWhitespaceCount: int = 0
+    dependencyReasons: list[str] = Field(default_factory=list)
+
+
+class SourceDependencyGroupDTO(BaseModel):
+    """One connected component, with reasons and inspectable membership."""
+
+    id: str
+    reasons: list[str] = Field(default_factory=list)
+    publisherKeys: list[str] = Field(default_factory=list)
+    evidenceCount: int = 0
+    members: list[SourceMemberDTO] = Field(default_factory=list)
+
+
+class PublisherCountDTO(BaseModel):
+    """Observed evidence count for one known publisher identity."""
+
+    publisherKey: str
+    publisher: str | None = None
+    evidenceCount: int = 0
+    dependencyGroupCount: int = 0
+    provisional: bool = False
+
+
+class SourceSummaryDTO(BaseModel):
+    """Observed publishers plus dependency groups; never an independence score."""
+
+    caseId: str
+    scope: Literal["case", "claim"]
+    claimId: str | None = None
+    claimSignature: str | None = None
+    evidenceCount: int = 0
+    distinctPublisherCount: int = 0
+    dependencyGroupCount: int = 0
+    unknownPublisherCount: int = 0
+    independenceStatus: Literal["unknown", "dependency_detected"] = "unknown"
+    policy: SourcePolicyDTO
+    publisherCounts: list[PublisherCountDTO] = Field(default_factory=list)
+    groups: list[SourceDependencyGroupDTO] = Field(default_factory=list)
+
+
 class HealthResponse(BaseModel):
     status: Literal["ok"]

@@ -75,6 +75,7 @@ from src.cases.evidence import (
     normalize_capture_text,
     resolve_effective_relationship,
 )
+from src.cases.provenance import read_source_summary
 from src.cases.readers import (
     link_read_model,
     read_capture_window,
@@ -341,6 +342,18 @@ class TopicCaseService:
                 capture_id=capture_id,
                 start=start,
                 length=length,
+            )
+        finally:
+            session.close()
+
+    def get_source_summary(
+        self, case_id: str, *, claim_id: str | None = None
+    ) -> dict[str, Any] | None:
+        """Read case-level or claim-scoped source dependency groups."""
+        session = get_database().get_session_sync()
+        try:
+            return read_source_summary(
+                session, case_id=case_id, claim_id=claim_id
             )
         finally:
             session.close()
