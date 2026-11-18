@@ -1,6 +1,6 @@
 # Comparison navigation and panels (P03)
 
-Date: 2026-11-18. Status: **implemented, pending Release B review**. Contract:
+Date: 2026-11-18. Status: **implemented and committed at `4226856`, pending Release B review**. Contract:
 [specification](../plans/20261114-evidence-workbench-specification.md) §6, ticket
 [P03](../plans/20261114-evidence-workbench-worker-plan.md). Depends on P02 and
 E04. No backend behaviour changed in this ticket.
