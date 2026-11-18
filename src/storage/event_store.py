@@ -302,6 +302,7 @@ def store_event_in_db(
     *,
     case_id: str | None = None,
     case_run_id: str | None = None,
+    investigation_run_id: str | None = None,
     create_review: bool = True,
     confirmed_parties: list[str] | None = None,
     session: Session | None = None,
@@ -323,6 +324,7 @@ def store_event_in_db(
             event_data,
             case_id=case_id,
             case_run_id=case_run_id,
+            investigation_run_id=investigation_run_id,
             create_review=create_review,
             confirmed_parties=confirmed_parties,
         )
@@ -335,6 +337,7 @@ def store_event_in_db(
             event_data,
             case_id=case_id,
             case_run_id=case_run_id,
+            investigation_run_id=investigation_run_id,
             create_review=create_review,
             confirmed_parties=confirmed_parties,
         )
@@ -599,6 +602,7 @@ def _write_event(
     *,
     case_id: str | None,
     case_run_id: str | None,
+    investigation_run_id: str | None = None,
     create_review: bool,
     confirmed_parties: list[str] | None,
 ) -> None:
@@ -680,6 +684,7 @@ def _write_event(
         event.location_lon = event_data.get("location_lon")
         event.case_id = case_id
         event.case_run_id = case_run_id
+        event.investigation_run_id = investigation_run_id
         event.workflow_route = event_data.get("workflow_route")
         event.source_url = event_data.get("source_url")
     else:
@@ -696,6 +701,7 @@ def _write_event(
             location_lon=event_data.get("location_lon"),
             case_id=case_id,
             case_run_id=case_run_id,
+            investigation_run_id=investigation_run_id,
             workflow_route=event_data.get("workflow_route"),
             source_url=event_data.get("source_url"),
         )

@@ -98,6 +98,8 @@ class MigrationManager:
                 self._apply_evidence_capture_schema(session)
             elif migration.version == 11:
                 self._apply_claim_citation_schema(session)
+            elif migration.version == 12:
+                self._apply_investigation_run_schema(session)
             else:
                 # Apply migration SQL
                 session.execute(text(migration.up_sql))
@@ -593,6 +595,87 @@ class MigrationManager:
                     f"ON {table} ({column})"
                 )
             )
+
+    def _apply_investigation_run_schema(self, session) -> None:
+        """Add grouped investigation invocations and nullable origin references.
+
+        Schema only: existing ``case_stage_runs``/``events`` rows keep a null
+        grouped-run reference (unknown legacy origin), no stage history is
+        rewritten and no snapshot/coverage value is fabricated. The parent table
+        is created first so the inline nullable FKs are valid for both fresh and
+        legacy SQLite schemas.
+        """
+        inspector = inspect(session.bind)
+        existing_tables = set(inspector.get_table_names())
+
+        session.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS investigation_runs (
+                    id TEXT PRIMARY KEY,
+                    case_id TEXT NOT NULL,
+                    sequence INTEGER NOT NULL,
+                    trigger TEXT NOT NULL,
+                    requested_start_stage TEXT,
+                    parameter_snapshot JSON NOT NULL DEFAULT '{}',
+                    predecessor_run_id TEXT,
+                    status TEXT NOT NULL,
+                    coverage TEXT NOT NULL,
+                    coverage_details JSON NOT NULL DEFAULT '{}',
+                    started_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    completed_at TIMESTAMP,
+                    error_json JSON,
+                    baseline_snapshot_id TEXT,
+                    result_snapshot_id TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(case_id, sequence),
+                    FOREIGN KEY(case_id) REFERENCES topic_cases(id),
+                    FOREIGN KEY(predecessor_run_id) REFERENCES investigation_runs(id)
+                )
+                """
+            )
+        )
+
+        for table_name in ("case_stage_runs", "events"):
+            if table_name not in existing_tables:
+                continue
+            existing_columns = {
+                column["name"] for column in inspector.get_columns(table_name)
+            }
+            if "investigation_run_id" not in existing_columns:
+                session.execute(
+                    text(
+                        f"ALTER TABLE {table_name} "
+                        "ADD COLUMN investigation_run_id TEXT "
+                        "REFERENCES investigation_runs(id)"
+                    )
+                )
+            session.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS "
+                    f"ix_{table_name}_investigation_run_id "
+                    f"ON {table_name} (investigation_run_id)"
+                )
+            )
+
+        session.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_investigation_runs_case_id "
+                "ON investigation_runs (case_id)"
+            )
+        )
+        session.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_investigation_runs_status "
+                "ON investigation_runs (status)"
+            )
+        )
+        session.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_investigation_runs_trigger "
+                "ON investigation_runs (trigger)"
+            )
+        )
 
     def _apply_event_location_schema(self, session) -> None:
         """Add event location columns if they are missing."""
@@ -1365,6 +1448,42 @@ MIGRATIONS: list[Migration] = [
             FOREIGN KEY(case_id) REFERENCES topic_cases(id),
             FOREIGN KEY(capture_id) REFERENCES evidence_captures(id)
         );
+        """,
+        down="""
+        """,
+    ),
+    Migration(
+        version=12,
+        name="Add grouped investigation runs and origin references",
+        up="""
+        CREATE TABLE IF NOT EXISTS investigation_runs (
+            id TEXT PRIMARY KEY,
+            case_id TEXT NOT NULL,
+            sequence INTEGER NOT NULL,
+            trigger TEXT NOT NULL,
+            requested_start_stage TEXT,
+            parameter_snapshot JSON NOT NULL DEFAULT '{}',
+            predecessor_run_id TEXT,
+            status TEXT NOT NULL,
+            coverage TEXT NOT NULL,
+            coverage_details JSON NOT NULL DEFAULT '{}',
+            started_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            completed_at TIMESTAMP,
+            error_json JSON,
+            baseline_snapshot_id TEXT,
+            result_snapshot_id TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(case_id, sequence),
+            FOREIGN KEY(case_id) REFERENCES topic_cases(id),
+            FOREIGN KEY(predecessor_run_id) REFERENCES investigation_runs(id)
+        );
+        ALTER TABLE case_stage_runs ADD COLUMN investigation_run_id TEXT REFERENCES investigation_runs(id);
+        ALTER TABLE events ADD COLUMN investigation_run_id TEXT REFERENCES investigation_runs(id);
+        CREATE INDEX IF NOT EXISTS ix_investigation_runs_case_id ON investigation_runs (case_id);
+        CREATE INDEX IF NOT EXISTS ix_investigation_runs_status ON investigation_runs (status);
+        CREATE INDEX IF NOT EXISTS ix_investigation_runs_trigger ON investigation_runs (trigger);
+        CREATE INDEX IF NOT EXISTS ix_case_stage_runs_investigation_run_id ON case_stage_runs (investigation_run_id);
+        CREATE INDEX IF NOT EXISTS ix_events_investigation_run_id ON events (investigation_run_id);
         """,
         down="""
         """,

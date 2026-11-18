@@ -18,10 +18,11 @@ Contract authority remains the
 | P01 | `e95bfb2` — conservative source dependency groups |
 | P02 | `4d93c12` — deterministic comparison read API |
 | P03 | `4226856` — comparison navigation and panels; **Release B reviewed and accepted 2026-11-18** |
-| Next ticket | **R01 — grouped invocation identity (not started)** |
-| Migrations | 1..11 (7 OSINT, 8 review audit/evaluation, 9 review hash, 10 captures, 11 citations) |
+| R01 | delivered/verified 2026-11-18 (working tree, not committed) — grouped invocation identity; migration 12; **diff review pending** |
+| Next ticket | **R02 — case writer admission, fencing and explicit recovery (not started)** |
+| Migrations | 1..12 (7 OSINT, 8 review audit/evaluation, 9 review hash, 10 captures, 11 citations, 12 grouped investigation runs) |
 | Frontend gate | `npm run check` green; `npm test -- --run` = **107 tests / 12 files** |
-| Backend gate | **456 passed, 9 deselected**; Ruff clean |
+| Backend gate | **462 passed, 9 deselected**; Ruff clean |
 | Scratch files | 382 removed after archive at `/tmp/triangulate-scratch-archive-20261118T005339Z.tar.gz` (382/382 verified, sha256 `6a38b51c41a7542819f30d23bddc0a83ebb07f8b9eda943df69e554314bad4e5`); no untracked scratch files remain |
 | Production data | untouched; B02 test-database incident remains disclosed |
 
@@ -42,7 +43,8 @@ P01/P02/P03 docs:
    browser check passed with 47 backend GETs, 0 non-GET and 0 happy-path console
    errors; runtime evidence at `/tmp/triangulate-p03-browser.20261118T104309Z`.
 4. ~~Record Release B acceptance in the worker plan and commit the documentation.~~
-   Recorded. **R01 is now the only active ticket.**
+   Recorded (`aaa4f16`). R01 was then delivered in the working tree and verified;
+   **review its diff before starting R02**.
 5. One bounded ticket at a time, parent diff review after each. Do not start R02
    before R01 is reviewed.
 
@@ -103,13 +105,27 @@ Previous browser evidence (isolated session, temp DB/config):
 
 ## 5. Remaining work map
 
-Default order after Release B acceptance: **R01 → R02 → R03 → R04 → S01 → S02 →
-V01**. Stop after each ticket for parent review and after V01 for the Release C
-gate. S01 depends on E02/E03 and is technically independent of the R lane, but
-shared storage/event-store writers mean one application-code writer at a time;
-the default order avoids races.
+Because R01 is delivered, the default remaining order after its diff review is
+**R02 → R03 → R04 → S01 → S02 → V01**. S01 depends on E02/E03 and is technically
+independent of the R lane, but shared storage/event-store writers mean one
+application-code writer at a time; the default order avoids races.
 
-### R01 — Grouped invocation identity (internal only)
+### R01 — Grouped invocation identity (internal only) — **delivered, review pending**
+
+Delivered in the working tree on 2026-11-18 (migration 12, not committed): one
+`InvestigationRun` per `run_case` with per-case sequence, trigger, requested start
+stage, parameter snapshot, predecessor, status, coverage/details, timestamps and
+error; nullable grouped-run references on `CaseStageRun` and `Event` (while
+`Event.case_run_id` stays the stage FK); one ID propagated through stages,
+invocation events, reruns and monitor dispatch. Coverage is derived from recorded
+stage outcomes (failed/paused/complete/partial/not-attempted/unknown) and never
+upgraded from a legacy unobserved retrieval. Snapshot IDs stay null. Full gate
+**462 passed, 9 deselected**, Ruff clean; see the worker plan §7 and
+[grouped-run architecture](../architecture/20261118-investigation-runs.md).
+Review the diff before starting R02; do not deploy/use grouped runs for change
+semantics before R02 fencing and R03 finalization.
+
+The original R01 scope (now delivered) was:
 
 - Add `InvestigationRun` model/migration/exports; one `run_case` invocation ID
   and per-case sequence, trigger, requested stage, parameter snapshot,
@@ -213,7 +229,7 @@ Release C implementation.
   browser/server. A prior seed helper is
   `tests.test_p02_comparison_api.seed_workbench(tmp_path)`.
 - No commits, resets, branches, dependency changes, pushes or deletions on `main`
-  without owner instruction. Local `main` is already 6 commits ahead of origin.
+  without owner instruction. Local `main` is already 7 commits ahead of origin.
 - One application-code writer at a time. New migrations: allocate the next
   number from the then-current registry; do not reserve conflicting versions.
 - Preserve the CLI-only mutation boundary; no new public mutation endpoints.
@@ -239,9 +255,14 @@ uv run ruff check src tests --output-format concise
 
 ## 8. Known caveats
 
-- P03 is committed but **not yet accepted as Release B**; the new thread owns
-  that review.
-- Local `main` is 6 commits ahead of `origin/main` and has not been pushed.
+- P03 is committed and **accepted as Release B** (2026-11-18).
+- R01 is implemented in the working tree (migration 12) and verified; its diff
+  still needs owner/parent review before R02 starts.
+- Local `main` is 7 commits ahead of `origin/main` (including the Release B
+  acceptance commit) and has not been pushed.
+- Grouped runs are recorded but **not yet used** for change/delta semantics; R02
+  fencing and R03 finalization must land first. R01 does not claim
+  concurrency-safe sequence allocation.
 - The scratch archive is in `/tmp` and is not durable across a machine cleanup;
   copy it somewhere durable if the old one-offs must be retained.
 - P02 test fixtures now expose `seed_workbench(tmp_path)` for browser seeding;
@@ -254,26 +275,34 @@ uv run ruff check src tests --output-format concise
 - No `.pi-lens.json` ignore file was added; the scratch-file cascade is gone
   because the files were archived/removed.
 
-## 9. Paste-ready R01 dispatch brief
+## 9. Paste-ready R02 dispatch brief
 
 ```text
-Implement ticket R01 from docs/plans/20261114-evidence-workbench-worker-plan.md
+Implement ticket R02 from docs/plans/20261114-evidence-workbench-worker-plan.md
 (contract: docs/plans/20261114-evidence-workbench-specification.md §7).
-Start by reading docs/plans/20261118-release-b-handoff.md and confirming the
-Release B acceptance is recorded (P01/P02/P03 commits e95bfb2/4d93c12/4226856).
+Start by reading docs/plans/20261118-release-b-handoff.md, the R01 architecture
+doc (docs/architecture/20261118-investigation-runs.md) and the delivered R01
+diff, and confirm the Release B acceptance is recorded (P03 4226856).
 
-Scope: InvestigationRun model/migration/exports; run_case invocation identity,
-per-case sequence, trigger, stage/parameters, predecessor, status, coverage,
-timestamps, error, baseline/result snapshot IDs; nullable grouped-run references
-on CaseStageRun and Event; pass one ID through stages. Keep Event.case_run_id as
-the stage FK and existing stage history unchanged. Legacy origins stay unknown.
-No deployment/use of grouped runs before R02 fencing and R03 finalization.
+Scope: small transactional case-writer guard/owner fields; admit and validate the
+owner token in every case-bound write transaction (including after awaited work);
+protect run_case/rerun/monitor stage writes, case-bound intake/URL intake,
+_process_intake_item, review_case, update_exception_status and direct case-bound
+store_event_in_db callers. Enumerate actual call sites before editing; helper
+methods inherit the caller's token and must not acquire conflicting nested owners;
+purely unassigned intake is outside the guard. Add an explicit CLI-only interrupt
+that requires matching owner/run ID, reason and confirmation, atomically marks the
+invocation interrupted and invalidates ownership; old tokens cannot commit after a
+new writer starts. No elapsed-time or GET-side recovery. Keep legacy direct-SQL
+scripts explicitly unsupported/unfenced.
 
-Do not modify: production DB/data/logs, unrelated features, HTTP mutation
-boundaries, other tickets' files, or re-add scratch scripts. Use the disposable
-backend copy for tests and allocate the next migration number from the current
-registry. Stop and report blockers rather than expanding scope.
+R01 is internal-only: do not add snapshots/deltas, grouped-run HTTP endpoints or
+change semantics. Do not modify production DB/data/logs, unrelated features,
+existing HTTP mutation boundaries or other tickets' files. Use the disposable
+backend copy for tests and temporary DBs; allocate the next migration number from
+the then-current registry. Stop and report blockers rather than expanding scope.
 
-Return: behaviour delivered; files/symbols changed; real migration/test output;
-full backend suite and Ruff; remaining risks. Do not call partial work done.
+Return: behaviour delivered; exact files/symbols changed; protected-path test
+matrix; real migration/test output; full backend suite and Ruff; remaining risks.
+Do not call partial work done.
 ```

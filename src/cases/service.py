@@ -28,6 +28,7 @@ from src.ingester.topic_fetcher import (
     COVERAGE_COMPLETE,
     COVERAGE_FAILED,
     COVERAGE_NOT_ATTEMPTED,
+    COVERAGE_PARTIAL,
     COVERAGE_UNKNOWN,
     SUCCESS_ACQUISITION_STATUSES,
     AcquisitionStatus,
@@ -57,6 +58,10 @@ from src.storage import (
     EvidenceVerificationCheck,
     Event,
     IntakeItem,
+    InvestigationCoverage,
+    InvestigationRun,
+    InvestigationRunStatus,
+    InvestigationRunTrigger,
     MonitorCheckpoint,
     Narrative,
     Party,
@@ -567,6 +572,7 @@ class TopicCaseService:
         start_stage: CaseStageName = CaseStageName.BOOTSTRAP,
         automation_mode: str = "exceptions_only",
         case_id: str | None = None,
+        trigger: InvestigationRunTrigger | None = None,
     ) -> TopicCase:
         session = get_database().get_session_sync()
         try:
@@ -584,13 +590,40 @@ class TopicCaseService:
             session.close()
 
         case = self._reload_case(case_id_value)
+        effective_trigger = trigger or (
+            InvestigationRunTrigger.MONITOR
+            if monitor_mode
+            else InvestigationRunTrigger.INITIAL
+        )
         context = CaseRunContext(
             case=case,
             run_started_at=_utcnow(),
             output_dir=(output_dir or self.output_root) / "cases" / case.slug,
+            run_trigger=effective_trigger.value,
+            requested_start_stage=start_stage,
         )
         if start_stage != CaseStageName.BOOTSTRAP:
             self._hydrate_context_from_case(context)
+
+        context.investigation_run_id = self._start_investigation_run(
+            context,
+            trigger=effective_trigger,
+            start_stage=start_stage,
+            parameters={
+                "query": query,
+                "conflict": conflict,
+                "confirmedParties": list(confirmed_parties or []),
+                "manualLinks": list(manual_links or []),
+                "maxArticles": max_articles,
+                "relevanceThreshold": relevance_threshold,
+                "importance": importance,
+                "monitorMode": monitor_mode,
+                "startStage": start_stage.value,
+                "automationMode": automation_mode,
+                "resumeExistingCase": case_id is not None,
+                "trigger": effective_trigger.value,
+            },
+        )
 
         effective_automation_mode = _normalize_automation_mode(
             automation_mode
@@ -604,50 +637,81 @@ class TopicCaseService:
         )
 
         requested_index = STAGE_ORDER.index(start_stage)
-        for stage in STAGE_ORDER[requested_index:]:
-            if stage == CaseStageName.BOOTSTRAP:
-                await self._stage_bootstrap(
-                    context,
-                    conflict=conflict,
-                    confirmed_parties=confirmed_parties or [],
-                    manual_links=manual_links or [],
-                    automation_mode=effective_automation_mode,
-                )
-            elif stage == CaseStageName.RETRIEVE:
-                await self._stage_retrieve(
-                    context,
-                    conflict=conflict,
-                    confirmed_parties=confirmed_parties or [],
-                    manual_links=manual_links or [],
-                    max_articles=max_articles,
-                    relevance_threshold=relevance_threshold,
-                    monitor_mode=monitor_mode,
-                )
-            elif stage == CaseStageName.TRIAGE:
-                await self._stage_triage(
-                    context, max_articles=max_articles, monitor_mode=monitor_mode
-                )
-            elif stage == CaseStageName.INVESTIGATE:
-                await self._stage_investigate(context)
-            elif stage == CaseStageName.ARBITRATE:
-                await self._stage_arbitrate(context, monitor_mode=monitor_mode)
-            elif stage == CaseStageName.REPORT:
-                await self._stage_report(context)
+        paused_stage: CaseStageName | None = None
+        try:
+            for stage in STAGE_ORDER[requested_index:]:
+                if stage == CaseStageName.BOOTSTRAP:
+                    await self._stage_bootstrap(
+                        context,
+                        conflict=conflict,
+                        confirmed_parties=confirmed_parties or [],
+                        manual_links=manual_links or [],
+                        automation_mode=effective_automation_mode,
+                    )
+                elif stage == CaseStageName.RETRIEVE:
+                    await self._stage_retrieve(
+                        context,
+                        conflict=conflict,
+                        confirmed_parties=confirmed_parties or [],
+                        manual_links=manual_links or [],
+                        max_articles=max_articles,
+                        relevance_threshold=relevance_threshold,
+                        monitor_mode=monitor_mode,
+                    )
+                elif stage == CaseStageName.TRIAGE:
+                    await self._stage_triage(
+                        context, max_articles=max_articles, monitor_mode=monitor_mode
+                    )
+                elif stage == CaseStageName.INVESTIGATE:
+                    await self._stage_investigate(context)
+                elif stage == CaseStageName.ARBITRATE:
+                    await self._stage_arbitrate(context, monitor_mode=monitor_mode)
+                elif stage == CaseStageName.REPORT:
+                    await self._stage_report(context)
 
-            if context.case.status == CaseStatus.FAILED:
-                break
+                if context.case.status == CaseStatus.FAILED:
+                    break
 
-            if self._should_pause_after_stage(
-                context.case, stage_name=stage, automation_mode=execution_automation_mode
-            ):
-                self._pause_case_for_manual_action(
-                    context.case.id,
+                if self._should_pause_after_stage(
+                    context.case,
                     stage_name=stage,
                     automation_mode=execution_automation_mode,
+                ):
+                    self._pause_case_for_manual_action(
+                        context.case.id,
+                        stage_name=stage,
+                        automation_mode=execution_automation_mode,
+                    )
+                    context.case = self._reload_case(context.case.id)
+                    paused_stage = stage
+                    break
+        except Exception as exc:
+            # Record the failed invocation before propagating: an unexpected
+            # error outside a stage transaction must not leave a RUNNING run or
+            # imply successful coverage. A bookkeeping failure must not mask the
+            # original error.
+            try:
+                self._finalize_investigation_run(
+                    context,
+                    forced_status=InvestigationRunStatus.FAILED,
+                    forced_coverage=InvestigationCoverage.FAILED,
+                    error={
+                        "message": str(exc),
+                        "stage": (
+                            context.case.current_stage.value
+                            if context.case.current_stage is not None
+                            else None
+                        ),
+                    },
                 )
-                context.case = self._reload_case(context.case.id)
-                break
+            except Exception:
+                logger.exception(
+                    "Failed to record grouped-run failure for case %s",
+                    context.case.id,
+                )
+            raise
 
+        self._finalize_investigation_run(context, paused_stage=paused_stage)
         return self._reload_case(context.case.id)
 
     async def rerun_case(
@@ -683,6 +747,7 @@ class TopicCaseService:
             case_id=case_id,
             automation_mode=automation_mode,
             monitor_mode=monitor_mode,
+            trigger=InvestigationRunTrigger.RERUN,
         )
 
     def review_case(
@@ -819,6 +884,7 @@ class TopicCaseService:
                 output_dir=output_root or self.output_root,
                 monitor_mode=True,
                 automation_mode=topic.get("automation_mode", "exceptions_only"),
+                trigger=InvestigationRunTrigger.MONITOR,
             )
             completed_cases.append(case)
         return completed_cases
@@ -1819,6 +1885,7 @@ class TopicCaseService:
                 event,
                 case_id=context.case.id,
                 case_run_id=stage_run.id,
+                investigation_run_id=context.investigation_run_id,
                 create_review=True,
                 confirmed_parties=confirmed_parties,
                 session=session,
@@ -2120,6 +2187,7 @@ class TopicCaseService:
             started_at,
             workflow_name=workflow_name,
             model_used=model_used,
+            investigation_run_id=context.investigation_run_id,
         )
 
         try:
@@ -2195,6 +2263,23 @@ class TopicCaseService:
                 )
                 session.commit()
                 context.case = case
+                context.stage_outcomes.append(
+                    {
+                        "stage": stage_name.value,
+                        "status": "FAILED" if stage_failure is not None else "COMPLETED",
+                        "stageRunId": stage_run.id,
+                        "message": (
+                            str(stage_failure.get("message"))
+                            if stage_failure is not None
+                            else None
+                        ),
+                        "retrievalCoverage": (
+                            result.get("acquisition_coverage")
+                            if stage_name == CaseStageName.RETRIEVE
+                            else None
+                        ),
+                    }
+                )
             except Exception:
                 session.rollback()
                 raise
@@ -2214,6 +2299,15 @@ class TopicCaseService:
                     logger.error(
                         "Cannot record failure for stage run %s: row or case missing",
                         stage_run_id,
+                    )
+                    context.stage_outcomes.append(
+                        {
+                            "stage": stage_name.value,
+                            "status": "FAILED",
+                            "stageRunId": stage_run_id,
+                            "message": str(exc),
+                            "retrievalCoverage": None,
+                        }
                     )
                     return
                 stage_run.status = StageStatus.FAILED
@@ -2244,8 +2338,245 @@ class TopicCaseService:
                 case.metadata_json = metadata_json
                 session.commit()
                 context.case = case
+                context.stage_outcomes.append(
+                    {
+                        "stage": stage_name.value,
+                        "status": "FAILED",
+                        "stageRunId": stage_run_id,
+                        "message": str(exc),
+                        "retrievalCoverage": None,
+                    }
+                )
             finally:
                 session.close()
+
+    def _requested_stages(
+        self, start_stage: CaseStageName | None
+    ) -> list[CaseStageName]:
+        """Stages requested by this invocation, from its start stage onward."""
+        stage = start_stage or CaseStageName.BOOTSTRAP
+        if stage not in STAGE_ORDER:
+            return []
+        return STAGE_ORDER[STAGE_ORDER.index(stage) :]
+
+    def _start_investigation_run(
+        self,
+        context: CaseRunContext,
+        *,
+        trigger: InvestigationRunTrigger,
+        start_stage: CaseStageName,
+        parameters: dict[str, Any],
+    ) -> str:
+        """Create the RUNNING grouped record before the first stage attempt.
+
+        The per-case sequence/predecessor are read in the same session as the
+        insert. R01 does not claim concurrency-safe sequence allocation: R02
+        owns case write admission and fencing, so a concurrent invocation is a
+        known gap of this internal-only ticket, not a supported mode.
+        """
+        session = get_database().get_session_sync()
+        try:
+            case = (
+                session.query(TopicCase)
+                .filter(TopicCase.id == context.case.id)
+                .first()
+            )
+            if case is None:
+                raise RuntimeError(f"Case {context.case.id!r} is missing")
+            previous = (
+                session.query(InvestigationRun)
+                .filter(InvestigationRun.case_id == context.case.id)
+                .order_by(InvestigationRun.sequence.desc())
+                .first()
+            )
+            sequence = (previous.sequence + 1) if previous is not None else 1
+            run = InvestigationRun(
+                id=str(uuid.uuid4()),
+                case_id=context.case.id,
+                sequence=sequence,
+                trigger=trigger,
+                requested_start_stage=start_stage,
+                parameter_snapshot=json.loads(
+                    json.dumps(parameters, default=str)
+                ),
+                predecessor_run_id=previous.id if previous is not None else None,
+                status=InvestigationRunStatus.RUNNING,
+                # No snapshot/coverage claim until the invocation actually ends.
+                coverage=InvestigationCoverage.UNKNOWN,
+                coverage_details={},
+                started_at=context.run_started_at,
+            )
+            session.add(run)
+            context.predecessor_run_id = run.predecessor_run_id
+            session.commit()
+            return run.id
+        finally:
+            session.close()
+
+    def _coverage_details(
+        self, context: CaseRunContext, *, paused_stage: CaseStageName | None
+    ) -> dict[str, Any]:
+        return {
+            "requestedStages": [
+                stage.value for stage in self._requested_stages(context.requested_start_stage)
+            ],
+            "stageOutcomes": [dict(item) for item in context.stage_outcomes],
+            "pausedAfterStage": (
+                paused_stage.value if paused_stage is not None else None
+            ),
+            "trigger": context.run_trigger,
+            "predecessorRunId": context.predecessor_run_id,
+        }
+
+    def _derive_run_outcome(
+        self, context: CaseRunContext, *, paused_stage: CaseStageName | None
+    ) -> tuple[
+        InvestigationRunStatus,
+        InvestigationCoverage,
+        dict[str, Any],
+        dict[str, Any] | None,
+    ]:
+        """Derive an honest status/coverage from actual stage outcomes.
+
+        Retrieval coverage comes only from the canonical B02 observation already
+        stored on the stage result. A legacy result without structured outcomes
+        stays ``unknown``; it is never upgraded to complete coverage.
+        """
+        details = self._coverage_details(context, paused_stage=paused_stage)
+        outcomes = list(context.stage_outcomes)
+        failed = next((item for item in outcomes if item.get("status") == "FAILED"), None)
+        if failed is None and context.case.status == CaseStatus.FAILED:
+            failed = {
+                "stage": (
+                    context.case.current_stage.value
+                    if context.case.current_stage is not None
+                    else None
+                ),
+                "message": None,
+            }
+        if failed is not None:
+            details["failedStage"] = failed.get("stage")
+            return (
+                InvestigationRunStatus.FAILED,
+                InvestigationCoverage.FAILED,
+                details,
+                {"stage": failed.get("stage"), "message": failed.get("message")},
+            )
+        if paused_stage is not None:
+            details["coverageNote"] = (
+                "Remaining requested stages were not attempted after the manual gate."
+            )
+            return (
+                InvestigationRunStatus.PAUSED,
+                InvestigationCoverage.PARTIAL,
+                details,
+                None,
+            )
+
+        coverage_map = {
+            COVERAGE_COMPLETE: InvestigationCoverage.COMPLETE_REQUESTED_SCOPE,
+            COVERAGE_PARTIAL: InvestigationCoverage.PARTIAL,
+            COVERAGE_FAILED: InvestigationCoverage.FAILED,
+            COVERAGE_NOT_ATTEMPTED: InvestigationCoverage.NOT_ATTEMPTED,
+            COVERAGE_UNKNOWN: InvestigationCoverage.UNKNOWN,
+        }
+        retrieval = next(
+            (
+                item
+                for item in outcomes
+                if item.get("stage") == CaseStageName.RETRIEVE.value
+            ),
+            None,
+        )
+        retrieval_coverage = retrieval.get("retrievalCoverage") if retrieval else None
+        if isinstance(retrieval_coverage, str) and retrieval_coverage:
+            coverage = coverage_map.get(
+                retrieval_coverage, InvestigationCoverage.UNKNOWN
+            )
+        else:
+            requested = self._requested_stages(context.requested_start_stage)
+            completed = sum(
+                1 for item in outcomes if item.get("status") == "COMPLETED"
+            )
+            if not outcomes:
+                coverage = InvestigationCoverage.NOT_ATTEMPTED
+            elif completed == len(requested):
+                coverage = InvestigationCoverage.COMPLETE_REQUESTED_SCOPE
+            else:
+                coverage = InvestigationCoverage.UNKNOWN
+        details["retrievalCoverage"] = retrieval_coverage
+        if coverage == InvestigationCoverage.FAILED:
+            # Defensive: a run whose canonical retrieval coverage is failed is
+            # never reported as a successful invocation.
+            details["failedStage"] = CaseStageName.RETRIEVE.value
+            return (
+                InvestigationRunStatus.FAILED,
+                InvestigationCoverage.FAILED,
+                details,
+                {
+                    "stage": CaseStageName.RETRIEVE.value,
+                    "message": "Retrieval coverage is failed.",
+                },
+            )
+        return (
+            InvestigationRunStatus.SUCCEEDED,
+            coverage,
+            details,
+            None,
+        )
+
+    def _finalize_investigation_run(
+        self,
+        context: CaseRunContext,
+        *,
+        paused_stage: CaseStageName | None = None,
+        forced_status: InvestigationRunStatus | None = None,
+        forced_coverage: InvestigationCoverage | None = None,
+        error: dict[str, Any] | None = None,
+    ) -> None:
+        """Persist the final grouped-run status/coverage/error, once.
+
+        R01 leaves the snapshot references null: finalization writes a grouped
+        observation record only. R03 owns snapshots/deltas and the guarded
+        success transaction.
+        """
+        if forced_status is not None:
+            status = forced_status
+            coverage = forced_coverage or InvestigationCoverage.UNKNOWN
+            details = self._coverage_details(context, paused_stage=paused_stage)
+        else:
+            status, coverage, details, derived_error = self._derive_run_outcome(
+                context, paused_stage=paused_stage
+            )
+            if error is None:
+                error = derived_error
+
+        session = get_database().get_session_sync()
+        try:
+            run = None
+            if context.investigation_run_id:
+                run = (
+                    session.query(InvestigationRun)
+                    .filter(InvestigationRun.id == context.investigation_run_id)
+                    .first()
+                )
+            if run is None:
+                logger.error(
+                    "Cannot finalize grouped run %s for case %s: record missing",
+                    context.investigation_run_id,
+                    context.case.id,
+                )
+                return
+            run.status = status
+            run.coverage = coverage
+            run.coverage_details = json.loads(json.dumps(details, default=str))
+            run.completed_at = _utcnow()
+            run.error_json = (
+                json.loads(json.dumps(error, default=str)) if error else None
+            )
+            session.commit()
+        finally:
+            session.close()
 
     def _mark_stage_running(
         self,
@@ -2256,6 +2587,7 @@ class TopicCaseService:
         *,
         workflow_name: str | None,
         model_used: str | None,
+        investigation_run_id: str | None = None,
     ) -> None:
         session = get_database().get_session_sync()
         try:
@@ -2283,6 +2615,7 @@ class TopicCaseService:
                 input_artifact_ids=[],
                 output_artifact_ids=[],
                 metrics_json={},
+                investigation_run_id=investigation_run_id,
             )
             session.add(stage_run)
             case.current_stage = stage_name

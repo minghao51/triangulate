@@ -10,8 +10,8 @@ from src.storage.database import init_database
 from src.storage.migrations import run_migrations
 from src.storage.models import CaseStatus, EvidenceItem, TopicCase
 
-# Highest migration version after the merge (theirs 7/8, ours renumbered 9/10/11).
-LATEST_MIGRATION_VERSION = 11
+# Highest migration version after R01 added grouped investigation runs.
+LATEST_MIGRATION_VERSION = 12
 
 
 
@@ -173,6 +173,123 @@ def _create_legacy_database(db_path) -> None:
         connection.close()
 
 
+def _create_legacy_v11_database_with_stage_history(db_path) -> None:
+    """Create a version-11 database with stage/event rows but no grouped runs.
+
+    Deliberately raw SQL so the old schema really lacks the new table/columns;
+    an ORM-created database would already include them and prove nothing about
+    the upgrade path.
+    """
+    connection = sqlite3.connect(db_path)
+    try:
+        connection.executescript(
+            """
+            CREATE TABLE _migrations (
+                version INTEGER PRIMARY KEY,
+                name TEXT NOT NULL,
+                applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            """
+        )
+        for version in range(1, 12):
+            connection.execute(
+                "INSERT INTO _migrations (version, name) VALUES (?, ?)",
+                (version, f"legacy migration {version}"),
+            )
+        connection.execute("CREATE TABLE topic_cases (id TEXT PRIMARY KEY)")
+        connection.execute(
+            """CREATE TABLE case_stage_runs (
+                id TEXT PRIMARY KEY,
+                case_id TEXT NOT NULL,
+                stage_name TEXT NOT NULL,
+                status TEXT NOT NULL
+            )"""
+        )
+        connection.execute(
+            """CREATE TABLE events (
+                id TEXT PRIMARY KEY,
+                case_id TEXT,
+                case_run_id TEXT,
+                title TEXT
+            )"""
+        )
+        connection.execute(
+            "INSERT INTO topic_cases (id) VALUES ('case-legacy-r01')"
+        )
+        connection.execute(
+            "INSERT INTO case_stage_runs (id, case_id, stage_name, status)"
+            " VALUES ('stage-legacy-r01', 'case-legacy-r01', 'REPORT', 'COMPLETED')"
+        )
+        connection.execute(
+            "INSERT INTO events (id, case_id, case_run_id, title)"
+            " VALUES ('event-legacy-r01', 'case-legacy-r01',"
+            " 'stage-legacy-r01', 'Legacy event')"
+        )
+        connection.commit()
+    finally:
+        connection.close()
+
+
+def test_migration_12_adds_grouped_runs_without_rewriting_stage_history(tmp_path):
+    """A version-11 database gains the grouped-run schema; old rows stay unknown."""
+    db_path = tmp_path / "triangulate-legacy-v11.db"
+    _create_legacy_v11_database_with_stage_history(db_path)
+
+    run_migrations(str(db_path))
+    # Idempotent: applying the registry again must not fail or invent origins.
+    run_migrations(str(db_path))
+
+    connection = sqlite3.connect(db_path)
+    try:
+        version = connection.execute(
+            "SELECT MAX(version) FROM _migrations"
+        ).fetchone()[0]
+        assert version == LATEST_MIGRATION_VERSION
+
+        tables = {
+            row[0]
+            for row in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table'"
+            ).fetchall()
+        }
+        assert "investigation_runs" in tables
+        for table_name in ("case_stage_runs", "events"):
+            columns = {
+                row[1]
+                for row in connection.execute(
+                    f"PRAGMA table_info({table_name})"
+                ).fetchall()
+            }
+            assert "investigation_run_id" in columns
+
+        stage_row = connection.execute(
+            "SELECT id, case_id, stage_name, status, investigation_run_id"
+            " FROM case_stage_runs"
+        ).fetchone()
+        assert stage_row[:4] == (
+            "stage-legacy-r01",
+            "case-legacy-r01",
+            "REPORT",
+            "COMPLETED",
+        )
+        assert stage_row[4] is None
+
+        event_row = connection.execute(
+            "SELECT id, case_id, case_run_id, title, investigation_run_id"
+            " FROM events"
+        ).fetchone()
+        assert event_row[:4] == (
+            "event-legacy-r01",
+            "case-legacy-r01",
+            "stage-legacy-r01",
+            "Legacy event",
+        )
+        assert event_row[4] is None
+    finally:
+        connection.close()
+
+
+
 def test_run_migrations_is_idempotent_on_fresh_database(tmp_path):
     """Fresh ORM-created databases should not fail when migrations run."""
     db_path = tmp_path / "triangulate.db"
@@ -199,6 +316,13 @@ def test_run_migrations_is_idempotent_on_fresh_database(tmp_path):
     assert "workflow_checkpoints" in inspector.get_table_names()
     assert "taxonomy_versions" in inspector.get_table_names()
     assert "agent_outputs" in inspector.get_table_names()
+    assert "investigation_runs" in inspector.get_table_names()
+    event_columns = {column["name"] for column in inspector.get_columns("events")}
+    stage_run_columns = {
+        column["name"] for column in inspector.get_columns("case_stage_runs")
+    }
+    assert "investigation_run_id" in event_columns
+    assert "investigation_run_id" in stage_run_columns
 
     with db.get_session_sync() as session:
         current_version = session.execute(
@@ -613,7 +737,7 @@ def test_migration_11_adds_citation_schema_without_backfill_or_rewrite(tmp_path)
     connection = sqlite3.connect(db_path)
     try:
         version = connection.execute("SELECT MAX(version) FROM _migrations").fetchone()[0]
-        assert version == LATEST_MIGRATION_VERSION == 11
+        assert version == LATEST_MIGRATION_VERSION
 
         link_columns = {
             row[1]

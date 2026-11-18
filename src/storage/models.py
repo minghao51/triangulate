@@ -88,6 +88,43 @@ class StageStatus(str, enum.Enum):
     SKIPPED = "SKIPPED"
 
 
+class InvestigationRunTrigger(str, enum.Enum):
+    """Why a grouped investigation invocation started.
+
+    Stored by member name like the other SQL enums; ``RERUN`` covers both an
+    explicit rerun and a resume that starts from a later stage, and ``MONITOR``
+    covers a monitor-cycle dispatch. A new invocation always gets a new ID.
+    """
+
+    INITIAL = "initial"
+    RERUN = "rerun"
+    MONITOR = "monitor"
+
+
+class InvestigationRunStatus(str, enum.Enum):
+    """Lifecycle status for one ``run_case`` invocation.
+
+    ``RUNNING`` is only an in-flight marker. ``INTERRUPTED`` exists for the
+    future explicit R02 interrupt contract; R01 never invents an interruption.
+    """
+
+    RUNNING = "running"
+    SUCCEEDED = "succeeded"
+    PAUSED = "paused"
+    FAILED = "failed"
+    INTERRUPTED = "interrupted"
+
+
+class InvestigationCoverage(str, enum.Enum):
+    """Honest coverage classification for one invocation's requested scope."""
+
+    COMPLETE_REQUESTED_SCOPE = "complete_requested_scope"
+    PARTIAL = "partial"
+    FAILED = "failed"
+    NOT_ATTEMPTED = "not_attempted"
+    UNKNOWN = "unknown"
+
+
 class SourceType(str, enum.Enum):
     """Source type enumeration."""
 
@@ -154,6 +191,11 @@ class Event(Base):
     created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
     case_id: Mapped[str | None] = mapped_column(String, ForeignKey("topic_cases.id"), index=True)
     case_run_id: Mapped[str | None] = mapped_column(String, ForeignKey("case_stage_runs.id"))
+    # Grouped invocation that produced this observation. Kept separate from
+    # ``case_run_id``, which still identifies the stage attempt.
+    investigation_run_id: Mapped[str | None] = mapped_column(
+        String, ForeignKey("investigation_runs.id"), index=True
+    )
 
     workflow_route: Mapped[str | None] = mapped_column(String, nullable=True)
     source_url: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -284,6 +326,62 @@ class TopicCase(Base):
     )
 
 
+class InvestigationRun(Base):
+    """One grouped ``run_case`` invocation.
+
+    This is an internal foundation record: it groups the stage attempts and
+    observations of a single invocation without repurposing
+    ``Event.case_run_id`` (which remains the stage-attempt FK). Existing stage
+    history keeps a null grouped-run reference and therefore stays explicitly
+    unknown. R01 does not claim concurrency safety: sequence allocation and
+    write admission are fenced in R02, and snapshot IDs are populated by R03.
+    """
+
+    __tablename__ = "investigation_runs"
+    __table_args__ = (
+        UniqueConstraint("case_id", "sequence", name="uq_investigation_run_case_sequence"),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    case_id: Mapped[str] = mapped_column(
+        String, ForeignKey("topic_cases.id"), nullable=False, index=True
+    )
+    sequence: Mapped[int] = mapped_column(Integer, nullable=False)
+    trigger: Mapped[InvestigationRunTrigger] = mapped_column(
+        SQLEnum(InvestigationRunTrigger), nullable=False, index=True
+    )
+    requested_start_stage: Mapped[CaseStageName | None] = mapped_column(
+        SQLEnum(CaseStageName)
+    )
+    parameter_snapshot: Mapped[dict[str, Any]] = mapped_column(
+        JSON, nullable=False, default=dict
+    )
+    predecessor_run_id: Mapped[str | None] = mapped_column(
+        String, ForeignKey("investigation_runs.id")
+    )
+    status: Mapped[InvestigationRunStatus] = mapped_column(
+        SQLEnum(InvestigationRunStatus), nullable=False, index=True
+    )
+    coverage: Mapped[InvestigationCoverage] = mapped_column(
+        SQLEnum(InvestigationCoverage), nullable=False
+    )
+    coverage_details: Mapped[dict[str, Any]] = mapped_column(
+        JSON, nullable=False, default=dict
+    )
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, nullable=False
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    error_json: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    # Snapshot references stay plain nullable values until R03 creates the
+    # snapshot table; R01 leaves them null instead of inventing a baseline.
+    baseline_snapshot_id: Mapped[str | None] = mapped_column(String)
+    result_snapshot_id: Mapped[str | None] = mapped_column(String)
+    created_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), default=utc_now
+    )
+
+
 class CaseStageRun(Base):
     """Persisted execution metadata for each case stage."""
 
@@ -309,6 +407,10 @@ class CaseStageRun(Base):
     parse_failure_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     cost_estimate_usd: Mapped[float | None] = mapped_column(Float)
     metrics_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    # Nullable grouped-invocation reference; legacy stage history stays unknown.
+    investigation_run_id: Mapped[str | None] = mapped_column(
+        String, ForeignKey("investigation_runs.id"), index=True
+    )
     created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=utc_now)
 
 

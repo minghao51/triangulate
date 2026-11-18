@@ -7,7 +7,7 @@ import json
 import logging
 import re
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -60,6 +60,15 @@ class CaseRunContext:
     changed: bool = False
     # Delay-aware stage failure recorded by a persistence callback (B02).
     stage_failure: dict[str, Any] | None = None
+    # Grouped invocation identity (R01). ``None`` means the caller is exercising
+    # a stage outside a recorded ``run_case`` invocation; legacy/direct stage
+    # calls legitimately leave the grouped origin unknown.
+    investigation_run_id: str | None = None
+    run_trigger: str | None = None
+    requested_start_stage: CaseStageName | None = None
+    predecessor_run_id: str | None = None
+    # Per-stage outcomes recorded by ``_execute_stage`` for honest run coverage.
+    stage_outcomes: list[dict[str, Any]] = field(default_factory=list)
 
 
 def _utcnow() -> datetime:
