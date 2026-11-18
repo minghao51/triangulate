@@ -10,8 +10,8 @@ from src.storage.database import init_database
 from src.storage.migrations import run_migrations
 from src.storage.models import CaseStatus, EvidenceItem, TopicCase
 
-# Highest migration version after R02 added case-writer ownership fields.
-LATEST_MIGRATION_VERSION = 13
+# Highest migration version after R03 added immutable case snapshots.
+LATEST_MIGRATION_VERSION = 14
 
 
 
@@ -396,6 +396,23 @@ def test_run_migrations_is_idempotent_on_fresh_database(tmp_path):
     assert "taxonomy_versions" in inspector.get_table_names()
     assert "agent_outputs" in inspector.get_table_names()
     assert "investigation_runs" in inspector.get_table_names()
+    assert "case_snapshots" in inspector.get_table_names()
+    snapshot_columns = {
+        column["name"] for column in inspector.get_columns("case_snapshots")
+    }
+    assert {
+        "id",
+        "case_id",
+        "investigation_run_id",
+        "baseline_snapshot_id",
+        "schema_version",
+        "identity_version",
+        "policy_version",
+        "semantic_hash",
+        "payload_json",
+        "delta_json",
+        "created_at",
+    } <= snapshot_columns
     event_columns = {column["name"] for column in inspector.get_columns("events")}
     stage_run_columns = {
         column["name"] for column in inspector.get_columns("case_stage_runs")

@@ -213,9 +213,10 @@ async def test_full_run_records_one_grouped_run_and_origin_references(
         assert run.started_at is not None
         assert run.completed_at is not None
         assert run.error_json is None
-        # R01 does not invent a baseline/result snapshot; R03 owns snapshots.
+        # R03 publishes a snapshot for a successful observation; the first run
+        # has no earlier baseline.
         assert run.baseline_snapshot_id is None
-        assert run.result_snapshot_id is None
+        assert run.result_snapshot_id is not None
         assert run.parameter_snapshot["query"] == "Grouped run"
         assert run.parameter_snapshot["maxArticles"] == 50
         assert run.parameter_snapshot["startStage"] == "BOOTSTRAP"
@@ -328,6 +329,9 @@ async def test_rerun_gets_new_sequence_predecessor_and_keeps_stage_history(
     assert second_run.coverage == InvestigationCoverage.COMPLETE_REQUESTED_SCOPE
     assert second_run.coverage_details["requestedStages"] == ["REPORT"]
     assert second_run.coverage_details["predecessorRunId"] == first_run.id
+    # R03 observations chain: the scoped rerun's baseline is the previous snapshot.
+    assert second_run.result_snapshot_id is not None
+    assert second_run.baseline_snapshot_id == first_run.result_snapshot_id
 
     session = _session(tmp_path)
     try:

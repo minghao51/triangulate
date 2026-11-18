@@ -390,6 +390,44 @@ class InvestigationRun(Base):
     )
 
 
+class CaseSnapshot(Base):
+    """One immutable observation of committed case state (R03).
+
+    The snapshot freezes a canonical payload of the case as it was observed at a
+    successful run's finalization, plus the deterministic delta from the prior
+    eligible snapshot. Capture bodies are referenced by immutable capture ID/hash
+    rather than duplicated. ``semantic_hash`` excludes volatile fields so an
+    equivalent rerun produces no semantic change.
+    """
+
+    __tablename__ = "case_snapshots"
+    __table_args__ = (
+        UniqueConstraint(
+            "investigation_run_id", name="uq_case_snapshot_investigation_run"
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    case_id: Mapped[str] = mapped_column(
+        String, ForeignKey("topic_cases.id"), nullable=False, index=True
+    )
+    investigation_run_id: Mapped[str] = mapped_column(
+        String, ForeignKey("investigation_runs.id"), nullable=False, index=True
+    )
+    baseline_snapshot_id: Mapped[str | None] = mapped_column(
+        String, ForeignKey("case_snapshots.id")
+    )
+    schema_version: Mapped[str] = mapped_column(String, nullable=False)
+    identity_version: Mapped[str] = mapped_column(String, nullable=False)
+    policy_version: Mapped[str] = mapped_column(String, nullable=False)
+    semantic_hash: Mapped[str] = mapped_column(String, nullable=False, index=True)
+    payload_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
+    delta_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, nullable=False, index=True
+    )
+
+
 class CaseStageRun(Base):
     """Persisted execution metadata for each case stage."""
 

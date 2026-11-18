@@ -1,11 +1,12 @@
 # Release B handoff: P03 review and Release C (R01–V01)
 
-Date: 2026-11-18. Status: **Release A and Release B are accepted; R01 is
-committed and R02 is delivered and verified with its diff review pending.** The
-review evidence is recorded in the [worker plan](20261114-evidence-workbench-worker-plan.md)
-§7 and the comparison/case-writer architecture docs. This document is the
-Release C (R01–V01) handoff. It remains self-contained for a fresh agent.
-Contract authority remains the
+Date: 2026-11-18. Status: **Release A and Release B are accepted; R01 and R02
+are committed, and R03a (snapshots/deltas/finalization/run APIs) is delivered and
+verified with its diff review pending. The snapshot-aware detail/comparison
+readers are the explicit R03b remainder.** Review evidence lives in the
+[worker plan](20261114-evidence-workbench-worker-plan.md) §7 and the architecture
+docs. This document is the Release C handoff and remains self-contained for a
+fresh agent. Contract authority remains the
 [specification](20261114-evidence-workbench-specification.md) and the
 [worker plan](20261114-evidence-workbench-worker-plan.md).
 
@@ -13,17 +14,19 @@ Contract authority remains the
 
 | Item | State |
 |---|---|
-| Local `main` | Ahead of `origin/main` by the Release B acceptance, R01 and this R02 documentation commit — **not pushed** |
+| Local `main` | Ahead of `origin/main` by the Release B acceptance, R01, R02 and this R03a commit — **not pushed** |
 | Release A | Accepted: B00–B03, E01–E04; E04 = `8ee32eb` |
 | P01 | `e95bfb2` — conservative source dependency groups |
 | P02 | `4d93c12` — deterministic comparison read API |
 | P03 | `4226856` — comparison navigation and panels; **Release B reviewed and accepted 2026-11-18** |
 | R01 | `ed8459f` — grouped invocation identity; migration 12; committed |
-| R02 | delivered/verified 2026-11-18 (working tree) — case writer admission/fencing + CLI interrupt; migration 13; **diff review pending** |
-| Next ticket | **R03 — snapshots, deltas and historical readers (not started)** |
-| Migrations | 1..13 (7 OSINT, 8 review audit/evaluation, 9 review hash, 10 captures, 11 citations, 12 grouped investigation runs, 13 case writer ownership) |
+| R02 | `0ea524a` — case writer admission/fencing + CLI interrupt; migration 13; committed |
+| R03a | delivered/verified 2026-11-18 (working tree) — snapshots/deltas, guarded finalization, run-specific reports, run/snapshot/changes GETs; migration 14; **diff review pending** |
+| R03b | **remaining** — snapshot-aware claim/evidence/comparison readers + selector acceptance |
+| Next ticket | **R03b — snapshot-aware historical readers (not started)** |
+| Migrations | 1..14 (…12 grouped investigation runs, 13 case writer ownership, 14 immutable case snapshots) |
 | Frontend gate | `npm run check` green; `npm test -- --run` = **107 tests / 12 files** |
-| Backend gate | **475 passed, 9 deselected**; Ruff clean |
+| Backend gate | **487 passed, 9 deselected**; Ruff clean |
 | Scratch files | 382 removed after archive at `/tmp/triangulate-scratch-archive-20261118T005339Z.tar.gz` (382/382 verified, sha256 `6a38b51c41a7542819f30d23bddc0a83ebb07f8b9eda943df69e554314bad4e5`); no untracked scratch files remain |
 | Production data | untouched; B02 test-database incident remains disclosed |
 
@@ -44,9 +47,10 @@ P01/P02/P03 docs:
    browser check passed with 47 backend GETs, 0 non-GET and 0 happy-path console
    errors; runtime evidence at `/tmp/triangulate-p03-browser.20261118T104309Z`.
 4. ~~Record Release B acceptance in the worker plan and commit the documentation.~~
-   Recorded (`aaa4f16`). R01 was delivered, verified and committed (`ed8459f`).
-5. R02 was delivered and verified (migration 13). **Review its diff before
-   starting R03.** One bounded ticket at a time, parent diff review after each.
+   Recorded (`aaa4f16`). R01 was committed (`ed8459f`) and R02 committed
+   (`0ea524a`).
+5. R03a was delivered and verified (migration 14). **Review its diff, then
+   implement R03b only.** One bounded ticket at a time, parent review after each.
 
 ## 3. P03 delivered behaviour
 
@@ -105,10 +109,11 @@ Previous browser evidence (isolated session, temp DB/config):
 
 ## 5. Remaining work map
 
-Because R01 and R02 are delivered, the default remaining order after the R02
-diff review is **R03 → R04 → S01 → S02 → V01**. S01 depends on E02/E03 and is
-technically independent of the R lane, but shared storage/event-store writers
-mean one application-code writer at a time; the default order avoids races.
+Because R01/R02 are committed and R03a is delivered, the remaining order after
+the R03a review is **R03b → R04 → S01 → S02 → V01**. R03b is the other half of
+the R03 ticket (snapshot-aware claim/evidence/comparison readers); S01 depends on
+E02/E03 and is technically independent of the R lane, but shared
+storage/event-store writers mean one application-code writer at a time.
 
 ### R01 — Grouped invocation identity (internal only) — **delivered and committed**
 
@@ -138,7 +143,7 @@ The original R01 scope (now delivered) was:
 - **Do not deploy/use grouped runs before R02 fencing and R03 finalization.**
   Migration/legacy regression tests required.
 
-### R02 — Case writer admission, fencing and explicit recovery — **delivered and verified**
+### R02 — Case writer admission, fencing and explicit recovery — **delivered and committed**
 
 Delivered in the working tree on 2026-11-18 (migration 13): nullable `owner_token`,
 `owner_kind`, `owner_ref_id` and `owner_claimed_at` on `topic_cases`, plus
@@ -171,22 +176,35 @@ The original R02 scope (now delivered) was:
 - Explicit test matrix per protected path; paused/finalized release ownership;
   resumed invocation gets a new owner; interrupted later commits fail.
 
-### R03 — Snapshots, deltas and historical readers
+### R03a — Snapshots, deltas, finalization and run APIs — **delivered and verified**
 
-- `CaseSnapshot` model/migration, `src/cases/history.py`, run finalization,
-  snapshot-aware inspector/comparison readers, run-specific report output, new
-  GET contracts.
-- Snapshot is an observation of committed state under a consistent read; freeze
-  baseline selection; carry known origin stage/run IDs; exclude volatile fields.
-- Immutable capture/citation/relationship references and before/after claim text;
-  removed live claims stay viewable.
-- Follow the §7 file/DB protocol exactly: temp sibling report dir → flush/rename →
-  guarded success/snapshot/delta/artifact/pointer transaction. File failure cannot
-  produce success; DB failure may leave an unreferenced directory but no published
-  pointer/baseline.
-- No false article removals, no fallback/no-content “retraction”, no invented
-  actor attribution. Failed/paused runs never advance the successful baseline.
-- Split storage/composition from delta/readers at parent review if needed.
+Delivered in the working tree on 2026-11-18 (migration 14): immutable
+`CaseSnapshot` payloads with a stable semantic projection/hash and stored typed
+deltas; successful runs compose under a read transaction, write an immutable
+run-specific report directory (temp → atomic rename), then publish
+snapshot/delta/artifacts/pointers in one owner-guarded transaction. File failure
+cannot produce success; DB failure after rename leaves no pointer/baseline;
+failed/paused runs never advance the baseline; article removals are never
+inferred and claim removals require current-run authoritative extraction. New
+GETs: grouped run list/detail, run changes (`initial|ready|pending|unavailable`)
+and snapshot summary, with cross-case/unknown 404. Full gate **487 passed, 9
+deselected**, Ruff clean; see the worker plan §7 and
+[snapshot architecture](../architecture/20261118-case-snapshots.md).
+
+### R03b — Snapshot-aware historical readers — **remaining**
+
+- Claim/evidence detail readers accept an optional `snapshotId`, resolve the
+  entity from that snapshot payload, and return explicit 404/unavailable states
+  instead of falling back to current rows.
+- Comparison accepts `snapshotId` and pairs the two pinned captures using that
+  snapshot's claims/links/citations; historical alignment is never silently
+  replaced by current links.
+- Remove the blanket 422 snapshot-selector rejection only where the selector is
+  genuinely supported; unsupported selectors still fail explicitly.
+- Readers must not invent actor attribution and must keep removed live claims
+  viewable with their frozen before/after text.
+- Focused tests for rewritten/deleted claims, historical comparisons, pending vs
+  unavailable snapshots, cross-case 404, and current-row independence.
 
 ### R04 — Changes and grouped history UI
 
@@ -276,14 +294,17 @@ uv run ruff check src tests --output-format concise
 ## 8. Known caveats
 
 - P03 is committed and **accepted as Release B** (2026-11-18).
-- R01 is committed (`ed8459f`, migration 12). R02 is implemented in the working
-  tree (migration 13) and verified; its diff still needs owner/parent review
-  before R03 starts.
-- Local `main` is ahead of `origin/main` (Release B acceptance, R01 and this R02
-  documentation commit) and has not been pushed.
-- Grouped runs are recorded but **not yet used** for change/delta semantics; R03
-  finalization must land first. R02 now makes run sequence allocation and case
-  writes single-writer-admitted, but does not add snapshots.
+- R01 (`ed8459f`, migration 12) and R02 (`0ea524a`, migration 13) are committed.
+- R03a is implemented in the working tree (migration 14) and verified; its diff
+  still needs owner/parent review. **R03b (snapshot-aware claim/evidence/
+  comparison readers) is not implemented**: those endpoints still reject a
+  snapshot selector with 422, so historical/removed claims and historical
+  comparisons are stored but not yet inspectable through them.
+- Local `main` is ahead of `origin/main` (Release B acceptance, R01, R02 and this
+  R03a commit) and has not been pushed.
+- Snapshots are observations of committed state, not a whole-case transaction;
+  report publishing is now run-specific and only a successful guarded
+  finalization moves the current report pointers.
 - A process death can leave a case ownership claim until an operator runs
   `triangulate case interrupt` (explicit CLI recovery); there is no elapsed-time
   or GET-side recovery, and external direct-SQL scripts remain unfenced.
@@ -294,40 +315,36 @@ uv run ruff check src tests --output-format concise
 - Timestamps are returned as persisted; SQLite drops `tzinfo` and the UI does not
   invent an offset.
 - `sourceDiversityCount` remains a compatibility field, not an independence count.
-- Historical comparison analysis is unavailable without persisted
-  capture-linked assessments until R03 snapshots exist.
 - No `.pi-lens.json` ignore file was added; the scratch-file cascade is gone
   because the files were archived/removed.
 
-## 9. Paste-ready R03 dispatch brief
+## 9. Paste-ready R03b dispatch brief
 
 ```text
-Implement ticket R03 from docs/plans/20261114-evidence-workbench-worker-plan.md
-(contract: docs/plans/20261114-evidence-workbench-specification.md §7).
-Start by reading docs/plans/20261118-release-b-handoff.md, the R01/R02
-architecture docs (grouped investigation runs, case-writer fencing) and the
-delivered R02 diff, and confirm R01/R02 ownership semantics are in place.
+Implement ticket R03b (the reader half of R03) from
+docs/plans/20261114-evidence-workbench-worker-plan.md (contract:
+docs/plans/20261114-evidence-workbench-specification.md §7).
+Start by reading docs/plans/20261118-release-b-handoff.md, the snapshot
+architecture doc (docs/architecture/20261118-case-snapshots.md), the R03a diff and
+the existing readers (src/cases/readers.py, comparison.py) plus their HTTP routes.
 
-Scope: CaseSnapshot model/migration; src/cases/history.py; run finalization;
-snapshot-aware inspector/comparison readers; run-specific report output; new GET
-contracts and tests. Freeze baseline selection; carry known origin stage/run IDs;
-exclude volatile fields; immutable capture/citation/relationship references and
-before/after claim text so removed live claims stay viewable. Follow the §7
-file/DB finalization protocol exactly: temp sibling report dir → flush/rename →
-guarded success/snapshot/delta/artifact/pointer transaction. File failure cannot
-produce success; DB failure may leave an unreferenced directory but no published
-pointer/baseline. Failed/paused runs never advance the successful baseline; no
-false article removals, fallback/no-content retraction or invented actor
-attribution. Snapshot selectors that are unsupported must fail explicitly.
+Scope: make claim and evidence detail readers accept an optional snapshotId and
+resolve the entity from that snapshot's canonical payload (frozen claim text/
+status/links/citations; evidence metadata and capture references at that
+observation). Make comparison accept snapshotId and pair the two pinned captures
+using the snapshot's claims/links/citations without substituting current rows.
+Remove the blanket 422 snapshot-selector rejection only for genuinely supported
+selectors; unsupported selectors must still fail explicitly. Return 404 when the
+entity is not in that snapshot; distinguish pending/unavailable from empty.
+Removed/rewritten live claims must remain viewable with frozen before/after text;
+never invent actor attribution or claim truth.
 
-Do not add the R04 changes UI, S01 search, production deployment, grouped-run
-mutation endpoints or unrelated features. Use the disposable backend copy and
-temporary DBs; allocate the next migration number from the then-current registry.
-Respect the case owner token in the finalization transaction. Stop and report
-blockers rather than expanding scope.
+Do not add R04 UI, S01 search, new snapshots during GET, mutation endpoints,
+production deployment or unrelated refactors. Use the disposable backend copy and
+temporary DBs. Add focused tests plus the full backend suite and Ruff. Stop and
+report blockers rather than expanding scope.
 
-Return: behaviour delivered; exact files/symbols/contracts changed; migration and
-reader semantics; real tests (first/changed/partial/scoped/failed/paused,
-file/DB failure); full backend suite and Ruff; remaining risks. Do not call
+Return: behaviour delivered; exact files/contracts changed; snapshot resolution
+and failure-state semantics; real test output; remaining risks. Do not call
 partial work done.
 ```

@@ -745,3 +745,77 @@ class ComparisonDTO(BaseModel):
 
 class HealthResponse(BaseModel):
     status: Literal["ok"]
+
+
+class InvestigationRunDTO(BaseModel):
+    """One grouped investigation invocation (distinct from stage attempts)."""
+
+    id: str
+    caseId: str
+    sequence: int
+    trigger: str
+    requestedStartStage: str | None = None
+    status: str
+    coverage: str
+    startedAt: str | None = None
+    completedAt: str | None = None
+    predecessorRunId: str | None = None
+    baselineSnapshotId: str | None = None
+    resultSnapshotId: str | None = None
+    snapshotId: str | None = None
+    errorMessage: str | None = None
+
+
+class InvestigationRunDetailDTO(InvestigationRunDTO):
+    parameterSnapshot: dict[str, Any] = Field(default_factory=dict)
+    coverageDetails: dict[str, Any] = Field(default_factory=dict)
+    error: dict[str, Any] | None = None
+
+
+class InvestigationRunListDTO(BaseModel):
+    items: list[InvestigationRunDTO] = Field(default_factory=list)
+    total: int
+    limit: int
+    offset: int
+    hasMore: bool
+
+
+class ChangeItemDTO(BaseModel):
+    """One typed semantic change; before/after are observations, not verdicts."""
+
+    type: str
+    entityType: str
+    entityId: str
+    before: dict[str, Any] | None = None
+    after: dict[str, Any] | None = None
+    originRunId: str | None = None
+    observedAt: str | None = None
+
+
+class RunChangesDTO(BaseModel):
+    availability: Literal["initial", "ready", "pending", "unavailable"]
+    baselineSnapshotId: str | None = None
+    targetSnapshotId: str | None = None
+    coverage: str
+    coverageNote: str | None = None
+    items: list[ChangeItemDTO] = Field(default_factory=list)
+    total: int
+    limit: int
+    offset: int
+    hasMore: bool
+
+
+class SnapshotSummaryDTO(BaseModel):
+    """Snapshot metadata/counts; entity bodies resolve through detail readers."""
+
+    id: str
+    caseId: str
+    investigationRunId: str
+    baselineSnapshotId: str | None = None
+    schemaVersion: str
+    identityVersion: str
+    policyVersion: str
+    semanticHash: str
+    createdAt: str | None = None
+    counts: dict[str, int] = Field(default_factory=dict)
+    observedAt: str | None = None

@@ -102,6 +102,8 @@ class MigrationManager:
                 self._apply_investigation_run_schema(session)
             elif migration.version == 13:
                 self._apply_case_writer_ownership_schema(session)
+            elif migration.version == 14:
+                self._apply_case_snapshot_schema(session)
             else:
                 # Apply migration SQL
                 session.execute(text(migration.up_sql))
@@ -710,6 +712,53 @@ class MigrationManager:
                 "ON topic_cases (owner_token)"
             )
         )
+
+    def _apply_case_snapshot_schema(self, session) -> None:
+        """Add immutable case snapshots and stored deltas (R03).
+
+        Schema only: no snapshot is fabricated for legacy runs and no case state
+        is copied or rewritten.
+        """
+        session.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS case_snapshots (
+                    id TEXT PRIMARY KEY,
+                    case_id TEXT NOT NULL,
+                    investigation_run_id TEXT NOT NULL,
+                    baseline_snapshot_id TEXT REFERENCES case_snapshots(id),
+                    schema_version TEXT NOT NULL,
+                    identity_version TEXT NOT NULL,
+                    policy_version TEXT NOT NULL,
+                    semantic_hash TEXT NOT NULL,
+                    payload_json JSON NOT NULL,
+                    delta_json JSON NOT NULL DEFAULT '{}',
+                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY(case_id) REFERENCES topic_cases(id),
+                    FOREIGN KEY(investigation_run_id) REFERENCES investigation_runs(id)
+                )
+                """
+            )
+        )
+        session.execute(
+            text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS "
+                "uq_case_snapshot_investigation_run "
+                "ON case_snapshots (investigation_run_id)"
+            )
+        )
+        for index_name, column in (
+            ("ix_case_snapshots_case_id", "case_id"),
+            ("ix_case_snapshots_investigation_run_id", "investigation_run_id"),
+            ("ix_case_snapshots_semantic_hash", "semantic_hash"),
+            ("ix_case_snapshots_created_at", "created_at"),
+        ):
+            session.execute(
+                text(
+                    f"CREATE INDEX IF NOT EXISTS {index_name} "
+                    f"ON case_snapshots ({column})"
+                )
+            )
 
     def _apply_event_location_schema(self, session) -> None:
         """Add event location columns if they are missing."""
@@ -1531,6 +1580,34 @@ MIGRATIONS: list[Migration] = [
         ALTER TABLE topic_cases ADD COLUMN owner_ref_id TEXT;
         ALTER TABLE topic_cases ADD COLUMN owner_claimed_at TIMESTAMP;
         CREATE INDEX IF NOT EXISTS ix_topic_cases_owner_token ON topic_cases (owner_token);
+        """,
+        down="""
+        """,
+    ),
+    Migration(
+        version=14,
+        name="Add immutable case snapshots and stored deltas",
+        up="""
+        CREATE TABLE IF NOT EXISTS case_snapshots (
+            id TEXT PRIMARY KEY,
+            case_id TEXT NOT NULL,
+            investigation_run_id TEXT NOT NULL,
+            baseline_snapshot_id TEXT REFERENCES case_snapshots(id),
+            schema_version TEXT NOT NULL,
+            identity_version TEXT NOT NULL,
+            policy_version TEXT NOT NULL,
+            semantic_hash TEXT NOT NULL,
+            payload_json JSON NOT NULL,
+            delta_json JSON NOT NULL DEFAULT '{}',
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(case_id) REFERENCES topic_cases(id),
+            FOREIGN KEY(investigation_run_id) REFERENCES investigation_runs(id)
+        );
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_case_snapshot_investigation_run ON case_snapshots (investigation_run_id);
+        CREATE INDEX IF NOT EXISTS ix_case_snapshots_case_id ON case_snapshots (case_id);
+        CREATE INDEX IF NOT EXISTS ix_case_snapshots_investigation_run_id ON case_snapshots (investigation_run_id);
+        CREATE INDEX IF NOT EXISTS ix_case_snapshots_semantic_hash ON case_snapshots (semantic_hash);
+        CREATE INDEX IF NOT EXISTS ix_case_snapshots_created_at ON case_snapshots (created_at);
         """,
         down="""
         """,

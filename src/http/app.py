@@ -28,8 +28,12 @@ from .mappers import (
     map_claims_overview,
     map_evidence_detail,
     map_evaluation_summary,
+    map_investigation_run_detail,
+    map_investigation_run_list,
     map_monitoring_summary,
     map_review_activity,
+    map_run_changes,
+    map_snapshot_summary,
     map_source_summary,
 )
 from .schemas import (
@@ -45,10 +49,14 @@ from .schemas import (
     EvaluationSummaryDTO,
     ExceptionActionRequest,
     HealthResponse,
+    InvestigationRunDetailDTO,
+    InvestigationRunListDTO,
     MonitoringSummaryDTO,
     ReviewActionRequest,
     ReviewActivityDTO,
     ReviewAnnotationDTO,
+    RunChangesDTO,
+    SnapshotSummaryDTO,
     SourceSummaryDTO,
     WorkflowDiagnosticsDTO,
 )
@@ -205,6 +213,83 @@ def get_case_comparison(
     except ComparisonInvalid as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return map_comparison(payload)
+
+
+@router.get(
+    "/api/cases/{case_id}/investigation-runs",
+    response_model=InvestigationRunListDTO,
+)
+def get_investigation_runs(
+    case_id: str,
+    limit: int = Query(default=25, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    service: TopicCaseService = Depends(get_case_service),
+) -> InvestigationRunListDTO:
+    """Grouped investigation invocations, newest sequence first (read-only)."""
+    payload = service.get_investigation_runs(case_id, limit=limit, offset=offset)
+    if payload is None:
+        raise HTTPException(status_code=404, detail=f"Case {case_id} not found")
+    return map_investigation_run_list(payload)
+
+
+@router.get(
+    "/api/cases/{case_id}/investigation-runs/{run_id}",
+    response_model=InvestigationRunDetailDTO,
+)
+def get_investigation_run(
+    case_id: str,
+    run_id: str,
+    service: TopicCaseService = Depends(get_case_service),
+) -> InvestigationRunDetailDTO:
+    payload = service.get_investigation_run(case_id, run_id)
+    if payload is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Investigation run {run_id} not found for case {case_id}",
+        )
+    return map_investigation_run_detail(payload)
+
+
+@router.get(
+    "/api/cases/{case_id}/investigation-runs/{run_id}/changes",
+    response_model=RunChangesDTO,
+)
+def get_investigation_run_changes(
+    case_id: str,
+    run_id: str,
+    limit: int = Query(default=25, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    service: TopicCaseService = Depends(get_case_service),
+) -> RunChangesDTO:
+    """Stored delta for one run; pending/unavailable are distinct from empty."""
+    payload = service.get_run_changes(
+        case_id, run_id, limit=limit, offset=offset
+    )
+    if payload is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Investigation run {run_id} not found for case {case_id}",
+        )
+    return map_run_changes(payload)
+
+
+@router.get(
+    "/api/cases/{case_id}/snapshots/{snapshot_id}",
+    response_model=SnapshotSummaryDTO,
+)
+def get_case_snapshot(
+    case_id: str,
+    snapshot_id: str,
+    service: TopicCaseService = Depends(get_case_service),
+) -> SnapshotSummaryDTO:
+    """Snapshot metadata/counts; entity bodies use snapshot-aware detail readers."""
+    payload = service.get_snapshot_summary(case_id, snapshot_id)
+    if payload is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Snapshot {snapshot_id} not found for case {case_id}",
+        )
+    return map_snapshot_summary(payload)
 
 
 @router.get("/api/cases/{case_id}/evidence")

@@ -65,6 +65,12 @@ from .schemas import (
     EvaluationResultDTO,
     EvaluationSummaryDTO,
     MonitoringSummaryDTO,
+    ChangeItemDTO,
+    InvestigationRunDTO,
+    InvestigationRunDetailDTO,
+    InvestigationRunListDTO,
+    RunChangesDTO,
+    SnapshotSummaryDTO,
 )
 
 
@@ -1049,4 +1055,79 @@ def map_comparison(payload: dict[str, Any]) -> ComparisonDTO:
             limitations=policy.get("limitations") or [],
         ),
         caveats=payload.get("caveats") or [],
+    )
+
+
+def map_investigation_run(payload: dict[str, Any]) -> InvestigationRunDTO:
+    """Map one grouped-run summary (newest-first list or run detail base)."""
+    return InvestigationRunDTO(
+        id=payload["id"],
+        caseId=payload["caseId"],
+        sequence=payload["sequence"],
+        trigger=payload["trigger"],
+        requestedStartStage=payload.get("requestedStartStage"),
+        status=payload["status"],
+        coverage=payload["coverage"],
+        startedAt=payload.get("startedAt"),
+        completedAt=payload.get("completedAt"),
+        predecessorRunId=payload.get("predecessorRunId"),
+        baselineSnapshotId=payload.get("baselineSnapshotId"),
+        resultSnapshotId=payload.get("resultSnapshotId"),
+        snapshotId=payload.get("snapshotId"),
+        errorMessage=payload.get("errorMessage"),
+    )
+
+
+def map_investigation_run_detail(
+    payload: dict[str, Any],
+) -> InvestigationRunDetailDTO:
+    base = map_investigation_run(payload)
+    return InvestigationRunDetailDTO(
+        **base.model_dump(),
+        parameterSnapshot=payload.get("parameterSnapshot") or {},
+        coverageDetails=payload.get("coverageDetails") or {},
+        error=payload.get("error"),
+    )
+
+
+def map_investigation_run_list(
+    payload: dict[str, Any],
+) -> InvestigationRunListDTO:
+    return InvestigationRunListDTO(
+        items=[map_investigation_run(item) for item in payload.get("items", [])],
+        total=payload["total"],
+        limit=payload["limit"],
+        offset=payload["offset"],
+        hasMore=bool(payload.get("hasMore")),
+    )
+
+
+def map_run_changes(payload: dict[str, Any]) -> RunChangesDTO:
+    return RunChangesDTO(
+        availability=payload["availability"],
+        baselineSnapshotId=payload.get("baselineSnapshotId"),
+        targetSnapshotId=payload.get("targetSnapshotId"),
+        coverage=payload["coverage"],
+        coverageNote=payload.get("coverageNote"),
+        items=[ChangeItemDTO(**item) for item in payload.get("items", [])],
+        total=payload["total"],
+        limit=payload["limit"],
+        offset=payload["offset"],
+        hasMore=bool(payload.get("hasMore")),
+    )
+
+
+def map_snapshot_summary(payload: dict[str, Any]) -> SnapshotSummaryDTO:
+    return SnapshotSummaryDTO(
+        id=payload["id"],
+        caseId=payload["caseId"],
+        investigationRunId=payload["investigationRunId"],
+        baselineSnapshotId=payload.get("baselineSnapshotId"),
+        schemaVersion=payload["schemaVersion"],
+        identityVersion=payload["identityVersion"],
+        policyVersion=payload["policyVersion"],
+        semanticHash=payload["semanticHash"],
+        createdAt=payload.get("createdAt"),
+        counts=payload.get("counts") or {},
+        observedAt=payload.get("observedAt"),
     )

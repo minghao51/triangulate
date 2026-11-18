@@ -7,6 +7,7 @@ import hashlib
 import json
 import logging
 import re
+import shutil
 import statistics
 import time
 import uuid
@@ -64,6 +65,7 @@ from src.storage import (
     InvestigationRun,
     InvestigationRunStatus,
     InvestigationRunTrigger,
+    CaseSnapshot,
     MonitorCheckpoint,
     OWNER_KIND_ANNOTATION,
     OWNER_KIND_EXCEPTION,
@@ -98,6 +100,18 @@ from src.cases.evidence import (
 from src.cases.comparison import (
     DEFAULT_COMPARISON_LIMIT,
     read_comparison,
+)
+from src.cases.history import (
+    SNAPSHOT_IDENTITY_VERSION,
+    SNAPSHOT_POLICY_VERSION,
+    SNAPSHOT_SCHEMA_VERSION,
+    build_snapshot_delta,
+    compose_case_snapshot,
+    latest_snapshot_before,
+    read_investigation_run,
+    read_investigation_runs,
+    read_run_changes,
+    read_snapshot_summary,
 )
 from src.cases.provenance import read_source_summary
 from src.cases.readers import (
@@ -815,6 +829,56 @@ class TopicCaseService:
             monitor_mode=monitor_mode,
             trigger=InvestigationRunTrigger.RERUN,
         )
+
+    def get_investigation_runs(
+        self, case_id: str, *, limit: int = 25, offset: int = 0
+    ) -> dict[str, Any] | None:
+        """Paginated grouped runs (distinct from the stage-oriented history)."""
+        session = get_database().get_session_sync()
+        try:
+            return read_investigation_runs(
+                session, case_id=case_id, limit=limit, offset=offset
+            )
+        finally:
+            session.close()
+
+    def get_investigation_run(
+        self, case_id: str, run_id: str
+    ) -> dict[str, Any] | None:
+        session = get_database().get_session_sync()
+        try:
+            return read_investigation_run(
+                session, case_id=case_id, run_id=run_id
+            )
+        finally:
+            session.close()
+
+    def get_run_changes(
+        self,
+        case_id: str,
+        run_id: str,
+        *,
+        limit: int = 25,
+        offset: int = 0,
+    ) -> dict[str, Any] | None:
+        session = get_database().get_session_sync()
+        try:
+            return read_run_changes(
+                session, case_id=case_id, run_id=run_id, limit=limit, offset=offset
+            )
+        finally:
+            session.close()
+
+    def get_snapshot_summary(
+        self, case_id: str, snapshot_id: str
+    ) -> dict[str, Any] | None:
+        session = get_database().get_session_sync()
+        try:
+            return read_snapshot_summary(
+                session, case_id=case_id, snapshot_id=snapshot_id
+            )
+        finally:
+            session.close()
 
     def get_case_owner(self, case_id: str) -> dict[str, Any]:
         """Read the current case-writer owner for operator diagnostics.
@@ -2313,52 +2377,14 @@ class TopicCaseService:
     def _persist_report_bundle(
         self, session, context: CaseRunContext, stage_run: CaseStageRun, result: dict[str, Any]
     ) -> list[str]:
-        if context.report_bundle is None:
-            return []
+        """Keep the composed bundle in memory; publish it at run finalization.
 
-        context.output_dir.mkdir(parents=True, exist_ok=True)
-        json_path = context.output_dir / "topic_analysis.json"
-        md_path = context.output_dir / "topic_report.md"
-        manifest_path = context.output_dir / "manifest.json"
-
-        self.json_exporter.export(
-            context.report_bundle["results"],
-            context.report_bundle["metadata"],
-            json_path,
-        )
-        self.markdown_exporter.export(
-            context.report_bundle["results"],
-            context.report_bundle["metadata"],
-            md_path,
-        )
-        with open(manifest_path, "w", encoding="utf-8") as handle:
-            json.dump(context.report_bundle["manifest"], handle, indent=2)
-
-        artifact_specs = [
-            ("report_json", json_path, context.report_bundle["results"]),
-            ("report_markdown", md_path, {"path": str(md_path)}),
-            ("execution_manifest", manifest_path, context.report_bundle["manifest"]),
-        ]
-        artifact_ids: list[str] = []
-        for artifact_type, path, payload in artifact_specs:
-            artifact = CaseArtifact(
-                id=str(uuid.uuid4()),
-                case_id=context.case.id,
-                stage_run_id=stage_run.id,
-                artifact_type=artifact_type,
-                path=str(path),
-                payload_json=payload if artifact_type != "report_markdown" else None,
-                checksum=_payload_checksum(payload),
-            )
-            session.add(artifact)
-            artifact_ids.append(artifact.id)
-
-        case = session.query(TopicCase).filter(TopicCase.id == context.case.id).first()
-        case.report_path = str(md_path)
-        case.latest_manifest_path = str(manifest_path)
-        context.case.report_path = str(md_path)
-        context.case.latest_manifest_path = str(manifest_path)
-        return artifact_ids
+        R03 moves file generation, artifact rows and case pointer updates into the
+        guarded success transaction so a file/finalization failure can never
+        leave a successful-looking report pointer. Nothing is written here.
+        """
+        del session, stage_run, result
+        return []
 
     def _persist_stage_payload(self, artifact_type: str):
         def callback(session, context: CaseRunContext, stage_run: CaseStageRun, result: dict[str, Any]) -> list[str]:
@@ -2818,11 +2844,11 @@ class TopicCaseService:
         forced_coverage: InvestigationCoverage | None = None,
         error: dict[str, Any] | None = None,
     ) -> None:
-        """Persist the final grouped-run status/coverage/error, once.
+        """Persist the final grouped-run state once.
 
-        R01 leaves the snapshot references null: finalization writes a grouped
-        observation record only. R03 owns snapshots/deltas and the guarded
-        success transaction.
+        A successful run publishes a report directory, snapshot and delta in one
+        guarded transaction. Paused/failed runs finalize without a snapshot and
+        never advance the successful baseline.
         """
         if forced_status is not None:
             status = forced_status
@@ -2834,6 +2860,10 @@ class TopicCaseService:
             )
             if error is None:
                 error = derived_error
+
+        if status == InvestigationRunStatus.SUCCEEDED:
+            self._publish_successful_run(context, coverage=coverage, details=details)
+            return
 
         session = get_database().get_session_sync()
         try:
@@ -2866,6 +2896,265 @@ class TopicCaseService:
                 operation="run_finalization",
             )
             session.commit()
+        finally:
+            session.close()
+
+    def _run_report_dir(self, context: CaseRunContext, run_id: str) -> Path:
+        """Immutable run-specific report directory (sibling of legacy files)."""
+        return context.output_dir / "runs" / run_id
+
+    def _json_safe_payload(self, value: Any) -> Any:
+        try:
+            return json.loads(json.dumps(value, default=str))
+        except (TypeError, ValueError) as exc:
+            raise ValueError("Payload must be JSON-serializable") from exc
+
+    def _write_report_bundle(
+        self, bundle: dict[str, Any], directory: Path
+    ) -> None:
+        """Write a complete report into a fresh temporary directory."""
+        directory.mkdir(parents=True, exist_ok=False)
+        self.json_exporter.export(
+            bundle["results"], bundle["metadata"], directory / "topic_analysis.json"
+        )
+        self.markdown_exporter.export(
+            bundle["results"], bundle["metadata"], directory / "topic_report.md"
+        )
+        manifest_path = directory / "manifest.json"
+        try:
+            with open(manifest_path, "w", encoding="utf-8") as handle:
+                json.dump(bundle["manifest"], handle, indent=2)
+                handle.flush()
+        except (OSError, TypeError, ValueError) as exc:
+            raise OSError(f"Failed to write report manifest: {exc}") from exc
+
+    def _authoritative_event_ids(self, context: CaseRunContext) -> set[str]:
+        """Events whose current-run extraction may legitimately remove claims.
+
+        Missing outcome metadata keeps the legacy full-replacement semantics;
+        fallback/unavailable/unknown outcomes never authorize a removal.
+        """
+        authoritative: set[str] = set()
+        for event in context.processed_events or []:
+            event_id = event.get("id")
+            if not event_id:
+                continue
+            outcome = event.get("extraction_outcome")
+            if not isinstance(outcome, dict) or outcome.get("status") in {
+                "valid",
+                "empty",
+            }:
+                authoritative.add(str(event_id))
+        return authoritative
+
+    def _publish_successful_run(
+        self,
+        context: CaseRunContext,
+        *,
+        coverage: InvestigationCoverage,
+        details: dict[str, Any],
+    ) -> None:
+        """Publish report files, snapshot, delta and pointers for a success.
+
+        Protocol: compose under one read transaction, write a temp sibling report
+        directory and atomically rename it, then insert snapshot/delta/artifacts,
+        finalize the run and update case pointers in one owner-guarded
+        transaction. A file failure cannot produce success; a DB failure may leave
+        an unreferenced directory but no pointer/baseline.
+        """
+        run_id = context.investigation_run_id
+        if run_id is None:
+            raise RuntimeError("A successful invocation requires an investigation run ID")
+        bundle = context.report_bundle
+        if bundle is None:
+            self._mark_finalization_failed(context, "report bundle missing")
+            raise RuntimeError("Successful invocation has no report bundle")
+
+        snapshot_id = str(uuid.uuid4())
+        observed_at = _utcnow().isoformat()
+        read_session = get_database().get_session_sync()
+        try:
+            run = read_session.get(InvestigationRun, run_id)
+            if run is None or run.case_id != context.case.id:
+                raise RuntimeError(f"Investigation run {run_id!r} is missing")
+            composed = compose_case_snapshot(
+                read_session, case_id=context.case.id
+            )
+            baseline = latest_snapshot_before(
+                read_session, case_id=context.case.id, run_sequence=run.sequence
+            )
+            baseline_payload = baseline.payload_json if baseline is not None else None
+            baseline_id = baseline.id if baseline is not None else None
+            delta = build_snapshot_delta(
+                snapshot_id=snapshot_id,
+                baseline_payload=baseline_payload,
+                baseline_snapshot_id=baseline_id,
+                current_payload=composed["payload"],
+                current_semantic=composed["semantic"],
+                coverage=coverage.value,
+                run_id=run_id,
+                authoritative_event_ids=self._authoritative_event_ids(context),
+                observed_at=observed_at,
+            )
+        finally:
+            read_session.close()
+
+        final_dir = self._run_report_dir(context, run_id)
+        temp_dir = final_dir.parent / f".tmp-{run_id}-{uuid.uuid4().hex}"
+        try:
+            final_dir.parent.mkdir(parents=True, exist_ok=True)
+            self._write_report_bundle(bundle, temp_dir)
+            if final_dir.exists():
+                raise FileExistsError(
+                    f"Run report directory already exists: {final_dir}"
+                )
+            temp_dir.replace(final_dir)
+        except Exception:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+            self._mark_finalization_failed(
+                context, "report file publication failed"
+            )
+            raise
+
+        session = get_database().get_session_sync()
+        try:
+            validate_case_ownership(
+                session,
+                context.case.id,
+                context.owner_token,
+                operation="run_finalization",
+            )
+            run = session.get(InvestigationRun, run_id)
+            if run is None or run.status != InvestigationRunStatus.RUNNING:
+                raise CaseWriterConflict(
+                    context.case.id,
+                    operation="run_finalization",
+                    reason="investigation run is no longer running",
+                )
+            report_stage = (
+                session.execute(
+                    select(CaseStageRun)
+                    .where(
+                        CaseStageRun.case_id == context.case.id,
+                        CaseStageRun.investigation_run_id == run_id,
+                        CaseStageRun.stage_name == CaseStageName.REPORT,
+                    )
+                    .order_by(CaseStageRun.started_at.desc())
+                )
+                .scalars()
+                .first()
+            )
+            if report_stage is None:
+                raise RuntimeError(
+                    "A successful invocation has no REPORT stage attempt"
+                )
+
+            payload = self._json_safe_payload(composed["payload"])
+            snapshot = CaseSnapshot(
+                id=snapshot_id,
+                case_id=context.case.id,
+                investigation_run_id=run_id,
+                baseline_snapshot_id=baseline_id,
+                schema_version=SNAPSHOT_SCHEMA_VERSION,
+                identity_version=SNAPSHOT_IDENTITY_VERSION,
+                policy_version=SNAPSHOT_POLICY_VERSION,
+                semantic_hash=composed["semanticHash"],
+                payload_json=payload,
+                delta_json=self._json_safe_payload(delta),
+            )
+            session.add(snapshot)
+
+            artifact_specs = [
+                (
+                    "report_json",
+                    final_dir / "topic_analysis.json",
+                    bundle["results"],
+                ),
+                (
+                    "report_markdown",
+                    final_dir / "topic_report.md",
+                    {"path": str(final_dir / "topic_report.md")},
+                ),
+                (
+                    "execution_manifest",
+                    final_dir / "manifest.json",
+                    bundle["manifest"],
+                ),
+            ]
+            for artifact_type, path, artifact_payload in artifact_specs:
+                payload_value = self._json_safe_payload(artifact_payload)
+                session.add(
+                    CaseArtifact(
+                        id=str(uuid.uuid4()),
+                        case_id=context.case.id,
+                        stage_run_id=report_stage.id,
+                        artifact_type=artifact_type,
+                        path=str(path),
+                        payload_json=(
+                            payload_value
+                            if artifact_type != "report_markdown"
+                            else None
+                        ),
+                        checksum=_payload_checksum(payload_value),
+                    )
+                )
+
+            run.status = InvestigationRunStatus.SUCCEEDED
+            run.coverage = coverage
+            run.coverage_details = self._json_safe_payload(details)
+            run.completed_at = _utcnow()
+            run.error_json = None
+            run.baseline_snapshot_id = baseline_id
+            run.result_snapshot_id = snapshot_id
+
+            case = session.get(TopicCase, context.case.id)
+            if case is None:
+                raise RuntimeError(f"Case {context.case.id!r} is missing")
+            case.report_path = str(final_dir / "topic_report.md")
+            case.latest_manifest_path = str(final_dir / "manifest.json")
+            case.updated_at = _utcnow()
+            context.case.report_path = case.report_path
+            context.case.latest_manifest_path = case.latest_manifest_path
+            session.commit()
+        except Exception:
+            session.rollback()
+            self._mark_finalization_failed(
+                context, "snapshot/database finalization failed"
+            )
+            raise
+        finally:
+            session.close()
+
+    def _mark_finalization_failed(
+        self, context: CaseRunContext, message: str
+    ) -> None:
+        """Best-effort terminal failure record; never masks the original error."""
+        session = get_database().get_session_sync()
+        try:
+            if context.investigation_run_id:
+                run = session.get(InvestigationRun, context.investigation_run_id)
+                if run is not None and run.status == InvestigationRunStatus.RUNNING:
+                    run.status = InvestigationRunStatus.FAILED
+                    run.coverage = InvestigationCoverage.FAILED
+                    run.completed_at = _utcnow()
+                    run.error_json = {"message": message, "stage": "REPORT"}
+            case = session.get(TopicCase, context.case.id)
+            if case is not None:
+                case.status = CaseStatus.FAILED
+                case.updated_at = _utcnow()
+            validate_case_ownership(
+                session,
+                context.case.id,
+                context.owner_token,
+                operation="finalization_recovery",
+            )
+            session.commit()
+        except Exception:
+            session.rollback()
+            logger.exception(
+                "Failed to record finalization failure for case %s",
+                context.case.id,
+            )
         finally:
             session.close()
 
