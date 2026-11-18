@@ -165,8 +165,7 @@ def _link(
     return link
 
 
-@pytest.fixture
-def workbench(tmp_path):
+def seed_workbench(tmp_path):
     init_database(str(tmp_path / "p02-comparison.sqlite3"))
     session = db_session()
     try:
@@ -360,6 +359,11 @@ def workbench(tmp_path):
         }
     finally:
         session.close()
+
+
+@pytest.fixture
+def workbench(tmp_path):
+    return seed_workbench(tmp_path)
 
 
 def _row(comparison: dict, claim_text: str) -> dict:

@@ -1,6 +1,6 @@
 # Deterministic comparison read API (P02)
 
-Date: 2026-11-18. Status: **implemented, pending owner review**. Contract:
+Date: 2026-11-18. Status: **delivered and accepted as the P03 baseline.** Contract:
 [specification](../plans/20261114-evidence-workbench-specification.md) §6, ticket
 [P02](../plans/20261114-evidence-workbench-worker-plan.md). Depends on P01 and
 E03; no migration, no model call and no mutation route.

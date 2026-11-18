@@ -125,3 +125,83 @@ export function buildClaimEvidenceUrl(caseId: string, claimId: string): string {
 export function buildCitationUrl(caseId: string, citationId: string): string {
   return buildInspectorUrl(caseId, { citationId });
 }
+
+// ---------------------------------------------------------------------------
+// P02/P03 comparison selectors
+// ---------------------------------------------------------------------------
+
+export const COMPARISON_PARAMS = {
+  left: 'left',
+  right: 'right',
+  leftCapture: 'leftCapture',
+  rightCapture: 'rightCapture',
+  offset: 'offset',
+  limit: 'limit',
+} as const;
+
+export interface ComparisonSelection {
+  leftId?: string | null;
+  rightId?: string | null;
+  leftCaptureId?: string | null;
+  rightCaptureId?: string | null;
+  offset?: number | null;
+  limit?: number | null;
+}
+
+export interface ParsedComparisonSelection {
+  leftId: string | null;
+  rightId: string | null;
+  leftCaptureId: string | null;
+  rightCaptureId: string | null;
+  offset: number | null;
+  limit: number | null;
+}
+
+export function toComparisonSearchParams(
+  selection: ComparisonSelection
+): URLSearchParams {
+  const params = new URLSearchParams();
+  const leftId = cleaned(selection.leftId);
+  const rightId = cleaned(selection.rightId);
+  const leftCaptureId = cleaned(selection.leftCaptureId);
+  const rightCaptureId = cleaned(selection.rightCaptureId);
+  const offset = cleanedOffset(selection.offset, 0);
+  const limit = cleanedOffset(selection.limit, 1);
+
+  if (leftId) params.set(COMPARISON_PARAMS.left, leftId);
+  if (rightId) params.set(COMPARISON_PARAMS.right, rightId);
+  if (leftCaptureId) params.set(COMPARISON_PARAMS.leftCapture, leftCaptureId);
+  if (rightCaptureId) params.set(COMPARISON_PARAMS.rightCapture, rightCaptureId);
+  if (offset !== null) params.set(COMPARISON_PARAMS.offset, String(offset));
+  if (limit !== null) params.set(COMPARISON_PARAMS.limit, String(limit));
+  return params;
+}
+
+export function parseComparisonSelection(
+  params: URLSearchParams
+): ParsedComparisonSelection {
+  const rawOffset = params.get(COMPARISON_PARAMS.offset);
+  const rawLimit = params.get(COMPARISON_PARAMS.limit);
+  const parsedOffset = rawOffset === null ? null : Number(rawOffset);
+  const parsedLimit = rawLimit === null ? null : Number(rawLimit);
+  return {
+    leftId: cleaned(params.get(COMPARISON_PARAMS.left)),
+    rightId: cleaned(params.get(COMPARISON_PARAMS.right)),
+    leftCaptureId: cleaned(params.get(COMPARISON_PARAMS.leftCapture)),
+    rightCaptureId: cleaned(params.get(COMPARISON_PARAMS.rightCapture)),
+    offset: parsedOffset === null ? null : cleanedOffset(parsedOffset, 0),
+    limit: parsedLimit === null ? null : cleanedOffset(parsedLimit, 1),
+  };
+}
+
+/** Build an encoded compare-tab URL that survives reload/back/forward. */
+export function buildComparisonUrl(
+  caseId: string,
+  selection: ComparisonSelection
+): string {
+  const path = `/cases/${encodeURIComponent(caseId)}/compare`;
+  const query = [...toComparisonSearchParams(selection).entries()]
+    .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
+    .join('&');
+  return query ? `${path}?${query}` : path;
+}

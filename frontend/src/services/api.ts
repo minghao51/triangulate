@@ -4,6 +4,7 @@ import type {
   CitationDetail,
   Claim,
   ClaimDetail,
+  Comparison,
   ClaimsOverview,
   Evidence,
   EvidenceDetail,
@@ -139,6 +140,32 @@ export const getCaptureWindow = async (
     `/api/cases/${encodeURIComponent(caseId)}/evidence/${encodeURIComponent(
       evidenceId
     )}/captures/${encodeURIComponent(captureId)}${query ? `?${query}` : ''}`
+  );
+};
+
+export interface ComparisonQuery {
+  left: string;
+  right: string;
+  leftCapture?: string | null;
+  rightCapture?: string | null;
+  limit?: number;
+  offset?: number;
+}
+
+/** P02 deterministic two-capture comparison (GET-only). */
+export const getComparison = async (
+  caseId: string,
+  query: ComparisonQuery
+): Promise<Comparison> => {
+  const params = new URLSearchParams();
+  params.set('left', query.left);
+  params.set('right', query.right);
+  if (query.leftCapture) params.set('leftCapture', query.leftCapture);
+  if (query.rightCapture) params.set('rightCapture', query.rightCapture);
+  if (typeof query.limit === 'number') params.set('limit', String(query.limit));
+  if (typeof query.offset === 'number') params.set('offset', String(query.offset));
+  return request(
+    `/api/cases/${encodeURIComponent(caseId)}/comparison?${params.toString()}`
   );
 };
 

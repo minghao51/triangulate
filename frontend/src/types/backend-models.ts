@@ -471,3 +471,139 @@ export interface CaseDetail {
     report: ReportData;
   };
 }
+
+/** P02 comparison read model (GET /api/cases/{id}/comparison). */
+export type ComparisonRowStatus = 'shared' | 'left_only' | 'right_only';
+
+export type ComparisonLinkageStatus =
+  | 'available'
+  | 'historical_unavailable'
+  | 'unattributed_legacy'
+  | 'empty';
+
+export interface ComparisonAnalysisScope {
+  status: string | null;
+  startChar: number | null;
+  endChar: number | null;
+  bodyCharCount: number | null;
+  inputLimit: number | null;
+  sourceAvailable: boolean | null;
+  reason: string | null;
+}
+
+export interface ComparisonCoverage {
+  linkedClaimCount: number;
+  attributedClaimCount: number;
+  attributedLinkCount: number;
+  otherCaptureLinkCount: number;
+  unattributedLinkCount: number;
+  claimLinkageStatus: ComparisonLinkageStatus;
+  historicalAnalysisAvailable: boolean;
+  caveat: string | null;
+}
+
+export interface ComparisonSide {
+  evidenceId: string;
+  captureId: string;
+  title: string | null;
+  publisher: string | null;
+  originUrl: string | null;
+  canonicalUrl: string | null;
+  publishedAt: string | null;
+  sourceType: string | null;
+  verificationStatus: string | null;
+  captureKind: string | null;
+  recordedAt: string | null;
+  observedAt: string | null;
+  textSha256: string | null;
+  charLength: number;
+  analysisScope: ComparisonAnalysisScope | null;
+  publisherKey: string | null;
+  publisherKeyProvisional: boolean;
+  host: string | null;
+  sourceUrl: string | null;
+  copyFingerprint: string | null;
+  copyNonWhitespaceCount: number;
+  coverage: ComparisonCoverage;
+}
+
+export interface ComparisonPassage {
+  claimId: string | null;
+  claimText: string;
+  claimSignature: string | null;
+  linkId: string | null;
+  citationId: string | null;
+  captureId: string | null;
+  relationship: string;
+  rawRelation: string | null;
+  alignmentStatus: string;
+  quote: string | null;
+  startChar: number | null;
+  endChar: number | null;
+  assessmentOrigin: string | null;
+  assessmentVersion: string | null;
+  diagnosticReason: string | null;
+}
+
+export interface ComparisonClaimSide {
+  claimIds: string[];
+  claimId: string | null;
+  claimText: string;
+  claimSignature: string | null;
+  passages: ComparisonPassage[];
+}
+
+export interface ComparisonContradiction {
+  explicit: boolean;
+  conflict: boolean;
+  leftRelationships: string[];
+  rightRelationships: string[];
+  reason: string;
+}
+
+export interface ComparisonRow {
+  claimSignature: string;
+  claimText: string;
+  status: ComparisonRowStatus;
+  left: ComparisonClaimSide | null;
+  right: ComparisonClaimSide | null;
+  contradiction: ComparisonContradiction;
+  caveat: string | null;
+}
+
+export interface ComparisonClaimsPage {
+  rows: ComparisonRow[];
+  total: number;
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+}
+
+export interface ComparisonDependency {
+  detected: boolean;
+  copyDetected: boolean;
+  reasons: string[];
+  leftPublisherKey: string | null;
+  rightPublisherKey: string | null;
+  message: string;
+}
+
+export interface ComparisonPolicy {
+  version: string;
+  claimIdentity: string;
+  alignment: string;
+  dependencyPolicy: string;
+  limitations: string[];
+}
+
+export interface Comparison {
+  caseId: string;
+  left: ComparisonSide;
+  right: ComparisonSide;
+  leftCaptureId: string;
+  rightCaptureId: string;
+  dependency: ComparisonDependency;
+  claims: ComparisonClaimsPage;
+  policy: ComparisonPolicy;
+  caveats: string[];
+}

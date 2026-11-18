@@ -60,6 +60,7 @@ const routeExpectations = [
   { initialEntry: '/cases/case-12345678', heading: 'Operator Commands' },
   { initialEntry: '/cases/case-12345678/evidence', heading: 'Evidence Gallery (1)' },
   { initialEntry: '/cases/case-12345678/claims', heading: 'Primary Claims Mapping' },
+  { initialEntry: '/cases/case-12345678/compare', heading: 'Compare sources' },
   { initialEntry: '/cases/case-12345678/parties', heading: 'Confirmed & Inferred Parties' },
   { initialEntry: '/cases/case-12345678/map', heading: 'Geographic Event Map' },
   { initialEntry: '/cases/case-12345678/timeline', heading: 'Investigation Timeline' },

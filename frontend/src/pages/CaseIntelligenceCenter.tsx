@@ -7,6 +7,7 @@ import {
   ShieldAlert,
   FileText,
   GitMerge,
+  GitCompare,
   Users,
   Clock,
   AlertTriangle,
@@ -35,6 +36,7 @@ import './CaseIntelligenceCenter.css';
 
 // Tab components
 import EvidenceTab from './tabs/EvidenceTab';
+import CompareTab from './tabs/CompareTab';
 import ClaimsTab from './tabs/ClaimsTab';
 import ExceptionsTab from './tabs/ExceptionsTab';
 import PartiesTab from './tabs/PartiesTab';
@@ -102,6 +104,7 @@ const CaseIntelligenceCenter: React.FC = () => {
     { id: 'overview', label: 'Overview', icon: <FileText size={16} />, path: '' },
     { id: 'evidence', label: 'Evidence', icon: <FileText size={16} />, path: 'evidence' },
     { id: 'claims', label: 'Claims', icon: <GitMerge size={16} />, path: 'claims' },
+    { id: 'compare', label: 'Compare', icon: <GitCompare size={16} />, path: 'compare' },
     { id: 'parties', label: 'Parties', icon: <Users size={16} />, path: 'parties' },
     { id: 'map', label: 'Map', icon: <Map size={16} />, path: 'map' },
     { id: 'timeline', label: 'Timeline', icon: <Clock size={16} />, path: 'timeline' },
@@ -302,6 +305,10 @@ const CaseIntelligenceCenter: React.FC = () => {
           <Route
             path="claims"
             element={<ClaimsTab caseId={id!} />}
+          />
+          <Route
+            path="compare"
+            element={<CompareTab caseId={id!} />}
           />
           <Route
             path="exceptions"
