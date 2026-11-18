@@ -75,6 +75,10 @@ from src.cases.evidence import (
     normalize_capture_text,
     resolve_effective_relationship,
 )
+from src.cases.comparison import (
+    DEFAULT_COMPARISON_LIMIT,
+    read_comparison,
+)
 from src.cases.provenance import read_source_summary
 from src.cases.readers import (
     link_read_model,
@@ -354,6 +358,33 @@ class TopicCaseService:
         try:
             return read_source_summary(
                 session, case_id=case_id, claim_id=claim_id
+            )
+        finally:
+            session.close()
+
+    def get_comparison(
+        self,
+        case_id: str,
+        *,
+        left_evidence_id: str,
+        right_evidence_id: str,
+        left_capture_id: str | None = None,
+        right_capture_id: str | None = None,
+        limit: int = DEFAULT_COMPARISON_LIMIT,
+        offset: int = 0,
+    ) -> dict[str, Any]:
+        """Read one deterministic two-capture comparison (P02, read-only)."""
+        session = get_database().get_session_sync()
+        try:
+            return read_comparison(
+                session,
+                case_id=case_id,
+                left_evidence_id=left_evidence_id,
+                right_evidence_id=right_evidence_id,
+                left_capture_id=left_capture_id,
+                right_capture_id=right_capture_id,
+                limit=limit,
+                offset=offset,
             )
         finally:
             session.close()

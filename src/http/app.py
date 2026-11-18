@@ -9,9 +9,16 @@ from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse, JSONResponse
 
 from src.cases import TopicCaseService
+from src.cases.comparison import (
+    DEFAULT_COMPARISON_LIMIT,
+    MAX_COMPARISON_LIMIT,
+    ComparisonInvalid,
+    ComparisonNotFound,
+)
 from src.cases.readers import CaptureRangeError
 from .dependencies import get_case_service
 from .mappers import (
+    map_comparison,
     map_capture_window,
     map_case_detail,
     map_case_list_item,
@@ -31,6 +38,7 @@ from .schemas import (
     CaseListItem,
     CitationDTO,
     ClaimDetailDTO,
+    ComparisonDTO,
     ClaimsOverviewResponse,
     EvidenceDetailDTO,
     EvaluationSummaryDTO,
@@ -160,6 +168,42 @@ def get_case_sources(
             )
         raise HTTPException(status_code=404, detail=f"Case {case_id} not found")
     return map_source_summary(payload)
+
+
+@router.get("/api/cases/{case_id}/comparison", response_model=ComparisonDTO)
+def get_case_comparison(
+    case_id: str,
+    left: str = Query(..., description="Left evidence ID"),
+    right: str = Query(..., description="Right evidence ID"),
+    left_capture_id: str | None = Query(default=None, alias="leftCapture"),
+    right_capture_id: str | None = Query(default=None, alias="rightCapture"),
+    snapshot_id: str | None = Query(default=None, alias="snapshotId"),
+    snapshot_id_snake: str | None = Query(default=None, alias="snapshot_id"),
+    limit: int = Query(
+        default=DEFAULT_COMPARISON_LIMIT,
+        ge=1,
+        le=MAX_COMPARISON_LIMIT,
+    ),
+    offset: int = Query(default=0, ge=0),
+    service: TopicCaseService = Depends(get_case_service),
+) -> ComparisonDTO:
+    """Deterministic two-capture comparison (P02, read-only)."""
+    _reject_snapshot_selector(snapshot_id, snapshot_id_snake)
+    try:
+        payload = service.get_comparison(
+            case_id,
+            left_evidence_id=left,
+            right_evidence_id=right,
+            left_capture_id=left_capture_id,
+            right_capture_id=right_capture_id,
+            limit=limit,
+            offset=offset,
+        )
+    except ComparisonNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ComparisonInvalid as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return map_comparison(payload)
 
 
 @router.get("/api/cases/{case_id}/evidence")

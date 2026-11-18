@@ -20,6 +20,17 @@ from .schemas import (
     CaptureWindowDTO,
     CitationDTO,
     ClaimCountsDTO,
+    ComparisonAnalysisScopeDTO,
+    ComparisonClaimSideDTO,
+    ComparisonClaimsPageDTO,
+    ComparisonContradictionDTO,
+    ComparisonCoverageDTO,
+    ComparisonDependencyDTO,
+    ComparisonDTO,
+    ComparisonPassageDTO,
+    ComparisonPolicyDTO,
+    ComparisonRowDTO,
+    ComparisonSideDTO,
     ClaimDTO,
     ClaimDetailDTO,
     ClaimEvidenceLinkDTO,
@@ -876,4 +887,166 @@ def map_source_summary(payload: dict[str, Any]) -> SourceSummaryDTO:
             )
             for group in payload.get("groups", [])
         ],
+    )
+
+def _map_comparison_analysis_scope(
+    item: dict[str, Any] | None,
+) -> ComparisonAnalysisScopeDTO | None:
+    if not isinstance(item, dict):
+        return None
+    return ComparisonAnalysisScopeDTO(
+        status=item.get("status"),
+        startChar=item.get("start_char"),
+        endChar=item.get("end_char"),
+        bodyCharCount=item.get("body_char_count"),
+        inputLimit=item.get("input_limit"),
+        sourceAvailable=item.get("source_available"),
+        reason=item.get("reason"),
+    )
+
+
+def _map_comparison_coverage(item: dict[str, Any]) -> ComparisonCoverageDTO:
+    return ComparisonCoverageDTO(
+        linkedClaimCount=item.get("linked_claim_count", 0),
+        attributedClaimCount=item.get("attributed_claim_count", 0),
+        attributedLinkCount=item.get("attributed_link_count", 0),
+        otherCaptureLinkCount=item.get("other_capture_link_count", 0),
+        unattributedLinkCount=item.get("unattributed_link_count", 0),
+        claimLinkageStatus=item.get("claim_linkage_status", "empty"),
+        historicalAnalysisAvailable=bool(item.get("historical_analysis_available")),
+        caveat=item.get("caveat"),
+    )
+
+
+def _map_comparison_side(item: dict[str, Any]) -> ComparisonSideDTO:
+    return ComparisonSideDTO(
+        evidenceId=item["evidence_id"],
+        captureId=item["capture_id"],
+        title=item.get("title"),
+        publisher=item.get("publisher"),
+        originUrl=item.get("origin_url"),
+        canonicalUrl=item.get("canonical_url"),
+        publishedAt=item.get("published_at"),
+        sourceType=item.get("source_type"),
+        verificationStatus=item.get("verification_status"),
+        captureKind=item.get("capture_kind"),
+        recordedAt=item.get("recorded_at"),
+        observedAt=item.get("observed_at"),
+        textSha256=item.get("text_sha256"),
+        charLength=item.get("char_length", 0),
+        analysisScope=_map_comparison_analysis_scope(item.get("analysis_scope")),
+        publisherKey=item.get("publisher_key"),
+        publisherKeyProvisional=bool(item.get("publisher_key_provisional")),
+        host=item.get("host"),
+        sourceUrl=item.get("source_url"),
+        copyFingerprint=item.get("copy_fingerprint"),
+        copyNonWhitespaceCount=item.get("copy_non_whitespace_count", 0),
+        coverage=_map_comparison_coverage(item.get("coverage") or {}),
+    )
+
+
+def _map_comparison_passage(item: dict[str, Any]) -> ComparisonPassageDTO:
+    return ComparisonPassageDTO(
+        claimId=item.get("claim_id"),
+        claimText=item.get("claim_text", ""),
+        claimSignature=item.get("claim_signature"),
+        linkId=item.get("link_id"),
+        citationId=item.get("citation_id"),
+        captureId=item.get("capture_id"),
+        relationship=item.get("relationship") or "uncertain",
+        rawRelation=item.get("raw_relation"),
+        alignmentStatus=item.get("alignment_status") or "not_provided",
+        quote=item.get("quote"),
+        startChar=item.get("start_char"),
+        endChar=item.get("end_char"),
+        assessmentOrigin=item.get("assessment_origin"),
+        assessmentVersion=item.get("assessment_version"),
+        diagnosticReason=item.get("diagnostic_reason"),
+    )
+
+
+def _map_comparison_claim_side(
+    item: dict[str, Any] | None,
+) -> ComparisonClaimSideDTO | None:
+    if not isinstance(item, dict):
+        return None
+    return ComparisonClaimSideDTO(
+        claimIds=item.get("claim_ids") or [],
+        claimId=item.get("claim_id"),
+        claimText=item.get("claim_text", ""),
+        claimSignature=item.get("claim_signature"),
+        passages=[
+            _map_comparison_passage(passage)
+            for passage in item.get("passages", [])
+        ],
+    )
+
+
+def _map_comparison_contradiction(
+    item: dict[str, Any],
+) -> ComparisonContradictionDTO:
+    return ComparisonContradictionDTO(
+        explicit=bool(item.get("explicit")),
+        conflict=bool(item.get("conflict")),
+        leftRelationships=item.get("left_relationships") or [],
+        rightRelationships=item.get("right_relationships") or [],
+        reason=item.get("reason") or "No explicitly assessed contradiction.",
+    )
+
+
+def _map_comparison_row(item: dict[str, Any]) -> ComparisonRowDTO:
+    return ComparisonRowDTO(
+        claimSignature=item["claim_signature"],
+        claimText=item.get("claim_text", ""),
+        status=item.get("status") or "shared",
+        left=_map_comparison_claim_side(item.get("left")),
+        right=_map_comparison_claim_side(item.get("right")),
+        contradiction=_map_comparison_contradiction(
+            item.get("contradiction") or {}
+        ),
+        caveat=item.get("caveat"),
+    )
+
+
+def _map_comparison_dependency(item: dict[str, Any]) -> ComparisonDependencyDTO:
+    return ComparisonDependencyDTO(
+        detected=bool(item.get("detected")),
+        copyDetected=bool(item.get("copy_detected")),
+        reasons=item.get("reasons") or [],
+        leftPublisherKey=item.get("left_publisher_key"),
+        rightPublisherKey=item.get("right_publisher_key"),
+        message=item.get("message") or "",
+    )
+
+
+def map_comparison(payload: dict[str, Any]) -> ComparisonDTO:
+    """Map one deterministic two-capture comparison read model."""
+    claims = payload.get("claims") or {}
+    policy = payload.get("policy") or {}
+    return ComparisonDTO(
+        caseId=payload["case_id"],
+        left=_map_comparison_side(payload["left"]),
+        right=_map_comparison_side(payload["right"]),
+        leftCaptureId=payload["left_capture_id"],
+        rightCaptureId=payload["right_capture_id"],
+        dependency=_map_comparison_dependency(payload.get("dependency") or {}),
+        claims=ComparisonClaimsPageDTO(
+            rows=[
+                _map_comparison_row(row) for row in claims.get("rows", [])
+            ],
+            total=claims.get("total", 0),
+            limit=claims.get("limit", 25),
+            offset=claims.get("offset", 0),
+            hasMore=bool(claims.get("has_more")),
+        ),
+        policy=ComparisonPolicyDTO(
+            version=policy.get("version", "comparison-read-policy-v1"),
+            claimIdentity=policy.get("claim_identity", ""),
+            alignment=policy.get("alignment", ""),
+            dependencyPolicy=policy.get(
+                "dependency_policy", "source-dependency-policy-v1"
+            ),
+            limitations=policy.get("limitations") or [],
+        ),
+        caveats=payload.get("caveats") or [],
     )

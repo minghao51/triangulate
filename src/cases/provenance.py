@@ -567,6 +567,29 @@ def _member_for(
     )
 
 
+def read_source_member(
+    session: Session,
+    *,
+    case_id: str,
+    evidence_id: str,
+    capture_id: str | None = None,
+) -> SourceMember | None:
+    """Read one owned evidence/capture member for a comparison side.
+
+    This is the same identity/fingerprint policy used by the source summary, so
+    comparison warnings cannot drift from case/claim dependency groups.
+    """
+    evidence = session.get(EvidenceItem, evidence_id)
+    if evidence is None or _as_str(evidence.case_id) != case_id:
+        return None
+    selected_capture_id = (
+        capture_id
+        if capture_id is not None
+        else _as_str(evidence.current_capture_id)
+    )
+    return _member_for(session, evidence, selected_capture_id)
+
+
 def _case_members(session: Session, case_id: str) -> list[SourceMember]:
     evidence_rows = list(
         session.scalars(
@@ -672,6 +695,7 @@ __all__ = [
     "build_source_summary",
     "copy_fingerprint",
     "normalize_source_url",
+    "read_source_member",
     "read_source_summary",
     "resolve_publisher_identity",
 ]

@@ -594,5 +594,154 @@ class SourceSummaryDTO(BaseModel):
     groups: list[SourceDependencyGroupDTO] = Field(default_factory=list)
 
 
+class ComparisonAnalysisScopeDTO(BaseModel):
+    """The body region the collector actually supplied to analysis."""
+
+    status: str | None = None
+    startChar: int | None = None
+    endChar: int | None = None
+    bodyCharCount: int | None = None
+    inputLimit: int | None = None
+    sourceAvailable: bool | None = None
+    reason: str | None = None
+
+
+class ComparisonCoverageDTO(BaseModel):
+    """Explicit capture-link attribution and historical-availability state."""
+
+    linkedClaimCount: int = 0
+    attributedClaimCount: int = 0
+    attributedLinkCount: int = 0
+    otherCaptureLinkCount: int = 0
+    unattributedLinkCount: int = 0
+    claimLinkageStatus: Literal[
+        "available", "historical_unavailable", "unattributed_legacy", "empty"
+    ] = "empty"
+    historicalAnalysisAvailable: bool = True
+    caveat: str | None = None
+
+
+class ComparisonSideDTO(BaseModel):
+    """One pinned evidence/capture side of a comparison (never capture bodies)."""
+
+    evidenceId: str
+    captureId: str
+    title: str | None = None
+    publisher: str | None = None
+    originUrl: str | None = None
+    canonicalUrl: str | None = None
+    publishedAt: str | None = None
+    sourceType: str | None = None
+    verificationStatus: str | None = None
+    captureKind: str | None = None
+    recordedAt: str | None = None
+    observedAt: str | None = None
+    textSha256: str | None = None
+    charLength: int = 0
+    analysisScope: ComparisonAnalysisScopeDTO | None = None
+    publisherKey: str | None = None
+    publisherKeyProvisional: bool = False
+    host: str | None = None
+    sourceUrl: str | None = None
+    copyFingerprint: str | None = None
+    copyNonWhitespaceCount: int = 0
+    coverage: ComparisonCoverageDTO
+
+
+class ComparisonPassageDTO(BaseModel):
+    """One persisted capture-linked passage on one side of a comparison row."""
+
+    claimId: str | None = None
+    claimText: str = ""
+    claimSignature: str | None = None
+    linkId: str | None = None
+    citationId: str | None = None
+    captureId: str | None = None
+    relationship: str = "uncertain"
+    rawRelation: str | None = None
+    alignmentStatus: str = "not_provided"
+    quote: str | None = None
+    startChar: int | None = None
+    endChar: int | None = None
+    assessmentOrigin: str | None = None
+    assessmentVersion: str | None = None
+    diagnosticReason: str | None = None
+
+
+class ComparisonClaimSideDTO(BaseModel):
+    """A claim's presence in one selected capture."""
+
+    claimIds: list[str] = Field(default_factory=list)
+    claimId: str | None = None
+    claimText: str = ""
+    claimSignature: str | None = None
+    passages: list[ComparisonPassageDTO] = Field(default_factory=list)
+
+
+class ComparisonContradictionDTO(BaseModel):
+    """Only explicitly assessed contradiction; never textual difference."""
+
+    explicit: bool = False
+    conflict: bool = False
+    leftRelationships: list[str] = Field(default_factory=list)
+    rightRelationships: list[str] = Field(default_factory=list)
+    reason: str = "No explicitly assessed contradiction."
+
+
+class ComparisonRowDTO(BaseModel):
+    """One exact-signature claim alignment row."""
+
+    claimSignature: str
+    claimText: str = ""
+    status: Literal["shared", "left_only", "right_only"]
+    left: ComparisonClaimSideDTO | None = None
+    right: ComparisonClaimSideDTO | None = None
+    contradiction: ComparisonContradictionDTO
+    caveat: str | None = None
+
+
+class ComparisonClaimsPageDTO(BaseModel):
+    """Deterministically ordered, paginated comparison rows."""
+
+    rows: list[ComparisonRowDTO] = Field(default_factory=list)
+    total: int = 0
+    limit: int = 25
+    offset: int = 0
+    hasMore: bool = False
+
+
+class ComparisonDependencyDTO(BaseModel):
+    """P01 dependency/copy warning for the two pinned records."""
+
+    detected: bool = False
+    copyDetected: bool = False
+    reasons: list[str] = Field(default_factory=list)
+    leftPublisherKey: str | None = None
+    rightPublisherKey: str | None = None
+    message: str
+
+
+class ComparisonPolicyDTO(BaseModel):
+    version: str
+    claimIdentity: str
+    alignment: str
+    dependencyPolicy: str
+    limitations: list[str] = Field(default_factory=list)
+
+
+class ComparisonDTO(BaseModel):
+    """Deterministic two-capture comparison response."""
+
+    caseId: str
+    left: ComparisonSideDTO
+    right: ComparisonSideDTO
+    leftCaptureId: str
+    rightCaptureId: str
+    dependency: ComparisonDependencyDTO
+    claims: ComparisonClaimsPageDTO
+    policy: ComparisonPolicyDTO
+    caveats: list[str] = Field(default_factory=list)
+
+
 class HealthResponse(BaseModel):
     status: Literal["ok"]
