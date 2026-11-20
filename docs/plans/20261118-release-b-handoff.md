@@ -3,7 +3,7 @@
 Date: 2026-11-18. Status: **Release A and Release B are accepted; R01, R02, R03a,
 R03b and the R03c change-origin ticket are delivered, independently reviewed and
 accepted; R01/R02/R03a are committed and R03b/R03c (plus the R01–R03a defect pass)
-are committed as `381303f`.** Review evidence lives in the
+are committed as `6c67f86`.** Review evidence lives in the
 [worker plan](20261114-evidence-workbench-worker-plan.md) §7 and the architecture
 docs. This document is the Release C handoff and remains self-contained for a
 fresh agent. Contract authority remains the
@@ -22,8 +22,8 @@ fresh agent. Contract authority remains the
 | R01 | `ed8459f` — grouped invocation identity; migration 12; committed; **accepted 2026-11-18 after a defect pass** |
 | R02 | `0ea524a` — case writer admission/fencing + CLI interrupt; migration 13; committed; **accepted 2026-11-18 after a defect pass** |
 | R03a | `44b9870` — snapshots/deltas, guarded finalization, run-specific reports, run/snapshot/changes GETs; migration 14; committed; **accepted 2026-11-18 after a defect pass** |
-| R03b | `381303f` — snapshot-aware claim/evidence/comparison readers + selector acceptance; no migration; **accepted** |
-| R03c | `381303f` — change-origin honesty (`originRunId`/`observedByRunId`), count-free semantic projection, explicit read transaction, report path containment; no migration; **accepted** |
+| R03b | `6c67f86` — snapshot-aware claim/evidence/comparison readers + selector acceptance; no migration; **accepted** |
+| R03c | `6c67f86` — change-origin honesty (`originRunId`/`observedByRunId`), count-free semantic projection, explicit read transaction, report path containment; no migration; **accepted** |
 | Next ticket | **R04 — changes and grouped history UI (not started)** |
 | Migrations | 1..14 (…12 grouped investigation runs, 13 case writer ownership, 14 immutable case snapshots) |
 | Frontend gate | `npm run check` green; `npm test -- --run` = **107 tests / 12 files** |
@@ -221,7 +221,7 @@ fidelity fields do not change `semanticHash`. Full gate in the disposable copy:
 
 ### R03c — Change-origin honesty and consistent observation — **delivered and accepted**
 
-Committed as `381303f` on 2026-11-18 (no migration). Each delta item now
+Committed as `6c67f86` on 2026-11-18 (no migration). Each delta item now
 records the two separate facts: `originRunId` is the entity's recorded grouped run
 (`Event.investigation_run_id`, baseline observation for removals) or `null` when
 nothing recorded it, and `observedByRunId` is the run whose observation produced
@@ -383,7 +383,7 @@ Start by reading, in this order:
 CURRENT STATE (2026-11-18)
 - Release A and Release B are accepted; R01, R02, R03a and R03b are delivered
   and verified (R03a committed as 44b9870; R03b/R03c and the defect pass as
-  381303f). Local main
+  6c67f86). Local main
   is 10+ commits ahead of origin/main and unpushed.
 - Migration history is 1..14. Backend 553 passed / 9 deselected, Ruff clean.
   Frontend `npm run check` green, 107 tests / 12 files.
