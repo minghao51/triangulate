@@ -618,6 +618,111 @@ describe('EvidenceInspector case scoping', () => {
   });
 });
 
+describe('EvidenceInspector claim-only selections', () => {
+  it('renders frozen claim text, signature, and changed-live-state note', async () => {
+    apiMocks.getClaimDetail.mockResolvedValue(
+      claimDetail({
+        claimText: 'Frozen snapshot claim',
+        claimSignature: 'frozen-signature',
+        verificationStatus: 'alleged',
+        verificationProvenance: 'legacy_unknown',
+        snapshotId: 'snap-1',
+        liveState: {
+          present: true,
+          claimSignature: 'live-signature',
+          textMatchesSnapshot: false,
+          currentCaptureId: null,
+          currentCaptureMatchesSnapshot: null,
+        },
+      })
+    );
+
+    renderInspector('/cases/case-1/evidence?claim=claim-1&snapshot=snap-1');
+
+    expect(await screen.findByRole('heading', { name: 'Frozen claim text' })).toBeDefined();
+    expect(screen.getByText('Frozen snapshot claim')).toBeDefined();
+    expect(screen.getByText('frozen-signature')).toBeDefined();
+    expect(screen.getByText(/live claim has changed since this observation/i)).toBeDefined();
+    expect(screen.getByText(/not a reviewer confirmation/)).toBeDefined();
+    expect(screen.queryByText('No evidence source is available for this selection.')).toBeNull();
+    expect(apiMocks.getClaimDetail).toHaveBeenCalledWith('case-1', 'claim-1', 'snap-1');
+  });
+
+  it('shows the no-longer-present note for a frozen claim', async () => {
+    apiMocks.getClaimDetail.mockResolvedValue(
+      claimDetail({
+        liveState: {
+          present: false,
+          claimSignature: null,
+          textMatchesSnapshot: null,
+          currentCaptureId: null,
+          currentCaptureMatchesSnapshot: null,
+        },
+      })
+    );
+
+    renderInspector('/cases/case-1/evidence?claim=claim-1&snapshot=snap-1');
+
+    expect(await screen.findByText(/live case no longer contains this claim/i)).toBeDefined();
+    expect(screen.getByText('Claim text')).toBeDefined();
+  });
+
+  it('renders current claim text without a snapshot', async () => {
+    apiMocks.getClaimDetail.mockResolvedValue(claimDetail({ claimText: 'Current claim body' }));
+
+    renderInspector('/cases/case-1/evidence?claim=claim-1');
+
+    expect(await screen.findByRole('heading', { name: 'Claim text' })).toBeDefined();
+    expect(screen.getByText('Current claim body')).toBeDefined();
+    expect(screen.queryByText('Frozen claim text')).toBeNull();
+    expect(screen.queryByText('No evidence source is available for this selection.')).toBeNull();
+  });
+
+  it('keeps the evidence passage claim text in one existing claim section', async () => {
+    apiMocks.getEvidenceDetail.mockResolvedValue(
+      evidenceDetail({ relatedClaims: [reference({ claimText: 'Linked reference text' })] })
+    );
+    apiMocks.getClaimDetail.mockResolvedValue(claimDetail({ claimText: 'Evidence-linked claim' }));
+
+    const { container } = renderInspector(
+      '/cases/case-1/evidence?evidence=ev-1&claim=claim-1'
+    );
+
+    expect(await screen.findByRole('heading', { name: 'Claim being inspected' })).toBeDefined();
+    expect(screen.getByRole('heading', { name: 'Validated passage' })).toBeDefined();
+    expect(screen.queryByRole('heading', { name: 'Claim text' })).toBeNull();
+    expect(
+      container.querySelectorAll('[aria-labelledby="claim-passage-heading"] .inspector-claim-text')
+    ).toHaveLength(1);
+    expect(
+      container.querySelector('[aria-labelledby="claim-passage-heading"] .inspector-claim-text')
+        ?.textContent
+    ).toBe('Linked reference text');
+  });
+
+  it('renders the claim query error for a claim-only selection', async () => {
+    apiMocks.getClaimDetail.mockRejectedValue(new Error('claim service unavailable'));
+
+    renderInspector('/cases/case-1/evidence?claim=claim-1');
+
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toContain('claim service unavailable');
+    expect(screen.queryByRole('heading', { name: 'Claim text' })).toBeNull();
+    expect(screen.queryByText('No evidence source is available for this selection.')).toBeNull();
+  });
+
+  it('explains a claim missing from the selected snapshot without showing other claim text', async () => {
+    apiMocks.getClaimDetail.mockRejectedValue(new ApiError('missing', 404));
+
+    renderInspector('/cases/case-1/evidence?claim=missing-claim&snapshot=snap-1');
+
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toMatch(/Claim not found for this case/i);
+    expect(alert.textContent).toMatch(/may not be present in the selected snapshot/i);
+    expect(screen.queryByText('Claim text')).toBeNull();
+  });
+});
+
 describe('EvidenceInspector historical observations', () => {
   it('resolves a claim from the pinned snapshot and states the live difference', async () => {
     apiMocks.getEvidenceDetail.mockResolvedValue(

@@ -301,16 +301,17 @@ export const EvidenceInspector: React.FC<EvidenceInspectorProps> = ({ caseId }) 
   // Move focus to the selected inspector heading (keyboard + deep-link parity).
   const focusKey = `${citationId ?? ''}|${evidenceId ?? ''}|${effectiveCaptureId ?? ''}|${claimId ?? ''}`;
   useEffect(() => {
-    if (!citationId && !evidenceId) return;
+    if (!citationId && !evidenceId && !claimId) return;
     headingRef.current?.focus();
-  }, [focusKey, citationId, evidenceId]);
+  }, [focusKey, citationId, evidenceId, claimId]);
 
-  if (!citationId && !evidenceId) return null;
+  if (!citationId && !evidenceId && !claimId) return null;
 
   const closeInspector = () => {
     updateSelection({
       citationId: null,
       evidenceId: null,
+      claimId: null,
       captureId: null,
       start: null,
       length: null,
@@ -322,7 +323,9 @@ export const EvidenceInspector: React.FC<EvidenceInspectorProps> = ({ caseId }) 
     ? `Frozen citation ${shortId(citation?.id ?? citationId)}`
     : activeEvidence?.title
       ? `Evidence inspector: ${activeEvidence.title}`
-      : `Evidence inspector ${shortId(evidenceId)}`;
+      : evidenceId
+        ? `Evidence inspector ${shortId(evidenceId)}`
+        : `Claim inspector ${shortId(claimId)}`;
 
   const renderQueryError = (
     error: unknown,
@@ -397,6 +400,12 @@ export const EvidenceInspector: React.FC<EvidenceInspectorProps> = ({ caseId }) 
         </div>
       )}
 
+      {!citationId && !evidenceId && claimId && claimQuery.isLoading && (
+        <div className="inspector-state" role="status">
+          Loading claim…
+        </div>
+      )}
+
       {primaryQuery.error != null &&
         renderQueryError(
           primaryQuery.error,
@@ -411,7 +420,10 @@ export const EvidenceInspector: React.FC<EvidenceInspectorProps> = ({ caseId }) 
           void claimQuery.refetch();
         })}
 
-      {!primaryQuery.isLoading && !primaryQuery.error && !activeEvidence && (
+      {!primaryQuery.isLoading &&
+        !primaryQuery.error &&
+        !activeEvidence &&
+        !claimId && (
         <div className="inspector-state" role="status">
           No evidence source is available for this selection.
         </div>
@@ -456,6 +468,25 @@ export const EvidenceInspector: React.FC<EvidenceInspectorProps> = ({ caseId }) 
             </div>
           </section>
         </>
+      )}
+
+      {!evidenceDetail && !citation && claimDetail && (
+        <section className="inspector-section" aria-labelledby="claim-only-heading">
+          <h4 id="claim-only-heading">
+            {snapshotId ? 'Frozen claim text' : 'Claim text'}
+          </h4>
+          <blockquote className="inspector-claim-text">{claimDetail.claimText}</blockquote>
+          <div className="inspector-fields">
+            <Field label="Claim signature">
+              {knownOrUnknown(claimDetail.claimSignature)}
+            </Field>
+            <Field label="Verification status">
+              {claimDetail.verificationStatus} (provenance:{' '}
+              {knownOrUnknown(claimDetail.verificationProvenance)}; not a reviewer
+              confirmation)
+            </Field>
+          </div>
+        </section>
       )}
 
       {!citation && passage && (
