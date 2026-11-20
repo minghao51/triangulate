@@ -117,6 +117,10 @@ from src.cases.history import (
     read_snapshot_summary,
 )
 from src.cases.provenance import read_source_summary
+from src.cases.search import (
+    DEFAULT_SEARCH_LIMIT,
+    read_case_search,
+)
 from src.cases.readers import (
     link_read_model,
     read_capture_window,
@@ -454,6 +458,41 @@ class TopicCaseService:
                 limit=limit,
                 offset=offset,
                 snapshot_id=snapshot_id,
+            )
+        finally:
+            session.close()
+
+    def search_case(
+        self,
+        case_id: str,
+        *,
+        q: str,
+        result_type: str | None = None,
+        publisher: str | None = None,
+        status: str | None = None,
+        published_from: str | None = None,
+        published_to: str | None = None,
+        limit: int = DEFAULT_SEARCH_LIMIT,
+        offset: int = 0,
+    ) -> dict[str, Any]:
+        """Read one page of case-scoped lexical search (S02, read-only).
+
+        The session is opened and closed here exactly like the other readers;
+        no commit, rebuild, index repair or capture work happens on a GET.
+        """
+        session = get_database().get_session_sync()
+        try:
+            return read_case_search(
+                session,
+                case_id=case_id,
+                q=q,
+                result_type=result_type,
+                publisher=publisher,
+                status=status,
+                published_from=published_from,
+                published_to=published_to,
+                limit=limit,
+                offset=offset,
             )
         finally:
             session.close()
