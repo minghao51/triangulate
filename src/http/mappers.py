@@ -57,6 +57,9 @@ from .schemas import (
     SourcePolicyDTO,
     SourceStanceBreakdown,
     SourceSummaryDTO,
+    SearchAppliedFiltersDTO,
+    SearchResponseDTO,
+    SearchResultItemDTO,
     TaxonomyDTO,
     TimelineEventDTO,
     WorkflowCheckpointDTO,
@@ -1152,4 +1155,44 @@ def map_snapshot_summary(payload: dict[str, Any]) -> SnapshotSummaryDTO:
         createdAt=payload.get("createdAt"),
         counts=payload.get("counts") or {},
         observedAt=payload.get("observedAt"),
+    )
+
+
+def map_search(payload: dict[str, Any]) -> SearchResponseDTO:
+    """Map a case search read model onto the pinned S02 response contract.
+
+    Snippets are passed through as plain text; no markup is generated or
+    injected here.
+    """
+    filters = payload.get("applied_filters") or {}
+    return SearchResponseDTO(
+        caseId=payload["case_id"],
+        query=payload["query"],
+        total=payload["total"],
+        limit=payload["limit"],
+        offset=payload["offset"],
+        appliedFilters=SearchAppliedFiltersDTO(
+            type=_runtime(filters.get("type")),
+            publisher=filters.get("publisher"),
+            status=_runtime(filters.get("status")),
+            publishedFrom=filters.get("published_from"),
+            publishedTo=filters.get("published_to"),
+        ),
+        items=[
+            SearchResultItemDTO(
+                resultType=_runtime(item["result_type"]),
+                id=item["id"],
+                claimId=item.get("claim_id"),
+                evidenceId=item.get("evidence_id"),
+                eventId=item.get("event_id"),
+                captureId=item.get("capture_id"),
+                title=item.get("title"),
+                snippet=item.get("snippet") or "",
+                matchedField=_runtime(item["matched_field"]),
+                publisher=item.get("publisher"),
+                status=_runtime(item.get("status")),
+                publishedAt=item.get("published_at"),
+            )
+            for item in payload.get("items", [])
+        ],
     )

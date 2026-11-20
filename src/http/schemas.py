@@ -846,3 +846,48 @@ class SnapshotSummaryDTO(BaseModel):
     createdAt: str | None = None
     counts: dict[str, int] = Field(default_factory=dict)
     observedAt: str | None = None
+
+
+SearchResultType = Literal["claim", "evidence"]
+SearchMatchedField = Literal["title", "body"]
+
+
+class SearchAppliedFiltersDTO(BaseModel):
+    """Echo of the effective filters; ``null`` means "not applied".
+
+    ``type`` is ``"claim"`` when a ``status`` filter was supplied without a
+    ``type``, because that is the effective narrowing.
+    """
+
+    type: SearchResultType | None = None
+    publisher: str | None = None
+    status: VerificationStatus | None = None
+    publishedFrom: str | None = None
+    publishedTo: str | None = None
+
+
+class SearchResultItemDTO(BaseModel):
+    """One typed lexical hit. ``snippet`` is plain text, never FTS HTML."""
+
+    resultType: SearchResultType
+    id: str
+    claimId: str | None = None
+    evidenceId: str | None = None
+    eventId: str | None = None
+    captureId: str | None = None
+    title: str | None = None
+    snippet: str
+    matchedField: SearchMatchedField
+    publisher: str | None = None
+    status: VerificationStatus | None = None
+    publishedAt: str | None = None
+
+
+class SearchResponseDTO(BaseModel):
+    caseId: str
+    query: str
+    total: int
+    limit: int
+    offset: int
+    appliedFilters: SearchAppliedFiltersDTO
+    items: list[SearchResultItemDTO] = Field(default_factory=list)

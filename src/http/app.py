@@ -17,6 +17,14 @@ from src.cases.comparison import (
     ComparisonNotFound,
 )
 from src.cases.readers import CaptureRangeError, SnapshotNotFound
+from src.cases.search import (
+    DEFAULT_SEARCH_LIMIT,
+    MAX_SEARCH_LIMIT,
+    MAX_SEARCH_OFFSET,
+    SearchIndexUnavailable,
+    SearchInvalid,
+    SearchNotFound,
+)
 from .dependencies import get_case_service
 from .mappers import (
     map_comparison,
@@ -33,6 +41,7 @@ from .mappers import (
     map_monitoring_summary,
     map_review_activity,
     map_run_changes,
+    map_search,
     map_snapshot_summary,
     map_source_summary,
 )
@@ -56,6 +65,7 @@ from .schemas import (
     ReviewActivityDTO,
     ReviewAnnotationDTO,
     RunChangesDTO,
+    SearchResponseDTO,
     SnapshotSummaryDTO,
     SourceSummaryDTO,
     WorkflowDiagnosticsDTO,
@@ -280,6 +290,63 @@ def get_case_comparison(
     except ComparisonInvalid as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return map_comparison(payload)
+
+
+@router.get(
+    "/api/cases/{case_id}/search",
+    response_model=SearchResponseDTO,
+    dependencies=[Depends(reject_snapshot_selector)],
+)
+def get_case_search(
+    case_id: str,
+    q: str = Query(..., description="Literal all-term search query"),
+    result_type: str | None = Query(default=None, alias="type"),
+    publisher: str | None = Query(default=None),
+    status: str | None = Query(default=None),
+    published_from: str | None = Query(default=None, alias="publishedFrom"),
+    published_to: str | None = Query(default=None, alias="publishedTo"),
+    limit: int = Query(default=DEFAULT_SEARCH_LIMIT, ge=1, le=MAX_SEARCH_LIMIT),
+    offset: int = Query(
+        default=0,
+        ge=0,
+        le=MAX_SEARCH_OFFSET,
+        description=f"Result offset, 0..{MAX_SEARCH_OFFSET}",
+    ),
+    service: TopicCaseService = Depends(get_case_service),
+) -> SearchResponseDTO:
+    """Case-scoped lexical search over the current-state FTS index (S02).
+
+    Read-only: the handler never writes, rebuilds or repairs the index. Unknown
+    case → 404, malformed query/filter → 422, unusable index capability → 503
+    with the operator rebuild remedy. An empty valid result is a 200 with
+    ``items: []`` and the real ``total``.
+    """
+    try:
+        payload = service.search_case(
+            case_id,
+            q=q,
+            result_type=result_type,
+            publisher=publisher,
+            status=status,
+            published_from=published_from,
+            published_to=published_to,
+            limit=limit,
+            offset=offset,
+        )
+    except SearchNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except SearchInvalid as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except SearchIndexUnavailable as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                f"Case search is unavailable for case {case_id}: {exc.reason} "
+                "Operator remedy: run "
+                f"`triangulate case rebuild-search {case_id}` and retry."
+            ),
+        ) from exc
+    return map_search(payload)
 
 
 @router.get(
