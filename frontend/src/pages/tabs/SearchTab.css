@@ -27,6 +27,8 @@
 }
 .case-search-filters label { grid-row: auto; }
 .case-search-filters button { justify-self: start; }
+.case-search-filter-hint { grid-column: 1 / -1; margin: 0; color: var(--text-secondary, #64748b); font-size: .9rem; }
+.case-search :disabled { cursor: not-allowed; opacity: .65; }
 .case-search :focus-visible { outline: 3px solid #2563eb; outline-offset: 2px; }
 .case-search-loading, .case-search-idle, .case-search-empty { padding: 1rem; }
 .case-search-error { border-left: 4px solid #b91c1c; padding: .75rem 1rem; background: #fef2f2; }

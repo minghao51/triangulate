@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, RefreshCw, Search } from 'lucide-react';
@@ -17,6 +17,7 @@ import {
 import './SearchTab.css';
 
 const PAGE_SIZE = 25;
+const MAX_SEARCH_OFFSET = 2_147_483_647;
 
 interface SearchTabProps {
   caseId: string;
@@ -37,11 +38,35 @@ function utcDate(value: string): string | null {
 const SearchTab: React.FC<SearchTabProps> = ({ caseId }) => {
   const location = useLocation();
   const navigate = useNavigate();
-  const selection = useMemo(
-    () => parseSearchSelection(new URLSearchParams(location.search)),
-    [location.search]
-  );
+  const selection = useMemo(() => {
+    const parsedSelection = parseSearchSelection(new URLSearchParams(location.search));
+    const parsed = {
+      ...parsedSelection,
+      // Match the API's MAX_SEARCH_OFFSET instead of sending a deep link that 422s.
+      offset: parsedSelection.offset > MAX_SEARCH_OFFSET ? 0 : parsedSelection.offset,
+    };
+    // Claims/status take precedence over publisher when resolving malformed deep links.
+    if (parsed.status) {
+      return {
+        ...parsed,
+        publisher: null,
+        type: parsed.type === 'evidence' ? 'claim' as const : parsed.type,
+      };
+    }
+    if (parsed.publisher && parsed.type === 'claim') {
+      return { ...parsed, publisher: null };
+    }
+    return parsed;
+  }, [location.search]);
+
+  useEffect(() => {
+    const canonicalUrl = buildSearchUrl(caseId, selection);
+    if (`${location.pathname}${location.search}` !== canonicalUrl) {
+      navigate(canonicalUrl, { replace: true });
+    }
+  }, [caseId, location.pathname, location.search, navigate, selection]);
   const [draftState, setDraftState] = useState({ source: selection.q, value: selection.q });
+  const queryInputRef = useRef<HTMLInputElement>(null);
   const draft = draftState.source === selection.q ? draftState.value : selection.q;
 
   const activeQuery = selection.q.trim();
@@ -75,7 +100,12 @@ const SearchTab: React.FC<SearchTabProps> = ({ caseId }) => {
 
   const submit = (event: { preventDefault: () => void }) => {
     event.preventDefault();
-    update({ q: draft.trim() });
+    const query = draft.trim();
+    if (!query) {
+      queryInputRef.current?.focus();
+      return;
+    }
+    update({ q: query });
   };
 
   const clearFilters = () => update({
@@ -98,6 +128,7 @@ const SearchTab: React.FC<SearchTabProps> = ({ caseId }) => {
         <div className="case-search-query-row">
           <input
             id="case-search-query"
+            ref={queryInputRef}
             name="q"
             type="search"
             value={draft}
@@ -109,22 +140,22 @@ const SearchTab: React.FC<SearchTabProps> = ({ caseId }) => {
 
         <div className="case-search-filters" aria-label="Search filters">
           <label htmlFor="search-type">Result type</label>
-          <select id="search-type" value={selection.type ?? ''} onChange={(event) =>
+          <select id="search-type" aria-describedby="search-filter-hint" value={selection.type ?? ''} onChange={(event) =>
             update({ type: event.target.value === 'claim' || event.target.value === 'evidence' ? event.target.value : null })
           }>
             <option value="">All types</option>
-            <option value="claim">Claims</option>
-            <option value="evidence">Evidence</option>
+            <option value="claim" disabled={Boolean(selection.publisher)}>Claims</option>
+            <option value="evidence" disabled={Boolean(selection.status)}>Evidence</option>
           </select>
 
           <label htmlFor="search-publisher">Publisher</label>
-          <input id="search-publisher" value={selection.publisher ?? ''} onChange={(event) =>
-            update({ publisher: event.target.value || null })
+          <input id="search-publisher" aria-describedby="search-filter-hint" disabled={Boolean(selection.status)} value={selection.publisher ?? ''} onChange={(event) =>
+            update({ publisher: event.target.value || null, type: event.target.value && selection.type === 'claim' ? null : selection.type })
           } />
 
           <label htmlFor="search-status">Claim status</label>
-          <select id="search-status" value={selection.status ?? ''} onChange={(event) =>
-            update({ status: event.target.value || null })
+          <select id="search-status" aria-describedby="search-filter-hint" disabled={Boolean(selection.publisher)} value={selection.status ?? ''} onChange={(event) =>
+            update({ status: event.target.value || null, publisher: event.target.value ? null : selection.publisher })
           }>
             <option value="">Any status</option>
             {['confirmed', 'probable', 'alleged', 'contested', 'debunked', 'unknown'].map((status) =>
@@ -141,6 +172,9 @@ const SearchTab: React.FC<SearchTabProps> = ({ caseId }) => {
             update({ publishedTo: utcDate(event.target.value) })
           } />
           <Button type="button" variant="secondary" onClick={clearFilters}>Clear filters</Button>
+          <p id="search-filter-hint" className="case-search-filter-hint" role="note">
+            Status applies to claims; publisher applies to evidence.
+          </p>
         </div>
       </form>
 
@@ -195,7 +229,12 @@ const SearchTab: React.FC<SearchTabProps> = ({ caseId }) => {
               })}
             </ol>
           )}
-          {search.data.total > search.data.limit && (
+          {search.data.total > 0 && selection.offset >= search.data.total ? (
+            <div className="case-search-pagination" role="status">
+              <span>This page is beyond the last result — showing the first page instead.</span>
+              <Button type="button" variant="secondary" onClick={() => update({ offset: 0 }, false)}>Show first page</Button>
+            </div>
+          ) : search.data.total > 0 && search.data.total > search.data.limit ? (
             <nav className="case-search-pagination" aria-label="Search result pages">
               <Button type="button" variant="secondary" disabled={selection.offset <= 0}
                 onClick={() => update({ offset: Math.max(0, selection.offset - search.data!.limit) }, false)}
@@ -205,7 +244,7 @@ const SearchTab: React.FC<SearchTabProps> = ({ caseId }) => {
                 onClick={() => update({ offset: selection.offset + search.data!.limit }, false)}
                 icon={<ChevronRight size={16} />}>Next</Button>
             </nav>
-          )}
+          ) : null}
         </>
       ) : null}
     </section>
