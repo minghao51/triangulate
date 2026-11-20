@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 
 import ChangesTab from './ChangesTab';
+import { ApiError } from '../../services/api-error';
 import type {
   ChangeItem,
   ClaimDetail,
@@ -13,6 +14,7 @@ import type {
 
 const apiMocks = vi.hoisted(() => ({
   getInvestigationRuns: vi.fn(),
+  getInvestigationRun: vi.fn(),
   getRunChanges: vi.fn(),
   getClaimDetail: vi.fn(),
 }));
@@ -113,6 +115,11 @@ describe('ChangesTab', () => {
     vi.clearAllMocks();
     apiMocks.getInvestigationRuns.mockResolvedValue(makeRunList([makeRun()]));
     apiMocks.getRunChanges.mockResolvedValue(makeChanges());
+    // Out-of-list run IDs are checked through the single-run reader; absence is
+    // only proven by its 404, so that is the default for unknown IDs.
+    apiMocks.getInvestigationRun.mockRejectedValue(
+      new ApiError('Investigation run not found', 404)
+    );
   });
 
   it('pins the newest run into the URL and loads its changes', async () => {
@@ -134,8 +141,15 @@ describe('ChangesTab', () => {
   });
 
   it('replaces an unknown run id in the URL instead of showing another run', async () => {
+    apiMocks.getInvestigationRun.mockRejectedValue(
+      new ApiError('Investigation run run-missing not found', 404)
+    );
+
     renderTab('/cases/case-1/changes?run=run-missing');
 
+    await waitFor(() =>
+      expect(apiMocks.getInvestigationRun).toHaveBeenCalledWith('case-1', 'run-missing')
+    );
     await waitFor(() =>
       expect(screen.getByTestId('location').textContent).toContain('run=run-2')
     );
@@ -146,6 +160,67 @@ describe('ChangesTab', () => {
     expect(
       screen.queryByText(/No grouped runs recorded/i)
     ).toBeNull();
+  });
+
+  it('keeps an out-of-list run that the single-run reader resolves', async () => {
+    // Only the newest run is within the latest-50 list; the permalink targets an
+    // older run that the list cannot show but the detail reader still resolves.
+    apiMocks.getInvestigationRuns.mockResolvedValue(
+      makeRunList([makeRun({ id: 'run-2', sequence: 2 })], 7)
+    );
+    apiMocks.getInvestigationRun.mockResolvedValue(
+      makeRun({ id: 'run-old', sequence: 1, trigger: 'initial' })
+    );
+
+    renderTab('/cases/case-1/changes?run=run-old');
+
+    // The resolved out-of-list run is rendered in the run header, not as a
+    // selector row (the selector lists only the latest-50 runs).
+    expect(
+      await screen.findByRole('heading', { name: /Run #1 · Initial run/ })
+    ).toBeTruthy();
+    expect(apiMocks.getRunChanges).toHaveBeenCalledWith('case-1', 'run-old', {
+      limit: 25,
+      offset: 0,
+    });
+    // The selection is legitimate, so the URL is never rewritten to the newest run.
+    expect(screen.getByTestId('location').textContent).toContain('run=run-old');
+    expect(screen.getByTestId('location').textContent).not.toContain('run=run-2');
+    expect(screen.getByText(/Showing the latest 1 of 7 runs/i)).toBeTruthy();
+  });
+
+  it('keeps the selected run when the lookup fails and retries it', async () => {
+    apiMocks.getInvestigationRuns.mockResolvedValue(
+      makeRunList([makeRun({ id: 'run-2', sequence: 2 })])
+    );
+    apiMocks.getInvestigationRun
+      .mockRejectedValueOnce(new ApiError('backend exploded', 500))
+      .mockResolvedValueOnce(makeRun({ id: 'run-old', sequence: 1 }));
+
+    renderTab('/cases/case-1/changes?run=run-old');
+
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent ?? '').toMatch(/Could not resolve the selected run/i);
+    expect(alert.textContent ?? '').toMatch(/backend exploded/i);
+    // A failed lookup is not evidence of absence: no run switch, no changes read.
+    expect(screen.getByTestId('location').textContent).toContain('run=run-old');
+    expect(apiMocks.getRunChanges).not.toHaveBeenCalled();
+
+    fireEvent.click(within(alert).getByRole('button', { name: 'Retry' }));
+
+    await waitFor(() =>
+      expect(apiMocks.getInvestigationRun).toHaveBeenCalledTimes(2)
+    );
+    expect(
+      await screen.findByRole('heading', { name: /Run #1 · Rerun or resume/ })
+    ).toBeTruthy();
+    expect(screen.getByTestId('location').textContent).toContain('run=run-old');
+    await waitFor(() =>
+      expect(apiMocks.getRunChanges).toHaveBeenCalledWith('case-1', 'run-old', {
+        limit: 25,
+        offset: 0,
+      })
+    );
   });
 
   it('labels a first observation as initial rather than a change surge', async () => {
@@ -463,9 +538,12 @@ describe('ChangesTab', () => {
     ).toBeNull();
   });
 
-  it('states that a claim is absent from the selected snapshot', async () => {
+  it('states that a claim is absent from the selected snapshot on a 404', async () => {
     apiMocks.getClaimDetail.mockRejectedValue(
-      new Error('Claim claim-gone is not present in snapshot snap-1 for case case-1')
+      new ApiError(
+        'Claim claim-gone is not present in snapshot snap-1 for case case-1',
+        404
+      )
     );
 
     renderTab('/cases/case-1/changes?run=run-2&claim=claim-gone&snapshot=snap-1');
@@ -474,6 +552,50 @@ describe('ChangesTab', () => {
     expect(alert.textContent ?? '').toMatch(/Claim not available in this observation/i);
     expect(alert.textContent ?? '').toMatch(/not present in snapshot snap-1/i);
     expect(alert.textContent ?? '').toMatch(/never replaced by a current row/i);
+    // Absence is terminal for the reader; no retry is offered for a 404.
+    expect(within(alert).queryByRole('button', { name: 'Retry' })).toBeNull();
+  });
+
+  it('shows a retryable error for a failed frozen-claim read and retries it', async () => {
+    apiMocks.getClaimDetail
+      .mockRejectedValueOnce(new ApiError('backend exploded', 500))
+      .mockResolvedValueOnce({
+        id: 'claim-gone',
+        caseId: 'case-1',
+        eventId: 'event-1',
+        claimText: 'Withdrawn assertion.',
+        claimSignature: 'sig-gone',
+        verificationStatus: 'alleged',
+        verificationProvenance: 'unknown',
+        type: 'allegation',
+        controversyScore: 0.4,
+        narrativeClusterId: null,
+        partyPositions: {},
+        counts: {
+          supportCount: 1,
+          opposeCount: 0,
+          sourceDiversityCount: 1,
+          evidenceCount: 1,
+        },
+        passages: [],
+        snapshotId: 'snap-1',
+        liveState: null,
+      } satisfies ClaimDetail);
+
+    renderTab('/cases/case-1/changes?run=run-2&claim=claim-gone&snapshot=snap-1');
+
+    const panel = await screen.findByRole('region', { name: 'Frozen claim' });
+    const alert = await within(panel).findByRole('alert');
+    // A non-404 failure is never labelled as snapshot absence.
+    expect(alert.textContent ?? '').toMatch(/Could not load the frozen claim/i);
+    expect(alert.textContent ?? '').toMatch(/backend exploded/i);
+    expect(alert.textContent ?? '').not.toMatch(/Claim not available in this observation/i);
+
+    fireEvent.click(within(alert).getByRole('button', { name: 'Retry' }));
+
+    expect(apiMocks.getClaimDetail).toHaveBeenCalledTimes(2);
+    expect(await within(panel).findByText('Withdrawn assertion.')).toBeTruthy();
+    expect(within(panel).queryByRole('alert')).toBeNull();
   });
 
   it('keeps pagination offset in the URL and requests the next page', async () => {

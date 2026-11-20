@@ -13,7 +13,13 @@ import {
 import Badge from '../../components/design-system/Badge';
 import Button from '../../components/design-system/Button';
 import { formatTimestamp, safeExternalUrl } from '../../components/inspector/inspector-utils';
-import { getClaimDetail, getInvestigationRuns, getRunChanges } from '../../services/api';
+import {
+  getClaimDetail,
+  getInvestigationRun,
+  getInvestigationRuns,
+  getRunChanges,
+} from '../../services/api';
+import { isNotFound } from '../../services/api-error';
 import {
   buildChangesUrl,
   buildInspectorUrl,
@@ -642,13 +648,23 @@ const FrozenClaimPanel: React.FC<FrozenClaimPanelProps> = ({
       ) : null}
 
       {query.isError ? (
-        <div className="changes-state changes-state--error" role="alert">
-          <h4>Claim not available in this observation</h4>
-          <p>{(query.error as Error).message}</p>
-          <p className="changes-state-hint">
-            A claim that is absent from this snapshot is never replaced by a current row.
-          </p>
-        </div>
+        isNotFound(query.error) ? (
+          <div className="changes-state changes-state--error" role="alert">
+            <h4>Claim not available in this observation</h4>
+            <p>{(query.error as Error).message}</p>
+            <p className="changes-state-hint">
+              A claim that is absent from this snapshot is never replaced by a current row.
+            </p>
+          </div>
+        ) : (
+          <div className="changes-state changes-state--error" role="alert">
+            <h4>Could not load the frozen claim</h4>
+            <p>{(query.error as Error).message}</p>
+            <Button variant="secondary" size="sm" onClick={() => void query.refetch()}>
+              Retry
+            </Button>
+          </div>
+        )
       ) : null}
 
       {claim ? (
@@ -763,18 +779,64 @@ export const ChangesTab: React.FC<ChangesTabProps> = ({ caseId }) => {
   );
   const total = runsQuery.data?.total ?? runs.length;
 
-  const selectedRun = useMemo(() => {
-    if (selection.runId) return runs.find((run) => run.id === selection.runId) ?? null;
-    return runs[0] ?? null;
-  }, [runs, selection.runId]);
+  const selectedInList = useMemo(
+    () => (selection.runId ? runs.find((run) => run.id === selection.runId) ?? null : null),
+    [runs, selection.runId]
+  );
+  const selectionNeedsLookup = Boolean(
+    runsQuery.isSuccess && runs.length > 0 && selection.runId && !selectedInList
+  );
 
-  // The URL is the selection authority. Pin the newest run once it is known, and
-  // replace an unknown/stale run ID instead of showing another run's data under it.
+  // A URL-selected run outside the latest-50 list is resolved through the
+  // single-run reader before the URL is rewritten: only its 404 proves absence,
+  // and a network/5xx failure is never evidence that the run does not exist.
+  const runLookupQuery = useQuery({
+    queryKey: ['investigation-run', caseId, selection.runId],
+    queryFn: () => getInvestigationRun(caseId, selection.runId as string),
+    enabled: selectionNeedsLookup,
+    retry: false,
+  });
+
+  const selectedRun = useMemo(() => {
+    if (selection.runId) {
+      if (selectedInList) return selectedInList;
+      if (runLookupQuery.isSuccess && runLookupQuery.data?.id === selection.runId) {
+        return runLookupQuery.data;
+      }
+      return null;
+    }
+    return runs[0] ?? null;
+  }, [runs, selection.runId, selectedInList, runLookupQuery.isSuccess, runLookupQuery.data]);
+
+  // The URL is the selection authority. Pin the newest run once the list is
+  // known. A run ID missing from the loaded list is replaced only after the
+  // single-run reader answers 404; a lookup failure keeps the selection and
+  // surfaces the error state instead of silently switching runs.
   useEffect(() => {
     if (!runsQuery.isSuccess || runs.length === 0) return;
-    if (selection.runId && runs.some((run) => run.id === selection.runId)) return;
+    if (!selection.runId) {
+      updateSelection({ runId: runs[0].id, offset: null }, { replace: true });
+      return;
+    }
+    if (selectedInList) return;
+    if (runLookupQuery.isPending) return;
+    if (runLookupQuery.isSuccess && runLookupQuery.data?.id === selection.runId) {
+      return;
+    }
+    if (runLookupQuery.isError && !isNotFound(runLookupQuery.error)) return;
     updateSelection({ runId: runs[0].id, offset: null }, { replace: true });
-  }, [runsQuery.isSuccess, runs, selection.runId, updateSelection]);
+  }, [
+    runsQuery.isSuccess,
+    runs,
+    selection.runId,
+    selectedInList,
+    runLookupQuery.isPending,
+    runLookupQuery.isSuccess,
+    runLookupQuery.data,
+    runLookupQuery.isError,
+    runLookupQuery.error,
+    updateSelection,
+  ]);
 
   const changesQuery = useQuery({
     queryKey: ['run-changes', caseId, selectedRun?.id ?? null, offset],
@@ -790,10 +852,14 @@ export const ChangesTab: React.FC<ChangesTabProps> = ({ caseId }) => {
     [updateSelection]
   );
 
+  const lookupFailed =
+    runLookupQuery.isError && !isNotFound(runLookupQuery.error);
+
   const handleRetry = useCallback(() => {
     void runsQuery.refetch();
+    if (runLookupQuery.isError) void runLookupQuery.refetch();
     if (selectedRun) void changesQuery.refetch();
-  }, [runsQuery, changesQuery, selectedRun]);
+  }, [runsQuery, changesQuery, runLookupQuery, selectedRun]);
 
   const changesUrl = buildChangesUrl(caseId, {
     runId: selectedRun?.id ?? selection.runId,
@@ -860,6 +926,31 @@ export const ChangesTab: React.FC<ChangesTabProps> = ({ caseId }) => {
             onSelect={handleSelectRun}
           />
           <div className="changes-panel">
+            {selectionNeedsLookup && runLookupQuery.isPending ? (
+              <div className="changes-state" role="status" aria-busy="true">
+                <p>Resolving the selected run…</p>
+              </div>
+            ) : null}
+
+            {lookupFailed ? (
+              <div className="changes-state changes-state--error" role="alert">
+                <h4>Could not resolve the selected run</h4>
+                <p>{(runLookupQuery.error as Error).message}</p>
+                <p className="changes-state-hint">
+                  The selected run is not among the latest {runs.length} listed runs,
+                  so it was checked against the single-run reader. A temporary failure
+                  is not proof that the run does not exist.
+                </p>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => void runLookupQuery.refetch()}
+                >
+                  Retry
+                </Button>
+              </div>
+            ) : null}
+
             {selectedRun ? (
               <div className="changes-run-header">
                 <h4>
