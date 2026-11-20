@@ -311,12 +311,22 @@ def _recompute_case_claim_aggregates(session, case_id: str) -> None:
                 bucket["support"] += 1
         bucket["party_positions"].update(claim.party_positions or {})
 
+    signature_backfill_events = set()
     for claim in claims:
         signature = claim.claim_signature or _claim_signature(claim.claim_text)
         aggregate = grouped[signature]
+        if not claim.claim_signature:
+            signature_backfill_events.add(claim.event_id)
         claim.claim_signature = signature
         claim.support_count = aggregate["support"]
         claim.oppose_count = aggregate["oppose"]
         claim.source_diversity_count = len(aggregate["sources"])
         if aggregate["party_positions"]:
             claim.party_positions = aggregate["party_positions"]
+
+    # Signature is stored as unindexed metadata on current claim rows. Keep it
+    # synchronized in this same transaction whenever aggregate repair backfills it.
+    if signature_backfill_events:
+        from src.storage.search import sync_event_index
+        for event_id in signature_backfill_events:
+            sync_event_index(session, event_id)

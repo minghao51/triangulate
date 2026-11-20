@@ -10,8 +10,8 @@ from src.storage.database import init_database
 from src.storage.migrations import run_migrations
 from src.storage.models import CaseStatus, EvidenceItem, TopicCase
 
-# Highest migration version after R03 added immutable case snapshots.
-LATEST_MIGRATION_VERSION = 14
+# Highest migration version after S01 added the optional FTS5 index.
+LATEST_MIGRATION_VERSION = 15
 
 
 

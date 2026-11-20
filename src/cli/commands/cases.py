@@ -12,9 +12,41 @@ from rich.prompt import Confirm, Prompt
 from rich.table import Table
 
 from src.runtime import build_case_service
-from src.storage import CaseStageName, CaseStatus, CaseWriterConflict
+from src.storage import CaseStageName, CaseStatus, CaseWriterConflict, get_database
+from src.storage.write_guard import claim_case_ownership, new_writer_token, release_case_ownership, validate_case_ownership
 
 console = Console()
+
+
+def cmd_rebuild_case_search(case_id: str) -> None:
+    """Rebuild only one case's current search rows under R02 ownership."""
+    from src.storage.search import rebuild_case_search_index
+
+    session = get_database().get_session_sync()
+    token = new_writer_token()
+    try:
+        claim_case_ownership(session, case_id, token=token, kind="evidence")
+        result = rebuild_case_search_index(session, case_id)
+        validate_case_ownership(session, case_id, token, operation="search rebuild")
+        release_case_ownership(session, case_id, token)
+        session.commit()
+        capability = result["capability"]
+        if capability.available:
+            console.print(f"Search index rebuilt for {case_id}: {result['counts']}")
+        else:
+            console.print(
+                f"Search index unavailable for {case_id}: {capability.reason}; "
+                f"indexed counts: {result['counts']}"
+            )
+    except CaseWriterConflict as exc:
+        session.rollback()
+        console.print(f"[red]Search rebuild rejected: {exc}[/red]")
+        raise typer.Exit(code=1) from exc
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
 
 
 def cmd_list_cases(output: Path = Path("./output")) -> None:

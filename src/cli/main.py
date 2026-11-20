@@ -23,6 +23,7 @@ from src.cli.commands.cases import (
     cmd_show_case_workflow,
     cmd_review_case,
     cmd_rerun_case,
+    cmd_rebuild_case_search,
 )
 from src.cli.commands.osint import cmd_osint_ingest, cmd_osint_stream
 from src.storage import init_database
@@ -226,6 +227,12 @@ def cases(
 ) -> None:
     """List persisted topic cases."""
     cmd_list_cases(output=output)
+
+
+@case_app.command("rebuild-search")
+def case_rebuild_search(case_id: str = typer.Argument(..., help="Case ID")) -> None:
+    """Rebuild one case's current FTS search index."""
+    cmd_rebuild_case_search(case_id)
 
 
 @case_app.command("show")

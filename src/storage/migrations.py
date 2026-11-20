@@ -104,6 +104,8 @@ class MigrationManager:
                 self._apply_case_writer_ownership_schema(session)
             elif migration.version == 14:
                 self._apply_case_snapshot_schema(session)
+            elif migration.version == 15:
+                self._apply_search_index_schema(session)
             else:
                 # Apply migration SQL
                 session.execute(text(migration.up_sql))
@@ -712,6 +714,24 @@ class MigrationManager:
                 "ON topic_cases (owner_token)"
             )
         )
+
+    def _apply_search_index_schema(self, session) -> None:
+        """Create the single current-state FTS index when SQLite supports FTS5."""
+        try:
+            session.execute(text("""
+                CREATE VIRTUAL TABLE IF NOT EXISTS case_search_index USING fts5(
+                    case_id UNINDEXED, entity_type UNINDEXED, entity_id UNINDEXED,
+                    title, body, signature UNINDEXED, event_id UNINDEXED,
+                    party_id UNINDEXED, publisher UNINDEXED, status UNINDEXED,
+                    published_at UNINDEXED, tokenize='unicode61'
+                )
+            """))
+        except Exception as exc:
+            # A missing FTS5 module is a supported, explicit runtime capability
+            # state. Migration tracking still advances; never substitute LIKE.
+            message = str(exc).lower()
+            if "no such module" not in message or "fts5" not in message:
+                raise
 
     def _apply_case_snapshot_schema(self, session) -> None:
         """Add immutable case snapshots and stored deltas (R03).
@@ -1611,6 +1631,12 @@ MIGRATIONS: list[Migration] = [
         """,
         down="""
         """,
+    ),
+    Migration(
+        version=15,
+        name="Add optional case-scoped FTS5 search index",
+        up="",
+        down="",
     ),
 ]
 

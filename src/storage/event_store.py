@@ -339,6 +339,8 @@ def store_event_in_db(
             create_review=create_review,
             confirmed_parties=confirmed_parties,
         )
+        from src.storage.search import sync_event_index
+        sync_event_index(session, event_data["id"])
         return True
 
     own_session = get_database().get_session_sync()
@@ -356,6 +358,8 @@ def store_event_in_db(
             create_review=create_review,
             confirmed_parties=confirmed_parties,
         )
+        from src.storage.search import sync_event_index
+        sync_event_index(own_session, event_data["id"])
         if case_id is not None:
             # Revalidate in the same transaction immediately before commit.
             validate_or_allow_legacy_writer(

@@ -1,11 +1,11 @@
 # Release C completion map: S01, S02, V01 (D01 gated)
 
-Date: 2026-11-20. Status: **planning document for the next agent.** Release A and
+Date: 2026-11-20. Status: **S01 defect pass implemented and verified (564 passed, Ruff clean); independent diff review pending.** Release A and
 Release B are accepted. R01, R02, R03a, R03b, R03c and the R01–R03a defect pass are
 accepted and pushed; R04 is committed (`44f1e58`) with its owner/parent diff review
-pending. This map is the single brief for finishing Release C: implement **S01**,
-**S02** and **V01 in that order**, autonomously but bounded, then stop. **D01 and
-production deployment are separate owner gates and must not be started.**
+pending. This map is the single brief for finishing Release C: accept/review **S01**,
+then implement **S02** and **V01 in that order**, then stop. **D01 and production
+deployment are separate owner gates and must not be started.**
 
 Contract authority remains the
 [specification](20261114-evidence-workbench-specification.md) (especially §8 and
@@ -17,11 +17,11 @@ state lives in the [Release C handoff](20261118-release-b-handoff.md).
 | Item | Value |
 |---|---|
 | Local `main` / `origin/main` | `81b8778` pushed; R04 is committed locally as `44f1e58` and **not pushed** |
-| Migrations | 1..14 (12 grouped runs, 13 case-writer ownership, 14 immutable snapshots) |
-| Backend gate | **553 passed, 9 deselected**; Ruff clean (disposable copy) |
+| Migrations | 1..15 (12 grouped runs, 13 case-writer ownership, 14 immutable snapshots, 15 optional case FTS5 index) |
+| Backend gate | Baseline **553 passed, 9 deselected**; S01 **556 passed, 9 deselected**, Ruff clean (disposable copy) |
 | Frontend gate | `npm run check` green; **132 tests / 13 files** |
 | Frontend consistency | React 18 + Vite + TanStack Query; `src/services/api.ts`, `src/services/deep-links.ts`, `src/types/backend-models.ts` are the API seams |
-| Research lane | R01–R04 delivered; next lane is search (S01 → S02), then verification (V01) |
+| Research lane | R01–R04 delivered; S01 implemented/verified (independent review pending), then S02, then V01 |
 | Production data | untouched; the B02 test-database incident remains disclosed |
 | Scratch | 382 files archived at `/tmp/triangulate-scratch-archive-20261118T005339Z.tar.gz` |
 
@@ -75,7 +75,7 @@ Read first, in this order: this map, the handoff, worker plan §5/§7, specifica
 
 | # | Ticket | Lane | Depends on | Migration |
 |---|---|---|---|---|
-| 1 | S01 — transactional case FTS index + explicit rebuild | backend | R01/R02, current schema | likely 15 |
+| 1 | S01 — transactional case FTS index + explicit rebuild (**implemented; review pending**) | backend | R01/R02, current schema | 15 |
 | 2 | S02 — search read API + workspace UI | backend + frontend | S01 | none expected |
 | 3 | V01 — Release C verification, E2E, docs | full stack | S01, S02 | none |
 | — | D01 — historical data recovery | — | **owner gate, do not start** | — |

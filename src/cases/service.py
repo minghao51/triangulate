@@ -90,6 +90,8 @@ from src.storage import (
     validate_case_ownership,
 )
 from src.storage.event_store import store_event_in_db
+from src.storage.captures import build_capture_metadata, record_evidence_capture
+from src.storage.search import sync_evidence_index
 from src.storage.write_guard import OWNER_KIND_EVALUATION, OWNER_KIND_EVIDENCE
 from src.cases._support import CaseRunContext
 from src.cases._persistence import _persist_workflow_diagnostics
@@ -4577,6 +4579,15 @@ class TopicCaseService:
                         "tool": tool,
                     },
                 }
+
+            body = raw_payload.get("content") or evidence.content or raw_text[:4000]
+            record_evidence_capture(
+                session,
+                evidence,
+                text=body,
+                metadata=build_capture_metadata(evidence, extra={"origin": "osint_import", "tool": tool}),
+            )
+            sync_evidence_index(session, evidence)
 
             link_id = str(
                 uuid.uuid5(
