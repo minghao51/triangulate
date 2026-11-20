@@ -7,6 +7,7 @@ therefore covered by the same case fencing and rollback as source writes.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import hashlib
 from typing import Any
 
 from sqlalchemy import text
@@ -74,16 +75,27 @@ def build_claim_row(claim: Claim, event: Event) -> dict[str, Any]:
     }
 
 
+def deterministic_rowid(entity_type: str, entity_id: str) -> int:
+    """Map an entity identity to a stable positive FTS5 rowid.
+
+    A 63-bit digest makes accidental collisions extraordinarily unlikely
+    (birthday bound). Entity IDs are primary keys and therefore unique within
+    each entity type; case is metadata rather than part of the row identity.
+    """
+    identity = f"{entity_type}\0{entity_id}".encode("utf-8")
+    return (int.from_bytes(hashlib.blake2b(identity, digest_size=8).digest(), "big") & ((1 << 63) - 1)) or 1
+
+
 def _delete_row(session: Session, case_id: str, entity_type: str, entity_id: str) -> None:
-    session.execute(text(f"DELETE FROM {TABLE} WHERE case_id=:case_id AND entity_type=:entity_type AND entity_id=:entity_id"),
-                    {"case_id": case_id, "entity_type": entity_type, "entity_id": entity_id})
+    session.execute(text(f"DELETE FROM {TABLE} WHERE rowid=:rowid"),
+                    {"rowid": deterministic_rowid(entity_type, entity_id)})
 
 
 def _upsert_row(session: Session, row: dict[str, Any]) -> None:
-    _delete_row(session, row["case_id"], row["entity_type"], row["entity_id"])
-    session.execute(text(f"""INSERT INTO {TABLE}
-        (case_id,entity_type,entity_id,title,body,signature,event_id,party_id,publisher,status,published_at)
-        VALUES (:case_id,:entity_type,:entity_id,:title,:body,:signature,:event_id,:party_id,:publisher,:status,:published_at)"""), row)
+    session.execute(text(f"""INSERT OR REPLACE INTO {TABLE}
+        (rowid,case_id,entity_type,entity_id,title,body,signature,event_id,party_id,publisher,status,published_at)
+        VALUES (:rowid,:case_id,:entity_type,:entity_id,:title,:body,:signature,:event_id,:party_id,:publisher,:status,:published_at)"""),
+        {**row, "rowid": deterministic_rowid(row["entity_type"], row["entity_id"])})
 
 
 def upsert_index_row(session: Session, row: dict[str, Any]) -> None:
@@ -121,7 +133,10 @@ def sync_evidence_index(session: Session, evidence: EvidenceItem) -> None:
     capability = probe_search_capability(session)
     if not capability.available:
         return
-    session.execute(text(f"DELETE FROM {TABLE} WHERE entity_type='evidence' AND entity_id=:id"), {"id": evidence.id})
+    if evidence.case_id is not None:
+        _delete_row(session, evidence.case_id, "evidence", evidence.id)
+    else:
+        _delete_row(session, "", "evidence", evidence.id)
     if evidence.case_id is None:
         return
     session.flush([evidence])

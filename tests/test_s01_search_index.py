@@ -1,6 +1,8 @@
 """S01 transactional case search-index contract tests."""
 from datetime import datetime, timezone
 import sqlite3
+import subprocess
+import sys
 
 import pytest
 from sqlalchemy import text
@@ -12,7 +14,9 @@ from src.storage.models import (
 )
 from src.storage.captures import record_evidence_capture
 from src.storage.search import (
-    probe_search_capability, rebuild_case_search_index, sync_event_index,
+    delete_index_row, deterministic_rowid, probe_search_capability,
+    rebuild_case_search_index, sync_evidence_index, sync_event_index,
+    upsert_index_row,
 )
 from src.storage.write_guard import claim_case_ownership, new_writer_token
 
@@ -102,6 +106,66 @@ def test_rebuild_case_scope_idempotency_and_active_writer_refusal(tmp_path, monk
             cmd_rebuild_case_search("A")
         assert _dump(session) == before
         assert {r[0] for r in before} == {"A", "B"}
+
+
+def test_targeted_index_upsert_delete_and_deterministic_rowid(tmp_path):
+    db = _db(tmp_path)
+    row = {
+        "case_id": "A", "entity_type": "evidence", "entity_id": "one",
+        "title": "first", "body": "initial searchable phrase", "signature": "",
+        "event_id": "", "party_id": "", "publisher": "", "status": "",
+        "published_at": "",
+    }
+    with db.get_session_sync() as session:
+        first_id = deterministic_rowid("evidence", "one")
+        assert first_id == deterministic_rowid("evidence", "one")
+        other_process = subprocess.check_output(
+            [sys.executable, "-c", "from src.storage.search import deterministic_rowid; print(deterministic_rowid('evidence', 'one'))"],
+            text=True,
+        ).strip()
+        assert first_id == int(other_process)
+        upsert_index_row(session, row)
+        upsert_index_row(session, {**row, "body": "replacement searchable phrase"})
+        other = {**row, "entity_id": "two", "body": "untouched searchable phrase"}
+        upsert_index_row(session, other)
+        assert session.execute(text("SELECT rowid FROM case_search_index WHERE entity_id='one'")).scalar() == first_id
+        assert session.execute(text("SELECT count(*) FROM case_search_index WHERE body MATCH 'initial'")).scalar() == 0
+        assert session.execute(text("SELECT count(*) FROM case_search_index WHERE body MATCH 'replacement'")).scalar() == 1
+        delete_index_row(session, "A", "evidence", "one")
+        assert session.execute(text("SELECT entity_id FROM case_search_index")).scalars().all() == ["two"]
+        session.commit()
+        # A real source entity retains its rowid when a case is rebuilt.
+        _case(session, "B")
+        rowid_before_rebuild = session.execute(
+            text("SELECT rowid FROM case_search_index WHERE entity_id='evidence-B'")
+        ).scalar()
+        rebuild_case_search_index(session, "B")
+        rowid_after_rebuild = session.execute(
+            text("SELECT rowid FROM case_search_index WHERE entity_id='evidence-B'")
+        ).scalar()
+        assert rowid_after_rebuild == rowid_before_rebuild
+
+
+def test_standalone_evidence_becoming_event_owned_reuses_one_row(tmp_path):
+    db = _db(tmp_path)
+    with db.get_session_sync() as session:
+        session.add(TopicCase(id="A", query="A", slug="A", status=CaseStatus.DISCOVERING))
+        evidence = EvidenceItem(id="moving-evidence", case_id="A", event_id=None,
+                                evidence_type="article", source_type="test", title="Standalone")
+        session.add(evidence)
+        session.flush()
+        record_evidence_capture(session, evidence, text="Standalone becomes owned")
+        sync_evidence_index(session, evidence)
+        event = Event(id="moving-event", timestamp=datetime.now(timezone.utc), title="Event",
+                      summary="", verification_status=VerificationStatus.ALLEGED, case_id="A")
+        session.add(event)
+        session.flush()
+        evidence.event_id = event.id
+        session.flush()
+        sync_event_index(session, event.id)
+        rows = session.execute(text("SELECT rowid,event_id FROM case_search_index WHERE entity_id='moving-evidence'")).all()
+        assert len(rows) == 1
+        assert rows[0][1] == event.id
 
 
 def test_missing_index_is_explicit_capability_state_and_migration_completes(tmp_path):
