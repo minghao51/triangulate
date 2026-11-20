@@ -229,6 +229,31 @@ async def test_first_snapshot_is_initial_and_report_is_run_specific(
 
 
 @pytest.mark.asyncio
+async def test_successful_finalization_composes_under_a_read_transaction(
+    monkeypatch, tmp_path
+):
+    """The production path must open the explicit read transaction, not just the
+    helper in isolation."""
+    from src.cases import service as service_module
+
+    service = make_service(tmp_path)
+    install_fakes(monkeypatch, service)
+    calls: list[object] = []
+    real = service_module.begin_read_transaction
+
+    def spy(session):
+        calls.append(session)
+        return real(session)
+
+    monkeypatch.setattr(service_module, "begin_read_transaction", spy)
+
+    case = await run_full(service, tmp_path)
+
+    assert calls, "snapshot composition must open a read transaction"
+    assert len(snapshots(tmp_path, case.id)) == 1
+
+
+@pytest.mark.asyncio
 async def test_identical_rerun_has_no_semantic_change(monkeypatch, tmp_path):
     service = make_service(tmp_path)
     install_fakes(monkeypatch, service)
@@ -272,7 +297,14 @@ async def test_changed_claim_and_capture_are_detected(monkeypatch, tmp_path):
     assert "capture_changed" in change_types
     assert "claim_added" in change_types
     assert "claim_no_longer_extracted" in change_types
-    assert all(item["originRunId"] == second_run.id for item in changes)
+    first_run = runs(tmp_path, case.id)[0]
+    by_type = {item["type"]: item for item in changes}
+    # R03c: the observing run and the entity's recorded origin are separate facts.
+    assert by_type["claim_added"]["observedByRunId"] == second_run.id
+    assert by_type["claim_added"]["originRunId"] == second_run.id
+    assert by_type["claim_no_longer_extracted"]["observedByRunId"] == second_run.id
+    assert by_type["claim_no_longer_extracted"]["originRunId"] == first_run.id
+    assert all(item["observedByRunId"] == second_run.id for item in changes)
     # No invented actor attribution on review/exception observations.
     assert all("actor" not in (item.get("before") or {}) for item in changes)
     assert all("actor" not in (item.get("after") or {}) for item in changes)

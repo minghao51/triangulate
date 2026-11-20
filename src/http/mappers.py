@@ -71,6 +71,7 @@ from .schemas import (
     InvestigationRunListDTO,
     RunChangesDTO,
     SnapshotSummaryDTO,
+    SnapshotLiveStateDTO,
 )
 
 
@@ -730,6 +731,21 @@ def map_citation_detail(payload: dict[str, Any]) -> CitationDTO:
     )
 
 
+def _map_snapshot_live_state(
+    item: dict[str, Any] | None,
+) -> SnapshotLiveStateDTO | None:
+    """Map the frozen-vs-current comparison of a snapshot entity."""
+    if not item:
+        return None
+    return SnapshotLiveStateDTO(
+        present=bool(item.get("present")),
+        claimSignature=item.get("claim_signature"),
+        textMatchesSnapshot=item.get("text_matches_snapshot"),
+        currentCaptureId=item.get("current_capture_id"),
+        currentCaptureMatchesSnapshot=item.get("current_capture_matches_snapshot"),
+    )
+
+
 def map_claim_detail(payload: dict[str, Any]) -> ClaimDetailDTO:
     """Map one claim read model, including its evidence passages."""
     counts = payload.get("counts") or {}
@@ -758,6 +774,8 @@ def map_claim_detail(payload: dict[str, Any]) -> ClaimDetailDTO:
         passages=[
             _map_claim_evidence_link(item) for item in payload.get("passages", [])
         ],
+        snapshotId=payload.get("snapshot_id"),
+        liveState=_map_snapshot_live_state(payload.get("live_state")),
     )
 
 
@@ -787,6 +805,9 @@ def map_evidence_detail(payload: dict[str, Any]) -> EvidenceDetailDTO:
             )
             for item in payload.get("related_claims", [])
         ],
+        snapshotId=payload.get("snapshot_id"),
+        unavailableCaptureIds=payload.get("unavailable_capture_ids") or [],
+        liveState=_map_snapshot_live_state(payload.get("live_state")),
     )
 
 
@@ -1055,6 +1076,7 @@ def map_comparison(payload: dict[str, Any]) -> ComparisonDTO:
             limitations=policy.get("limitations") or [],
         ),
         caveats=payload.get("caveats") or [],
+        snapshotId=payload.get("snapshot_id"),
     )
 
 

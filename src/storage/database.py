@@ -93,3 +93,23 @@ def init_database(db_path: str | None = None) -> Database:
     global _db
     _db = db
     return db
+
+
+def begin_read_transaction(session: Session) -> None:
+    """Open an explicit SQLite read transaction for a consistent multi-read view.
+
+    pysqlite's legacy transaction mode only issues ``BEGIN`` before DML, so a
+    sequence of SELECTs on its own would each observe the latest committed state.
+    Snapshot composition must observe one state, so the caller opens the read
+    transaction explicitly before its first read. The caller owns the transaction:
+    closing or rolling the session back ends it, and this helper never commits.
+    """
+    session.connection().exec_driver_sql("BEGIN")
+
+
+__all__ = [
+    "Database",
+    "begin_read_transaction",
+    "get_database",
+    "init_database",
+]

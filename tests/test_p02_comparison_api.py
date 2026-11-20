@@ -629,7 +629,7 @@ class TestComparisonHttpContract:
         assert "analysisScope" in payload["left"]
         assert "coverage" in payload["left"]
 
-    def test_query_validation_and_snapshot_rejection(self, client, workbench):
+    def test_query_validation_and_snapshot_selector(self, client, workbench):
         same = client.get(
             f"/api/cases/{CASE_ID}/comparison",
             params={
@@ -639,6 +639,8 @@ class TestComparisonHttpContract:
         )
         assert same.status_code == 422
 
+        # The selector is supported, so an unknown snapshot is an explicit 404
+        # rather than a silent fall back to the current comparison.
         snapshot = client.get(
             f"/api/cases/{CASE_ID}/comparison",
             params={
@@ -647,7 +649,8 @@ class TestComparisonHttpContract:
                 "snapshotId": "snap-1",
             },
         )
-        assert snapshot.status_code == 422
+        assert snapshot.status_code == 404
+        assert "Snapshot snap-1 not found" in snapshot.text
 
         bad_limit = client.get(
             f"/api/cases/{CASE_ID}/comparison",

@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 
+import typer
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Confirm, Prompt
@@ -303,14 +304,16 @@ def cmd_interrupt_case(
     output: Path = Path("./output"),
 ) -> None:
     """Explicitly interrupt the active case writer (CLI-only recovery)."""
+    # Every path that does not actually interrupt exits nonzero, so automation
+    # cannot mistake a rejected or cancelled recovery for a completed one.
     if not (reason or "").strip():
         console.print("[red]An interrupt reason is required[/red]")
-        return
+        raise typer.Exit(code=1)
     if not run_id and not token:
         console.print(
             "[red]Provide the active owner reference (--run-id) or --token[/red]"
         )
-        return
+        raise typer.Exit(code=1)
     if not yes:
         confirmed = Confirm.ask(
             f"Interrupt the active writer on case {case_id}? "
@@ -319,7 +322,7 @@ def cmd_interrupt_case(
         )
         if not confirmed:
             console.print("[yellow]Interrupt aborted[/yellow]")
-            return
+            raise typer.Exit(code=1)
     service = build_case_service(output)
     try:
         result = service.interrupt_case(
@@ -331,7 +334,7 @@ def cmd_interrupt_case(
         )
     except (CaseWriterConflict, ValueError) as exc:
         console.print(f"[red]Interrupt rejected: {exc}[/red]")
-        return
+        raise typer.Exit(code=1) from exc
     interrupted = result.get("interrupted") or {}
     target = result.get("runId") or interrupted.get("refId") or "active writer"
     console.print(

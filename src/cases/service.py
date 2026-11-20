@@ -81,6 +81,7 @@ from src.storage import (
     TopicCase,
     case_write_admission,
     claim_case_ownership,
+    begin_read_transaction,
     get_database,
     invalidate_case_ownership,
     new_writer_token,
@@ -278,6 +279,24 @@ def _execution_automation_mode(value: str | None) -> str:
     return _normalize_automation_mode(value)
 
 
+#: Maximum persisted length of an exception message in run/stage diagnostics.
+MAX_ERROR_MESSAGE_CHARS = 500
+
+
+def _bounded_error_message(value: BaseException | str) -> str:
+    """Return a bounded exception message for persistence.
+
+    Grouped-run and stage diagnostics are read back by operators and UIs, so a
+    provider/library error carrying a megabyte of payload must not be stored
+    verbatim. This bounds the size only; it does not claim to redact secrets, so
+    callers must still avoid interpolating credentials into exception messages.
+    """
+    text = str(value).strip()
+    if len(text) <= MAX_ERROR_MESSAGE_CHARS:
+        return text
+    return text[:MAX_ERROR_MESSAGE_CHARS] + " [truncated]"
+
+
 class TopicCaseService:
     """Owns topic-oriented case creation, orchestration, and review."""
 
@@ -340,23 +359,35 @@ class TopicCaseService:
             session.close()
 
     def get_claim_detail(
-        self, case_id: str, claim_id: str
+        self, case_id: str, claim_id: str, *, snapshot_id: str | None = None
     ) -> dict[str, Any] | None:
-        """Read one case-owned claim with its evidence passages."""
+        """Read one case-owned claim with its evidence passages.
+
+        ``snapshot_id`` resolves the claim from that immutable observation; the
+        live claim row is only used to report whether it still exists/matches.
+        """
         session = get_database().get_session_sync()
         try:
-            return read_claim_detail(session, case_id=case_id, claim_id=claim_id)
+            return read_claim_detail(
+                session,
+                case_id=case_id,
+                claim_id=claim_id,
+                snapshot_id=snapshot_id,
+            )
         finally:
             session.close()
 
     def get_evidence_detail(
-        self, case_id: str, evidence_id: str
+        self, case_id: str, evidence_id: str, *, snapshot_id: str | None = None
     ) -> dict[str, Any] | None:
         """Read one case-owned evidence item, its captures and its claims."""
         session = get_database().get_session_sync()
         try:
             return read_evidence_detail(
-                session, case_id=case_id, evidence_id=evidence_id
+                session,
+                case_id=case_id,
+                evidence_id=evidence_id,
+                snapshot_id=snapshot_id,
             )
         finally:
             session.close()
@@ -406,6 +437,7 @@ class TopicCaseService:
         right_capture_id: str | None = None,
         limit: int = DEFAULT_COMPARISON_LIMIT,
         offset: int = 0,
+        snapshot_id: str | None = None,
     ) -> dict[str, Any]:
         """Read one deterministic two-capture comparison (P02, read-only)."""
         session = get_database().get_session_sync()
@@ -419,6 +451,7 @@ class TopicCaseService:
                 right_capture_id=right_capture_id,
                 limit=limit,
                 offset=offset,
+                snapshot_id=snapshot_id,
             )
         finally:
             session.close()
@@ -640,6 +673,8 @@ class TopicCaseService:
 
         session = get_database().get_session_sync()
         predecessor_run_id: str | None = None
+        committed = False
+        case_id_value: str | None = None
         try:
             # Case preparation, admission and grouped-run creation are one
             # transaction: a conflicting writer cannot observe half-applied case
@@ -669,27 +704,58 @@ class TopicCaseService:
                 parameters=parameters,
                 started_at=run_started_at,
             )
-            session.commit()
+            # Captured before commit so no attribute access can fail afterwards.
             case_id_value = case.id
+            session.commit()
+            committed = True
         except Exception:
             session.rollback()
             raise
         finally:
-            session.close()
+            try:
+                session.close()
+            except Exception as exc:
+                # Nothing after a successful commit may strand the run row and its
+                # owner claim; a close failure is still a failed invocation.
+                if committed and case_id_value is not None:
+                    self._abandon_stalled_run(
+                        case_id=case_id_value,
+                        run_id=investigation_run_id,
+                        owner_token=owner_token,
+                        error=exc,
+                    )
+                raise
 
-        case = self._reload_case(case_id_value)
-        context = CaseRunContext(
-            case=case,
-            run_started_at=run_started_at,
-            output_dir=(output_dir or self.output_root) / "cases" / case.slug,
-            run_trigger=effective_trigger.value,
-            requested_start_stage=start_stage,
-            owner_token=owner_token,
-            investigation_run_id=investigation_run_id,
-            predecessor_run_id=predecessor_run_id,
-        )
-        if start_stage != CaseStageName.BOOTSTRAP:
-            self._hydrate_context_from_case(context)
+        if case_id_value is None:  # defensive: the commit path always sets it
+            raise RuntimeError("Grouped run was committed without a case reference")
+
+        # The grouped-run row and the owner claim are already committed, but the
+        # in-memory context does not exist yet. A failure while reloading the case
+        # or hydrating the context must still record a terminal run state and
+        # release the claim; otherwise the case stays RUNNING with a live owner and
+        # every later case-bound write is rejected until a manual CLI interrupt.
+        try:
+            case = self._reload_case(case_id_value)
+            context = CaseRunContext(
+                case=case,
+                run_started_at=run_started_at,
+                output_dir=(output_dir or self.output_root) / "cases" / case.slug,
+                run_trigger=effective_trigger.value,
+                requested_start_stage=start_stage,
+                owner_token=owner_token,
+                investigation_run_id=investigation_run_id,
+                predecessor_run_id=predecessor_run_id,
+            )
+            if start_stage != CaseStageName.BOOTSTRAP:
+                self._hydrate_context_from_case(context)
+        except Exception as exc:
+            self._abandon_stalled_run(
+                case_id=case_id_value,
+                run_id=investigation_run_id,
+                owner_token=owner_token,
+                error=exc,
+            )
+            raise
 
         try:
             effective_automation_mode = _normalize_automation_mode(
@@ -774,7 +840,7 @@ class TopicCaseService:
                         forced_status=InvestigationRunStatus.FAILED,
                         forced_coverage=InvestigationCoverage.FAILED,
                         error={
-                            "message": str(exc),
+                            "message": _bounded_error_message(exc),
                             "stage": (
                                 context.case.current_stage.value
                                 if context.case.current_stage is not None
@@ -941,7 +1007,14 @@ class TopicCaseService:
                 expected_ref_id=run_id,
             )
             run = None
-            if interrupted.kind == OWNER_KIND_RUN and interrupted.ref_id:
+            if interrupted.kind == OWNER_KIND_RUN:
+                # Clearing a claim whose run is missing or already finished would
+                # report a recovery that did not happen, and any raise here rolls
+                # the clear back inside the same transaction.
+                if not interrupted.ref_id:
+                    raise ValueError(
+                        "The active run owner has no investigation run reference"
+                    )
                 run = (
                     session.execute(
                         select(InvestigationRun).where(
@@ -952,14 +1025,23 @@ class TopicCaseService:
                     .scalars()
                     .first()
                 )
-                if run is not None and run.status == InvestigationRunStatus.RUNNING:
-                    run.status = InvestigationRunStatus.INTERRUPTED
-                    run.completed_at = _utcnow()
-                    run.error_json = {
-                        "reason": cleaned_reason,
-                        "interruptedAt": _utcnow().isoformat(),
-                        "interruptedKind": interrupted.kind,
-                    }
+                if run is None:
+                    raise ValueError(
+                        f"Investigation run {interrupted.ref_id} not found for "
+                        f"case {case_id}"
+                    )
+                if run.status != InvestigationRunStatus.RUNNING:
+                    raise ValueError(
+                        f"Investigation run {run.id} is {run.status.value}, not "
+                        "running; nothing to interrupt"
+                    )
+                run.status = InvestigationRunStatus.INTERRUPTED
+                run.completed_at = _utcnow()
+                run.error_json = {
+                    "reason": _bounded_error_message(cleaned_reason),
+                    "interruptedAt": _utcnow().isoformat(),
+                    "interruptedKind": interrupted.kind,
+                }
             session.commit()
             return {
                 "caseId": case_id,
@@ -1376,7 +1458,7 @@ class TopicCaseService:
             failing = session.query(IntakeItem).filter(IntakeItem.id == intake_id).first()
             if failing is not None:
                 failing.intake_status = "FAILED"
-                failing.error_message = str(exc)
+                failing.error_message = _bounded_error_message(exc)
                 try:
                     if owner_token and owner_case_id:
                         validate_case_ownership(
@@ -2511,7 +2593,7 @@ class TopicCaseService:
                 stage_run.parse_failure_count = self._count_parse_failures(result)
                 if stage_failure is not None:
                     stage_run.status = StageStatus.FAILED
-                    stage_run.error_message = str(
+                    stage_run.error_message = _bounded_error_message(
                         stage_failure.get("message")
                         or f"Stage {stage_name.value} reported failure"
                     )
@@ -2594,14 +2676,14 @@ class TopicCaseService:
                             "stage": stage_name.value,
                             "status": "FAILED",
                             "stageRunId": stage_run_id,
-                            "message": str(exc),
+                            "message": _bounded_error_message(exc),
                             "retrievalCoverage": None,
                         }
                     )
                     return
                 stage_run.status = StageStatus.FAILED
                 stage_run.completed_at = _utcnow()
-                stage_run.error_message = str(exc)
+                stage_run.error_message = _bounded_error_message(exc)
                 stage_run.duration_ms = int(
                     (_utcnow() - started_at).total_seconds() * 1000
                 )
@@ -2618,9 +2700,9 @@ class TopicCaseService:
                             if stage_name == CaseStageName.RETRIEVE
                             else "parse_failure",
                             stage=stage_name,
-                            message=str(exc),
+                            message=_bounded_error_message(exc),
                             severity="high",
-                            details={"error": str(exc)},
+                            details={"error": _bounded_error_message(exc)},
                         )
                     ],
                 )
@@ -2639,7 +2721,7 @@ class TopicCaseService:
                         "stage": stage_name.value,
                         "status": "FAILED",
                         "stageRunId": stage_run_id,
-                        "message": str(exc),
+                        "message": _bounded_error_message(exc),
                         "retrievalCoverage": None,
                     }
                 )
@@ -2705,6 +2787,43 @@ class TopicCaseService:
         )
         session.add(run)
         return run.predecessor_run_id
+
+    def _abandon_stalled_run(
+        self,
+        *,
+        case_id: str,
+        run_id: str,
+        owner_token: str,
+        error: BaseException,
+    ) -> None:
+        """Finalize a run that failed before its in-memory context existed.
+
+        The run row and owner claim are committed before the context is built, so
+        this window must still record a terminal failure and release ownership. It
+        publishes no snapshot, no successful coverage and no report pointer, and a
+        bookkeeping failure never masks the original error.
+        """
+        session = get_database().get_session_sync()
+        try:
+            run = session.get(InvestigationRun, run_id)
+            if run is not None and run.status == InvestigationRunStatus.RUNNING:
+                run.status = InvestigationRunStatus.FAILED
+                run.coverage = InvestigationCoverage.FAILED
+                run.completed_at = _utcnow()
+                run.error_json = {
+                    "message": _bounded_error_message(error),
+                    "stage": None,
+                    "abandonedBeforeStage": True,
+                }
+            release_case_ownership(session, case_id, owner_token)
+            session.commit()
+        except Exception:
+            session.rollback()
+            logger.exception(
+                "Failed to record stalled-run failure for case %s", case_id
+            )
+        finally:
+            session.close()
 
     def _end_case_ownership(self, case_id: str, token: str | None) -> None:
         """Release a long-lived case claim; never mask the run outcome."""
@@ -2928,6 +3047,37 @@ class TopicCaseService:
         except (OSError, TypeError, ValueError) as exc:
             raise OSError(f"Failed to write report manifest: {exc}") from exc
 
+    def _assert_report_path_contained(
+        self, context: CaseRunContext, destination: Path
+    ) -> None:
+        """Refuse a report destination reached through a symlink in the case tree.
+
+        Resolution alone is not enough: resolving both sides would also resolve a
+        symlinked `cases/{slug}` and make an escaping write look contained. So the
+        destination must be a lexical descendant of the configured case output
+        directory, and no component below it may be a symlink. The case directory
+        itself may be an operator-configured symlink; only components below it are
+        checked. Called before any filesystem write.
+        """
+        root = context.output_dir
+        try:
+            relative = destination.relative_to(root)
+        except ValueError as exc:
+            raise OSError(
+                f"Report destination {destination} is outside {root}"
+            ) from exc
+        if ".." in relative.parts:
+            raise OSError(
+                f"Report destination {destination} escapes the case output root"
+            )
+        current = root
+        for part in relative.parts:
+            current = current / part
+            if current.is_symlink():
+                raise OSError(
+                    f"Report path component {current} is a symlink"
+                )
+
     def _authoritative_event_ids(self, context: CaseRunContext) -> set[str]:
         """Events whose current-run extraction may legitimately remove claims.
 
@@ -2974,6 +3124,9 @@ class TopicCaseService:
         observed_at = _utcnow().isoformat()
         read_session = get_database().get_session_sync()
         try:
+            # One explicit read transaction, so the observation cannot mix two
+            # committed states (pysqlite does not BEGIN for plain queries).
+            begin_read_transaction(read_session)
             run = read_session.get(InvestigationRun, run_id)
             if run is None or run.case_id != context.case.id:
                 raise RuntimeError(f"Investigation run {run_id!r} is missing")
@@ -3002,6 +3155,10 @@ class TopicCaseService:
         final_dir = self._run_report_dir(context, run_id)
         temp_dir = final_dir.parent / f".tmp-{run_id}-{uuid.uuid4().hex}"
         try:
+            # Checked before any write: a symlinked `runs` component (or any other
+            # component below the case output directory) must not redirect reports.
+            self._assert_report_path_contained(context, temp_dir)
+            self._assert_report_path_contained(context, final_dir)
             final_dir.parent.mkdir(parents=True, exist_ok=True)
             self._write_report_bundle(bundle, temp_dir)
             if final_dir.exists():
@@ -3137,7 +3294,10 @@ class TopicCaseService:
                     run.status = InvestigationRunStatus.FAILED
                     run.coverage = InvestigationCoverage.FAILED
                     run.completed_at = _utcnow()
-                    run.error_json = {"message": message, "stage": "REPORT"}
+                    run.error_json = {
+                        "message": _bounded_error_message(message),
+                        "stage": "REPORT",
+                    }
             case = session.get(TopicCase, context.case.id)
             if case is not None:
                 case.status = CaseStatus.FAILED

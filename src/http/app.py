@@ -16,7 +16,7 @@ from src.cases.comparison import (
     ComparisonInvalid,
     ComparisonNotFound,
 )
-from src.cases.readers import CaptureRangeError
+from src.cases.readers import CaptureRangeError, SnapshotNotFound
 from .dependencies import get_case_service
 from .mappers import (
     map_comparison,
@@ -64,25 +64,66 @@ from .schemas import (
 
 router = APIRouter()
 
-# Deliberately explicit: E03 reads committed state only. A supplied snapshot
-# selector is rejected instead of being silently ignored, so a caller can never
-# believe it is reading historical state when it is reading the latest rows.
+# Historical readers are opt-in per route. A route that reads current committed
+# state rejects a supplied snapshot selector explicitly instead of silently
+# ignoring it, so a caller can never believe it is reading historical state when
+# it is reading the latest rows.
 UNSUPPORTED_SNAPSHOT_SELECTOR_MESSAGE = (
-    "Snapshot selectors are not supported yet; omit snapshotId/snapshot_id to "
-    "read the current committed state."
+    "This reader does not support snapshot selection; omit snapshotId/snapshot_id "
+    "or use the snapshot-aware claim, evidence or comparison reader."
 )
 
 _DEFAULT_CAPTURE_WINDOW_LENGTH = 20000
 _MAX_CAPTURE_WINDOW_LENGTH = 50000
 
+_SNAPSHOT_SELECTOR_NAMES = ("snapshotId", "snapshot_id")
 
-def _reject_snapshot_selector(*selectors: str | None) -> None:
-    """422 on any supplied (even empty) snapshot selector argument."""
-    for selector in selectors:
-        if selector is not None:
+
+def reject_snapshot_selector(request: Request) -> None:
+    """422 when an unsupported reader route is given a snapshot selector.
+
+    FastAPI ignores unknown query parameters, so an unguarded current-state
+    reader would answer with live rows while the caller believed it had pinned a
+    historical observation.
+    """
+    for name in _SNAPSHOT_SELECTOR_NAMES:
+        if name in request.query_params:
             raise HTTPException(
                 status_code=422, detail=UNSUPPORTED_SNAPSHOT_SELECTOR_MESSAGE
             )
+
+
+def _resolve_snapshot_selector(
+    snapshot_id: str | None, snapshot_id_snake: str | None
+) -> str | None:
+    """Resolve an optional snapshot selector or reject a malformed/ambiguous one."""
+    if (
+        snapshot_id is not None
+        and snapshot_id_snake is not None
+        and snapshot_id != snapshot_id_snake
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail="Conflicting snapshotId and snapshot_id selectors were supplied",
+        )
+    selector = snapshot_id if snapshot_id is not None else snapshot_id_snake
+    if selector is not None and not selector.strip():
+        raise HTTPException(status_code=422, detail="snapshotId must not be empty")
+    return selector
+
+
+def _entity_not_found_detail(
+    entity: str,
+    entity_id: str,
+    case_id: str,
+    snapshot_id: str | None,
+) -> str:
+    if snapshot_id is None:
+        return f"{entity} {entity_id} not found for case {case_id}"
+    return (
+        f"{entity} {entity_id} is not present in snapshot {snapshot_id} for case "
+        f"{case_id}"
+    )
 
 
 def _load_case_detail_or_404(service: TopicCaseService, case_id: str) -> CaseDetailResponse:
@@ -109,17 +150,28 @@ def list_cases(service: TopicCaseService = Depends(get_case_service)) -> list[Ca
     return [map_case_list_item(case) for case in service.list_cases()]
 
 
-@router.get("/api/cases/{case_id}", response_model=CaseDetailResponse)
+@router.get(
+    "/api/cases/{case_id}",
+    response_model=CaseDetailResponse,
+    dependencies=[Depends(reject_snapshot_selector)],
+)
 def get_case(case_id: str, service: TopicCaseService = Depends(get_case_service)) -> CaseDetailResponse:
     return _load_case_detail_or_404(service, case_id)
 
 
-@router.get("/api/cases/{case_id}/claims")
+@router.get(
+    "/api/cases/{case_id}/claims",
+    dependencies=[Depends(reject_snapshot_selector)],
+)
 def get_case_claims(case_id: str, service: TopicCaseService = Depends(get_case_service)):
     return _load_case_detail_or_404(service, case_id).tabs.claims
 
 
-@router.get("/api/cases/{case_id}/claims/overview", response_model=ClaimsOverviewResponse)
+@router.get(
+    "/api/cases/{case_id}/claims/overview",
+    response_model=ClaimsOverviewResponse,
+    dependencies=[Depends(reject_snapshot_selector)],
+)
 def get_case_claims_overview(
     case_id: str, service: TopicCaseService = Depends(get_case_service)
 ) -> ClaimsOverviewResponse:
@@ -136,13 +188,23 @@ def get_case_claim_detail(
     snapshot_id_snake: str | None = Query(default=None, alias="snapshot_id"),
     service: TopicCaseService = Depends(get_case_service),
 ) -> ClaimDetailDTO:
-    """One claim with its evidence passages (GET-only; creates nothing)."""
-    _reject_snapshot_selector(snapshot_id, snapshot_id_snake)
-    payload = service.get_claim_detail(case_id, claim_id)
+    """One claim with its evidence passages (GET-only; creates nothing).
+
+    ``snapshotId`` resolves the claim from that immutable observation. An
+    unknown/wrong-case snapshot is 404, as is a claim the snapshot does not
+    contain; current rows are never substituted.
+    """
+    selector = _resolve_snapshot_selector(snapshot_id, snapshot_id_snake)
+    try:
+        payload = service.get_claim_detail(
+            case_id, claim_id, snapshot_id=selector
+        )
+    except SnapshotNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     if payload is None:
         raise HTTPException(
             status_code=404,
-            detail=f"Claim {claim_id} not found for case {case_id}",
+            detail=_entity_not_found_detail("Claim", claim_id, case_id, selector),
         )
     return map_claim_detail(payload)
 
@@ -159,7 +221,11 @@ def _resolve_claim_selector(
     return claim_id if claim_id is not None else claim_id_snake
 
 
-@router.get("/api/cases/{case_id}/sources", response_model=SourceSummaryDTO)
+@router.get(
+    "/api/cases/{case_id}/sources",
+    response_model=SourceSummaryDTO,
+    dependencies=[Depends(reject_snapshot_selector)],
+)
 def get_case_sources(
     case_id: str,
     claim_id: str | None = Query(default=None, alias="claimId"),
@@ -197,7 +263,7 @@ def get_case_comparison(
     service: TopicCaseService = Depends(get_case_service),
 ) -> ComparisonDTO:
     """Deterministic two-capture comparison (P02, read-only)."""
-    _reject_snapshot_selector(snapshot_id, snapshot_id_snake)
+    selector = _resolve_snapshot_selector(snapshot_id, snapshot_id_snake)
     try:
         payload = service.get_comparison(
             case_id,
@@ -207,6 +273,7 @@ def get_case_comparison(
             right_capture_id=right_capture_id,
             limit=limit,
             offset=offset,
+            snapshot_id=selector,
         )
     except ComparisonNotFound as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -218,6 +285,7 @@ def get_case_comparison(
 @router.get(
     "/api/cases/{case_id}/investigation-runs",
     response_model=InvestigationRunListDTO,
+    dependencies=[Depends(reject_snapshot_selector)],
 )
 def get_investigation_runs(
     case_id: str,
@@ -235,6 +303,7 @@ def get_investigation_runs(
 @router.get(
     "/api/cases/{case_id}/investigation-runs/{run_id}",
     response_model=InvestigationRunDetailDTO,
+    dependencies=[Depends(reject_snapshot_selector)],
 )
 def get_investigation_run(
     case_id: str,
@@ -253,6 +322,7 @@ def get_investigation_run(
 @router.get(
     "/api/cases/{case_id}/investigation-runs/{run_id}/changes",
     response_model=RunChangesDTO,
+    dependencies=[Depends(reject_snapshot_selector)],
 )
 def get_investigation_run_changes(
     case_id: str,
@@ -276,6 +346,7 @@ def get_investigation_run_changes(
 @router.get(
     "/api/cases/{case_id}/snapshots/{snapshot_id}",
     response_model=SnapshotSummaryDTO,
+    dependencies=[Depends(reject_snapshot_selector)],
 )
 def get_case_snapshot(
     case_id: str,
@@ -292,7 +363,10 @@ def get_case_snapshot(
     return map_snapshot_summary(payload)
 
 
-@router.get("/api/cases/{case_id}/evidence")
+@router.get(
+    "/api/cases/{case_id}/evidence",
+    dependencies=[Depends(reject_snapshot_selector)],
+)
 def get_case_evidence(case_id: str, service: TopicCaseService = Depends(get_case_service)):
     return _load_case_detail_or_404(service, case_id).tabs.evidence
 
@@ -305,13 +379,24 @@ def get_case_evidence_detail(
     snapshot_id_snake: str | None = Query(default=None, alias="snapshot_id"),
     service: TopicCaseService = Depends(get_case_service),
 ) -> EvidenceDetailDTO:
-    """Source metadata, capture list and claim references. Never capture text."""
-    _reject_snapshot_selector(snapshot_id, snapshot_id_snake)
-    payload = service.get_evidence_detail(case_id, evidence_id)
+    """Source metadata, capture list and claim references. Never capture text.
+
+    ``snapshotId`` resolves the item, its capture references and its related
+    claims from that immutable observation; live rows are never substituted.
+    """
+    selector = _resolve_snapshot_selector(snapshot_id, snapshot_id_snake)
+    try:
+        payload = service.get_evidence_detail(
+            case_id, evidence_id, snapshot_id=selector
+        )
+    except SnapshotNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     if payload is None:
         raise HTTPException(
             status_code=404,
-            detail=f"Evidence {evidence_id} not found for case {case_id}",
+            detail=_entity_not_found_detail(
+                "Evidence", evidence_id, case_id, selector
+            ),
         )
     return map_evidence_detail(payload)
 
@@ -319,6 +404,7 @@ def get_case_evidence_detail(
 @router.get(
     "/api/cases/{case_id}/evidence/{evidence_id}/captures/{capture_id}",
     response_model=CaptureWindowDTO,
+    dependencies=[Depends(reject_snapshot_selector)],
 )
 def get_case_capture_window(
     case_id: str,
@@ -356,7 +442,11 @@ def get_case_capture_window(
     return map_capture_window(payload)
 
 
-@router.get("/api/cases/{case_id}/citations/{citation_id}", response_model=CitationDTO)
+@router.get(
+    "/api/cases/{case_id}/citations/{citation_id}",
+    response_model=CitationDTO,
+    dependencies=[Depends(reject_snapshot_selector)],
+)
 def get_case_citation(
     case_id: str,
     citation_id: str,
@@ -372,32 +462,40 @@ def get_case_citation(
     return map_citation_detail(payload)
 
 
-@router.get("/api/cases/{case_id}/exceptions")
+@router.get("/api/cases/{case_id}/exceptions", dependencies=[Depends(reject_snapshot_selector)])
 def get_case_exceptions(case_id: str, service: TopicCaseService = Depends(get_case_service)):
     return _load_case_detail_or_404(service, case_id).tabs.exceptions
 
 
-@router.get("/api/cases/{case_id}/parties")
+@router.get("/api/cases/{case_id}/parties", dependencies=[Depends(reject_snapshot_selector)])
 def get_case_parties(case_id: str, service: TopicCaseService = Depends(get_case_service)):
     return _load_case_detail_or_404(service, case_id).tabs.parties
 
 
-@router.get("/api/cases/{case_id}/timeline")
+@router.get("/api/cases/{case_id}/timeline", dependencies=[Depends(reject_snapshot_selector)])
 def get_case_timeline(case_id: str, service: TopicCaseService = Depends(get_case_service)):
     return _load_case_detail_or_404(service, case_id).tabs.timeline
 
 
-@router.get("/api/cases/{case_id}/run-history")
+@router.get("/api/cases/{case_id}/run-history", dependencies=[Depends(reject_snapshot_selector)])
 def get_case_run_history(case_id: str, service: TopicCaseService = Depends(get_case_service)):
     return _load_case_detail_or_404(service, case_id).tabs.runHistory
 
 
-@router.get("/api/cases/{case_id}/workflow", response_model=WorkflowDiagnosticsDTO)
+@router.get(
+    "/api/cases/{case_id}/workflow",
+    response_model=WorkflowDiagnosticsDTO,
+    dependencies=[Depends(reject_snapshot_selector)],
+)
 def get_case_workflow(case_id: str, service: TopicCaseService = Depends(get_case_service)):
     return _load_case_detail_or_404(service, case_id).tabs.workflow
 
 
-@router.get("/api/cases/{case_id}/review-activity", response_model=ReviewActivityDTO)
+@router.get(
+    "/api/cases/{case_id}/review-activity",
+    response_model=ReviewActivityDTO,
+    dependencies=[Depends(reject_snapshot_selector)],
+)
 def get_case_review_activity(
     case_id: str,
     service: TopicCaseService = Depends(get_case_service),
@@ -461,7 +559,11 @@ def post_case_annotation(
     )
 
 
-@router.get("/api/cases/{case_id}/evaluation", response_model=EvaluationSummaryDTO)
+@router.get(
+    "/api/cases/{case_id}/evaluation",
+    response_model=EvaluationSummaryDTO,
+    dependencies=[Depends(reject_snapshot_selector)],
+)
 def get_case_evaluation(
     case_id: str,
     service: TopicCaseService = Depends(get_case_service),
@@ -476,12 +578,15 @@ def get_monitoring_summary(
     return map_monitoring_summary(service.get_monitoring_summary())
 
 
-@router.get("/api/cases/{case_id}/report")
+@router.get("/api/cases/{case_id}/report", dependencies=[Depends(reject_snapshot_selector)])
 def get_case_report(case_id: str, service: TopicCaseService = Depends(get_case_service)):
     return _load_case_detail_or_404(service, case_id).tabs.report
 
 
-@router.get("/api/cases/{case_id}/report/markdown")
+@router.get(
+    "/api/cases/{case_id}/report/markdown",
+    dependencies=[Depends(reject_snapshot_selector)],
+)
 def download_case_report_markdown(
     case_id: str,
     service: TopicCaseService = Depends(get_case_service),
@@ -496,7 +601,10 @@ def download_case_report_markdown(
     return FileResponse(path, media_type="text/markdown", filename=path.name)
 
 
-@router.get("/api/cases/{case_id}/report/manifest")
+@router.get(
+    "/api/cases/{case_id}/report/manifest",
+    dependencies=[Depends(reject_snapshot_selector)],
+)
 def download_case_report_manifest(
     case_id: str,
     service: TopicCaseService = Depends(get_case_service),

@@ -1,6 +1,11 @@
 """Storage layer for Triangulate."""
 
-from src.storage.database import Database, get_database, init_database
+from src.storage.database import (
+    Database,
+    begin_read_transaction,
+    get_database,
+    init_database,
+)
 from src.storage.models import (
     Base,
     Source,
@@ -66,6 +71,7 @@ from src.storage.write_guard import (
 
 __all__ = [
     "Database",
+    "begin_read_transaction",
     "get_database",
     "init_database",
     "Base",

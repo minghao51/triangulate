@@ -15,6 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from src.cases import TopicCaseService
+from src.cases.service import MAX_ERROR_MESSAGE_CHARS
 from src.ingester.topic_fetcher import describe_source_outcomes
 from src.storage import (
     CaseStageName,
@@ -27,6 +28,7 @@ from src.storage import (
     InvestigationRunTrigger,
     StageStatus,
     init_database,
+    read_case_owner,
 )
 
 ARTICLE = {
@@ -457,3 +459,59 @@ async def test_monitor_dispatch_trigger_is_recorded(monkeypatch, tmp_path):
     runs = _runs(tmp_path, case.id)
     assert len(runs) == 1
     assert runs[0].trigger == InvestigationRunTrigger.MONITOR
+
+
+@pytest.mark.asyncio
+async def test_setup_failure_finalizes_stalled_run_and_releases_claim(
+    monkeypatch, tmp_path
+):
+    """R01/R02: the post-commit setup window cannot strand a RUNNING run.
+
+    The grouped-run row and owner claim are committed before the in-memory context
+    exists. If reloading/hydrating that context fails, the run must still be
+    finalized as failed (with a bounded message) and ownership must be released,
+    otherwise every later case-bound write is rejected until a manual interrupt.
+    """
+    service = make_service(tmp_path)
+    install_fakes(monkeypatch, service)
+    case = await service.run_case(
+        query="Stalled run", output_dir=tmp_path, conflict="ukraine_war"
+    )
+    runs_before = _runs(tmp_path, case.id)
+
+    oversized_message = "context hydration exploded " + "x" * 2000
+
+    def explode(_context):
+        raise RuntimeError(oversized_message)
+
+    monkeypatch.setattr(service, "_hydrate_context_from_case", explode)
+
+    with pytest.raises(RuntimeError, match="context hydration exploded"):
+        await service.run_case(
+            query="Stalled run",
+            case_id=case.id,
+            output_dir=tmp_path,
+            conflict="ukraine_war",
+            start_stage=CaseStageName.RETRIEVE,
+        )
+
+    runs = _runs(tmp_path, case.id)
+    assert len(runs) == len(runs_before) + 1
+    stalled = runs[-1]
+    assert stalled.status == InvestigationRunStatus.FAILED
+    assert stalled.coverage == InvestigationCoverage.FAILED
+    assert stalled.completed_at is not None
+    assert stalled.baseline_snapshot_id is None
+    assert stalled.result_snapshot_id is None
+    assert stalled.error_json is not None
+    assert stalled.error_json["abandonedBeforeStage"] is True
+    assert "context hydration exploded" in stalled.error_json["message"]
+    assert len(stalled.error_json["message"]) == (
+        MAX_ERROR_MESSAGE_CHARS + len(" [truncated]")
+    )
+
+    session = _session(tmp_path)
+    try:
+        assert not read_case_owner(session, case.id).is_owned
+    finally:
+        session.close()

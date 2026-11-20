@@ -518,17 +518,60 @@ def _member_for(
     session: Session, evidence: EvidenceItem, capture_id: str | None
 ) -> SourceMember:
     capture = _capture_for(session, evidence, capture_id)
-    metadata_sources = (
-        _metadata(capture.metadata_json) if capture is not None else {},
-        _metadata(evidence.capture_metadata),
+    return _member_from_values(
+        evidence_id=_as_str(evidence.id) or "",
+        publisher=_as_str(evidence.publisher),
+        origin_url=_as_str(evidence.origin_url),
+        canonical_url=_as_str(evidence.canonical_url),
+        case_article_id=_as_str(evidence.case_article_id),
+        metadata_sources=(
+            _metadata(capture.metadata_json) if capture is not None else {},
+            _metadata(evidence.capture_metadata),
+        ),
+        capture_id=_as_str(capture.id) if capture is not None else None,
+        capture_kind=(
+            _as_str(capture.capture_kind) if capture is not None else None
+        ),
+        capture_text_sha256=(
+            _as_str(capture.text_sha256) if capture is not None else None
+        ),
+        capture_normalized_text_sha256=(
+            _as_str(capture.normalized_text_sha256)
+            if capture is not None
+            else None
+        ),
+        capture_text=_as_str(capture.text) if capture is not None else None,
+        recorded_at=_iso(capture.recorded_at) if capture is not None else None,
+        observed_at=_iso(capture.observed_at) if capture is not None else None,
     )
-    origin_url = _as_str(evidence.origin_url)
-    canonical_url = _as_str(evidence.canonical_url)
+
+
+def _member_from_values(
+    *,
+    evidence_id: str,
+    publisher: str | None,
+    origin_url: str | None,
+    canonical_url: str | None,
+    case_article_id: str | None,
+    metadata_sources: tuple[Mapping[str, Any], Mapping[str, Any]],
+    capture_id: str | None,
+    capture_kind: str | None,
+    capture_text_sha256: str | None,
+    capture_normalized_text_sha256: str | None,
+    capture_text: str | None,
+    recorded_at: str | None,
+    observed_at: str | None,
+) -> SourceMember:
+    """Build one member from already-read source values (no ORM/DB access).
+
+    Shared by the live reader and the snapshot reader so the identity/fingerprint
+    policy cannot drift between a current and a historical comparison.
+    """
     source_url = normalize_source_url(canonical_url) or normalize_source_url(
         origin_url
     )
     identity = resolve_publisher_identity(
-        publisher=_as_str(evidence.publisher),
+        publisher=publisher,
         source_url=source_url,
         metadata_sources=metadata_sources,
     )
@@ -537,33 +580,77 @@ def _member_for(
     )
     fingerprint: str | None = None
     non_whitespace = 0
-    if capture is not None:
-        fingerprint, non_whitespace = copy_fingerprint(_as_str(capture.text))
-    body_length = len(capture.text) if capture is not None else None
+    if capture_text is not None:
+        fingerprint, non_whitespace = copy_fingerprint(capture_text)
     return SourceMember(
-        evidence_id=_as_str(evidence.id) or "",
-        publisher=_as_str(evidence.publisher),
+        evidence_id=evidence_id,
+        publisher=publisher,
         publisher_key=identity.key,
         publisher_key_provisional=identity.provisional,
         host=identity.host,
         origin_url=origin_url,
         canonical_url=canonical_url,
         source_url=source_url,
-        case_article_id=_as_str(evidence.case_article_id),
+        case_article_id=case_article_id,
         explicit_origin_key=explicit_origin_key,
-        capture_id=_as_str(capture.id) if capture is not None else None,
-        capture_kind=_as_str(capture.capture_kind) if capture is not None else None,
-        capture_text_sha256=(
-            _as_str(capture.text_sha256) if capture is not None else None
-        ),
-        capture_normalized_text_sha256=(
-            _as_str(capture.normalized_text_sha256) if capture is not None else None
-        ),
-        capture_char_length=body_length,
-        recorded_at=_iso(capture.recorded_at) if capture is not None else None,
-        observed_at=_iso(capture.observed_at) if capture is not None else None,
+        capture_id=capture_id,
+        capture_kind=capture_kind,
+        capture_text_sha256=capture_text_sha256,
+        capture_normalized_text_sha256=capture_normalized_text_sha256,
+        capture_char_length=len(capture_text) if capture_text is not None else None,
+        recorded_at=recorded_at,
+        observed_at=observed_at,
         copy_fingerprint=fingerprint,
         copy_non_whitespace_count=non_whitespace,
+    )
+
+
+def source_member_from_observation(
+    *,
+    evidence: Mapping[str, Any],
+    capture: Mapping[str, Any] | None,
+    capture_text: str | None,
+) -> SourceMember:
+    """Build a comparison member from a frozen snapshot observation.
+
+    ``evidence``/``capture`` are snapshot payload rows (camelCase keys). Capture
+    bodies are never copied into the snapshot, so ``capture_text`` must be the
+    immutable capture body the caller verified against the recorded hash; pass
+    ``None`` when that body is unavailable and the copy fingerprint stays
+    explicitly unknown instead of being read from a different version.
+    """
+    capture_metadata = (
+        capture.get("metadata") if capture is not None else None
+    )
+    return _member_from_values(
+        evidence_id=_as_str(evidence.get("id")) or "",
+        publisher=_as_str(evidence.get("publisher")),
+        origin_url=_as_str(evidence.get("originUrl")),
+        canonical_url=_as_str(evidence.get("canonicalUrl")),
+        case_article_id=_as_str(evidence.get("caseArticleId")),
+        metadata_sources=(
+            _metadata(capture_metadata),
+            _metadata(evidence.get("captureMetadata")),
+        ),
+        capture_id=_as_str(capture.get("id")) if capture is not None else None,
+        capture_kind=(
+            _as_str(capture.get("captureKind")) if capture is not None else None
+        ),
+        capture_text_sha256=(
+            _as_str(capture.get("textSha256")) if capture is not None else None
+        ),
+        capture_normalized_text_sha256=(
+            _as_str(capture.get("normalizedTextSha256"))
+            if capture is not None
+            else None
+        ),
+        capture_text=capture_text,
+        recorded_at=(
+            _as_str(capture.get("recordedAt")) if capture is not None else None
+        ),
+        observed_at=(
+            _as_str(capture.get("observedAt")) if capture is not None else None
+        ),
     )
 
 
@@ -698,4 +785,5 @@ __all__ = [
     "read_source_member",
     "read_source_summary",
     "resolve_publisher_identity",
+    "source_member_from_observation",
 ]

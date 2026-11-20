@@ -11,6 +11,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
+import typer
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -668,4 +669,81 @@ def test_http_conflicting_review_maps_to_409(tmp_path):
 
     assert response.status_code == 409
     assert "owned by a run" in response.json()["detail"]
+
+
+
+def test_interrupt_rejects_finished_or_missing_run_and_keeps_ownership(tmp_path):
+    """A rejected interrupt must not clear ownership (R02 review finding)."""
+    service = make_service(tmp_path)
+    case = seed_case(service)
+
+    seed_running_run(tmp_path, case.id, run_id="run-done")
+    session = db_session(tmp_path)
+    try:
+        run = session.get(InvestigationRun, "run-done")
+        assert run is not None
+        run.status = InvestigationRunStatus.SUCCEEDED
+        run.completed_at = run.started_at
+        session.commit()
+    finally:
+        session.close()
+
+    finished_token = claim_case(tmp_path, case.id, ref_id="run-done")
+    with pytest.raises(ValueError, match="not running"):
+        service.interrupt_case(
+            case.id, run_id="run-done", reason="stale", confirmed=True
+        )
+    assert owner(tmp_path, case.id).is_owned
+    assert service.get_case_owner(case.id)["refId"] == "run-done"
+    session = db_session(tmp_path)
+    try:
+        run = session.get(InvestigationRun, "run-done")
+        assert run is not None and run.status == InvestigationRunStatus.SUCCEEDED
+    finally:
+        session.close()
+
+    release_case(tmp_path, case.id, finished_token)
+
+    claim_case(tmp_path, case.id, ref_id="run-missing")
+    with pytest.raises(ValueError, match="not found"):
+        service.interrupt_case(
+            case.id, run_id="run-missing", reason="stale", confirmed=True
+        )
+    assert owner(tmp_path, case.id).is_owned
+    assert service.get_case_owner(case.id)["refId"] == "run-missing"
+
+
+def test_interrupt_command_exits_nonzero_on_rejection_and_cancel(tmp_path, monkeypatch):
+    """Automation must not read a rejected/cancelled recovery as success."""
+    from src.cli.commands import cases as cli_cases
+
+    class RejectingService:
+        def interrupt_case(self, *args, **kwargs):
+            raise ValueError("nothing to interrupt")
+
+    monkeypatch.setattr(
+        cli_cases, "build_case_service", lambda output: RejectingService()
+    )
+    with pytest.raises(typer.Exit) as rejected:
+        cli_cases.cmd_interrupt_case(
+            "case-x",
+            run_id="run-x",
+            token=None,
+            reason="stuck",
+            yes=True,
+            output=tmp_path,
+        )
+    assert rejected.value.exit_code == 1
+
+    monkeypatch.setattr(cli_cases.Confirm, "ask", lambda *a, **k: False)
+    with pytest.raises(typer.Exit) as cancelled:
+        cli_cases.cmd_interrupt_case(
+            "case-x",
+            run_id="run-x",
+            token=None,
+            reason="stuck",
+            yes=False,
+            output=tmp_path,
+        )
+    assert cancelled.value.exit_code == 1
 

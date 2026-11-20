@@ -22,13 +22,24 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from src.cases._support import _claim_signature
+from src.cases.history import (
+    get_case_snapshot,
+    snapshot_entities,
+    snapshot_entity_list,
+    snapshot_payload,
+)
 from src.cases.provenance import (
     REASON_IDENTICAL_CAPTURE_TEXT,
     SourceMember,
     build_source_summary,
     read_source_member,
+    source_member_from_observation,
 )
-from src.cases.readers import link_read_model
+from src.cases.readers import (
+    link_read_model,
+    read_immutable_capture_text,
+    snapshot_link_read_model,
+)
 from src.storage import (
     Claim,
     ClaimEvidenceLink,
@@ -41,6 +52,15 @@ from src.storage import (
 COMPARISON_POLICY_VERSION = "comparison-read-policy-v1"
 DEFAULT_COMPARISON_LIMIT = 25
 MAX_COMPARISON_LIMIT = 100
+
+SNAPSHOT_CAVEAT = (
+    "This comparison was resolved from the pinned snapshot observation; claim "
+    "links added after that observation are never used."
+)
+SNAPSHOT_ALIGNMENT_NOTE = (
+    "persisted capture-linked assessments frozen in the selected snapshot only; "
+    "current links are never substituted for a historical observation"
+)
 
 
 class ComparisonNotFound(LookupError):
@@ -178,7 +198,7 @@ def _passage_model(link: ClaimEvidenceLink, claim: Claim) -> dict[str, Any]:
 
 def _coverage(
     *,
-    attributed_links: list[ClaimEvidenceLink],
+    attributed_links: list[Any],
     other_capture_links: int,
     unattributed_links: int,
     linked_claim_count: int,
@@ -449,6 +469,111 @@ def _dependency(
     }
 
 
+def _claim_rows(
+    left_claims: dict[str, dict[str, Any]],
+    right_claims: dict[str, dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Pair the two exact-signature claim maps into deterministic rows.
+
+    Shared by the live and snapshot comparisons so pairing, contradiction and
+    one-sided caveats cannot drift between a current and a historical read.
+    """
+    rows: list[dict[str, Any]] = []
+    for signature in sorted(set(left_claims) | set(right_claims)):
+        left = left_claims.get(signature)
+        right = right_claims.get(signature)
+        if left is not None and right is not None:
+            status = "shared"
+        elif left is not None:
+            status = "left_only"
+        else:
+            status = "right_only"
+        claim_text = (
+            (left or {}).get("claim_text")
+            or (right or {}).get("claim_text")
+            or ""
+        )
+        rows.append(
+            {
+                "claim_signature": signature,
+                "claim_text": claim_text,
+                "status": status,
+                "left": left,
+                "right": right,
+                "contradiction": _contradiction(left, right),
+                "caveat": (
+                    "This assertion was extracted from the selected capture on "
+                    "one side only; that is not evidence that the other source "
+                    "omitted, lied or disagreed."
+                    if status != "shared"
+                    else None
+                ),
+            }
+        )
+    return rows
+
+
+def _comparison_payload(
+    *,
+    case_id: str,
+    left_side: dict[str, Any],
+    right_side: dict[str, Any],
+    left_capture_id: str | None,
+    right_capture_id: str | None,
+    left_claims: dict[str, dict[str, Any]],
+    right_claims: dict[str, dict[str, Any]],
+    dependency: dict[str, Any],
+    limit: int,
+    offset: int,
+    snapshot_id: str | None,
+    alignment_note: str,
+    extra_caveats: tuple[str, ...] = (),
+) -> dict[str, Any]:
+    """Assemble the comparison response shared by live and snapshot reads."""
+    rows = _claim_rows(left_claims, right_claims)
+    total = len(rows)
+    page = rows[offset : offset + limit]
+    caveats = [
+        "Rows are paired only by exact claim_signature; paraphrases are not merged.",
+        "One-sided rows describe extraction coverage, not source behavior.",
+        "The recorded analysis scope is the body region actually supplied to the extractor; a truncated prefix is not the whole capture.",
+        "No model, network or source-capture call is made by this read.",
+    ]
+    caveats.extend(extra_caveats)
+    return {
+        "case_id": case_id,
+        "left": left_side,
+        "right": right_side,
+        "left_capture_id": left_capture_id,
+        "right_capture_id": right_capture_id,
+        "snapshot_id": snapshot_id,
+        "dependency": dependency,
+        "claims": {
+            "rows": page,
+            "total": total,
+            "limit": limit,
+            "offset": offset,
+            "has_more": offset + len(page) < total,
+        },
+        "policy": {
+            "version": COMPARISON_POLICY_VERSION,
+            "claim_identity": (
+                "exact claim_signature (SHA-256 of lowercased, stripped claim "
+                "text); paraphrases are never merged"
+            ),
+            "alignment": alignment_note,
+            "dependency_policy": "source-dependency-policy-v1",
+            "limitations": [
+                "Not extracted on one side does not mean the source omitted, lied or disagreed.",
+                "Historical claim alignment is unavailable where no link persisted for the selected capture.",
+                "Copy/dependency warnings are deterministic P01 edges, not proof of independence when absent.",
+                "Near-duplicate and semantic paraphrase detection are not implemented.",
+            ],
+        },
+        "caveats": caveats,
+    }
+
+
 def read_comparison(
     session: Session,
     *,
@@ -459,12 +584,17 @@ def read_comparison(
     right_capture_id: str | None = None,
     limit: int = DEFAULT_COMPARISON_LIMIT,
     offset: int = 0,
+    snapshot_id: str | None = None,
 ) -> dict[str, Any]:
     """Read one deterministic two-capture comparison for an owned case.
 
     Raises :class:`ComparisonNotFound` for unknown/foreign case, evidence or
     capture resources (404) and :class:`ComparisonInvalid` for a same-evidence
     or otherwise malformed selector (422).
+
+    With ``snapshot_id`` both sides, their pinned captures and the paired claims
+    are resolved from that snapshot's frozen payload; live links and the live
+    current-capture pointers are never substituted.
     """
     if left_evidence_id == right_evidence_id:
         raise ComparisonInvalid(
@@ -485,6 +615,19 @@ def read_comparison(
     case = session.get(TopicCase, case_id)
     if case is None:
         raise ComparisonNotFound(f"Case {case_id} not found")
+
+    if snapshot_id is not None:
+        return _read_snapshot_comparison(
+            session,
+            case_id=case_id,
+            snapshot_id=snapshot_id,
+            left_evidence_id=left_evidence_id,
+            right_evidence_id=right_evidence_id,
+            left_capture_id=left_capture_id,
+            right_capture_id=right_capture_id,
+            limit=limit,
+            offset=offset,
+        )
 
     left_evidence = _owned_evidence(
         session, case_id=case_id, evidence_id=left_evidence_id
@@ -522,81 +665,314 @@ def read_comparison(
         capture_id=_as_str(right_capture.id),
     )
 
-    rows: list[dict[str, Any]] = []
-    for signature in sorted(set(left_claims) | set(right_claims)):
-        left = left_claims.get(signature)
-        right = right_claims.get(signature)
-        if left is not None and right is not None:
-            status = "shared"
-        elif left is not None:
-            status = "left_only"
-        else:
-            status = "right_only"
-        claim_text = (
-            (left or {}).get("claim_text")
-            or (right or {}).get("claim_text")
-            or ""
+    dependency = _dependency(left_member, right_member, case_id=case_id)
+    return _comparison_payload(
+        case_id=case_id,
+        left_side=left_side,
+        right_side=right_side,
+        left_capture_id=_as_str(left_capture.id),
+        right_capture_id=_as_str(right_capture.id),
+        left_claims=left_claims,
+        right_claims=right_claims,
+        dependency=dependency,
+        limit=limit,
+        offset=offset,
+        snapshot_id=None,
+        alignment_note=(
+            "persisted capture-linked assessments for the selected capture "
+            "only; current links are never substituted for an older capture"
+        ),
+    )
+
+
+def _snapshot_captures_by_evidence(
+    payload: dict[str, Any],
+) -> dict[str, list[dict[str, Any]]]:
+    """Group the snapshot's capture references by owning evidence ID."""
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for capture in snapshot_entity_list(payload, "captures"):
+        evidence_id = _as_str(capture.get("evidenceId"))
+        if evidence_id is None:
+            continue
+        grouped.setdefault(evidence_id, []).append(capture)
+    return grouped
+
+
+def _snapshot_selected_capture(
+    *,
+    evidence: dict[str, Any],
+    captures: list[dict[str, Any]],
+    requested_capture_id: str | None,
+) -> dict[str, Any]:
+    """Resolve the pinned capture from the observation, never from live state.
+
+    An explicit capture that the snapshot does not record is a 404; the live
+    capture list is not consulted and the current pointer is not guessed.
+    """
+    evidence_id = _as_str(evidence.get("id")) or ""
+    capture_id = (
+        requested_capture_id
+        if requested_capture_id is not None
+        else _as_str(evidence.get("currentCaptureId"))
+    )
+    if capture_id is None:
+        raise ComparisonNotFound(
+            f"Evidence {evidence_id} has no capture recorded in this snapshot"
         )
-        rows.append(
-            {
-                "claim_signature": signature,
-                "claim_text": claim_text,
-                "status": status,
-                "left": left,
-                "right": right,
-                "contradiction": _contradiction(left, right),
-                "caveat": (
-                    "This assertion was extracted from the selected capture on "
-                    "one side only; that is not evidence that the other source "
-                    "omitted, lied or disagreed."
-                    if status != "shared"
-                    else None
-                ),
-            }
+    for capture in captures:
+        if _as_str(capture.get("id")) == capture_id:
+            return capture
+    raise ComparisonNotFound(
+        f"Capture {capture_id} is not part of this snapshot for evidence "
+        f"{evidence_id}"
+    )
+
+
+def _snapshot_claim_signature(claim: dict[str, Any]) -> str:
+    stored = _as_str(claim.get("claimSignature"))
+    if stored:
+        return stored
+    return _claim_signature(_as_str(claim.get("text")) or "")
+
+
+def _snapshot_passage_model(
+    link: dict[str, Any], claim: dict[str, Any]
+) -> dict[str, Any]:
+    reference = snapshot_link_read_model(link)
+    return {
+        "claim_id": _as_str(claim.get("id")),
+        "claim_text": _as_str(claim.get("text")) or "",
+        "claim_signature": _snapshot_claim_signature(claim),
+        "link_id": _as_str(link.get("id")),
+        "citation_id": reference["citation_id"],
+        "capture_id": reference["capture_id"],
+        "relationship": reference["effective_relation"],
+        "raw_relation": reference["relation"],
+        "alignment_status": reference["alignment_status"],
+        "quote": reference["quote"],
+        "start_char": reference["start_char"],
+        "end_char": reference["end_char"],
+        "assessment_origin": reference["assessment_origin"],
+        "assessment_version": reference["assessment_version"],
+        "diagnostic_reason": reference["diagnostic_reason"],
+    }
+
+
+def _snapshot_side(
+    *,
+    session: Session,
+    payload: dict[str, Any],
+    evidence: dict[str, Any],
+    capture: dict[str, Any],
+    claims: dict[str, dict[str, Any]],
+) -> tuple[dict[str, Any], dict[str, Any], SourceMember]:
+    """Build one historical comparison side plus its exact-signature claim map."""
+    evidence_id = _as_str(evidence.get("id")) or ""
+    capture_id = _as_str(capture.get("id")) or ""
+    links = [
+        link
+        for link in snapshot_entity_list(payload, "links")
+        if _as_str(link.get("evidenceId")) == evidence_id
+    ]
+    owned_links = [
+        link
+        for link in links
+        if (_as_str(link.get("claimId")) or "") in claims
+    ]
+    attributed_links = [
+        link for link in owned_links if _as_str(link.get("captureId")) == capture_id
+    ]
+    other_capture_links = sum(
+        1
+        for link in owned_links
+        if _as_str(link.get("captureId")) not in (None, capture_id)
+    )
+    unattributed_links = sum(
+        1 for link in owned_links if _as_str(link.get("captureId")) is None
+    )
+
+    claim_groups: dict[str, list[tuple[dict[str, Any], dict[str, Any]]]] = {}
+    for link in attributed_links:
+        claim = claims[_as_str(link.get("claimId")) or ""]
+        claim_groups.setdefault(_snapshot_claim_signature(claim), []).append(
+            (claim, link)
         )
 
-    total = len(rows)
-    page = rows[offset : offset + limit]
-    dependency = _dependency(left_member, right_member, case_id=case_id)
-    return {
-        "case_id": case_id,
-        "left": left_side,
-        "right": right_side,
-        "left_capture_id": _as_str(left_capture.id),
-        "right_capture_id": _as_str(right_capture.id),
-        "dependency": dependency,
-        "claims": {
-            "rows": page,
-            "total": total,
-            "limit": limit,
-            "offset": offset,
-            "has_more": offset + len(page) < total,
-        },
-        "policy": {
-            "version": COMPARISON_POLICY_VERSION,
-            "claim_identity": (
-                "exact claim_signature (SHA-256 of lowercased, stripped claim "
-                "text); paraphrases are never merged"
+    claim_map: dict[str, dict[str, Any]] = {}
+    for signature, entries in claim_groups.items():
+        entries.sort(
+            key=lambda item: (
+                _as_str(item[0].get("id")) or "",
+                _as_str(item[1].get("id")) or "",
+            )
+        )
+        representative = entries[0][0]
+        passages = [
+            _snapshot_passage_model(link, claim) for claim, link in entries
+        ]
+        passages.sort(
+            key=lambda item: (item["citation_id"] or "", item["link_id"] or "")
+        )
+        claim_map[signature] = {
+            "claim_ids": sorted(
+                {_as_str(claim.get("id")) or "" for claim, _ in entries}
             ),
-            "alignment": (
-                "persisted capture-linked assessments for the selected capture "
-                "only; current links are never substituted for an older capture"
+            "claim_id": _as_str(representative.get("id")),
+            "claim_text": _as_str(representative.get("text")) or "",
+            "claim_signature": signature,
+            "passages": passages,
+        }
+
+    body = read_immutable_capture_text(
+        session,
+        capture_id=capture_id,
+        evidence_id=evidence_id,
+        recorded_text_sha256=_as_str(capture.get("textSha256")),
+    )
+    if body is None:
+        raise ComparisonNotFound(
+            f"Capture {capture_id} is recorded in this snapshot but its immutable "
+            "text is unavailable"
+        )
+    member = source_member_from_observation(
+        evidence=evidence, capture=capture, capture_text=body
+    )
+    side = {
+        "evidence_id": evidence_id,
+        "capture_id": capture_id,
+        "title": _as_str(evidence.get("title")),
+        "publisher": _as_str(evidence.get("publisher")),
+        "origin_url": _as_str(evidence.get("originUrl")),
+        "canonical_url": _as_str(evidence.get("canonicalUrl")),
+        "published_at": _as_str(evidence.get("publishedAt")),
+        "source_type": _as_str(evidence.get("sourceType")),
+        "verification_status": _as_str(evidence.get("verificationStatus")),
+        "capture_kind": _as_str(capture.get("captureKind")),
+        "recorded_at": _as_str(capture.get("recordedAt")),
+        "observed_at": _as_str(capture.get("observedAt")),
+        "text_sha256": _as_str(capture.get("textSha256")),
+        "char_length": len(body),
+        "analysis_scope": _analysis_scope(
+            _snapshot_extraction_metadata(capture, evidence)
+        ),
+        "publisher_key": member.publisher_key,
+        "publisher_key_provisional": member.publisher_key_provisional,
+        "host": member.host,
+        "source_url": member.source_url,
+        "copy_fingerprint": member.copy_fingerprint,
+        "copy_non_whitespace_count": member.copy_non_whitespace_count,
+        "coverage": _coverage(
+            attributed_links=attributed_links,
+            other_capture_links=other_capture_links,
+            unattributed_links=unattributed_links,
+            linked_claim_count=len(
+                {
+                    _as_str(link.get("claimId"))
+                    for link in owned_links
+                    if _as_str(link.get("claimId")) is not None
+                }
             ),
-            "dependency_policy": "source-dependency-policy-v1",
-            "limitations": [
-                "Not extracted on one side does not mean the source omitted, lied or disagreed.",
-                "Historical claim alignment is unavailable where no link persisted for the selected capture.",
-                "Copy/dependency warnings are deterministic P01 edges, not proof of independence when absent.",
-                "Near-duplicate and semantic paraphrase detection are not implemented.",
-            ],
-        },
-        "caveats": [
-            "Rows are paired only by exact claim_signature; paraphrases are not merged.",
-            "One-sided rows describe extraction coverage, not source behavior.",
-            "The recorded analysis scope is the body region actually supplied to the extractor; a truncated prefix is not the whole capture.",
-            "No model, network or source-capture call is made by this read.",
-        ],
+            attributed_claim_count=len(
+                {
+                    _as_str(link.get("claimId"))
+                    for link in attributed_links
+                    if _as_str(link.get("claimId")) is not None
+                }
+            ),
+        ),
     }
+    return side, claim_map, member
+
+
+def _snapshot_extraction_metadata(
+    capture: dict[str, Any], evidence: dict[str, Any]
+) -> Any:
+    """Frozen extraction scope from the snapshot's capture, then evidence, metadata."""
+    raw_capture_metadata = capture.get("metadata")
+    capture_metadata = (
+        raw_capture_metadata if isinstance(raw_capture_metadata, dict) else {}
+    )
+    raw_evidence_metadata = evidence.get("captureMetadata")
+    evidence_metadata = (
+        raw_evidence_metadata if isinstance(raw_evidence_metadata, dict) else {}
+    )
+    return capture_metadata.get("extraction") or evidence_metadata.get("extraction")
+
+
+def _read_snapshot_comparison(
+    session: Session,
+    *,
+    case_id: str,
+    snapshot_id: str,
+    left_evidence_id: str,
+    right_evidence_id: str,
+    left_capture_id: str | None,
+    right_capture_id: str | None,
+    limit: int,
+    offset: int,
+) -> dict[str, Any]:
+    """Pair two pinned captures using one snapshot's frozen claims and links."""
+    snapshot = get_case_snapshot(session, case_id=case_id, snapshot_id=snapshot_id)
+    if snapshot is None:
+        raise ComparisonNotFound(
+            f"Snapshot {snapshot_id} not found for case {case_id}"
+        )
+    payload = snapshot_payload(snapshot)
+    evidence_index = snapshot_entities(payload, "evidence")
+    left_evidence = evidence_index.get(left_evidence_id)
+    if left_evidence is None:
+        raise ComparisonNotFound(
+            f"Evidence {left_evidence_id} is not part of snapshot {snapshot_id}"
+        )
+    right_evidence = evidence_index.get(right_evidence_id)
+    if right_evidence is None:
+        raise ComparisonNotFound(
+            f"Evidence {right_evidence_id} is not part of snapshot {snapshot_id}"
+        )
+
+    captures_by_evidence = _snapshot_captures_by_evidence(payload)
+    left_capture = _snapshot_selected_capture(
+        evidence=left_evidence,
+        captures=captures_by_evidence.get(left_evidence_id, []),
+        requested_capture_id=left_capture_id,
+    )
+    right_capture = _snapshot_selected_capture(
+        evidence=right_evidence,
+        captures=captures_by_evidence.get(right_evidence_id, []),
+        requested_capture_id=right_capture_id,
+    )
+
+    claims = snapshot_entities(payload, "claims")
+    left_side, left_claims, left_member = _snapshot_side(
+        session=session,
+        payload=payload,
+        evidence=left_evidence,
+        capture=left_capture,
+        claims=claims,
+    )
+    right_side, right_claims, right_member = _snapshot_side(
+        session=session,
+        payload=payload,
+        evidence=right_evidence,
+        capture=right_capture,
+        claims=claims,
+    )
+
+    return _comparison_payload(
+        case_id=case_id,
+        left_side=left_side,
+        right_side=right_side,
+        left_capture_id=_as_str(left_capture.get("id")),
+        right_capture_id=_as_str(right_capture.get("id")),
+        left_claims=left_claims,
+        right_claims=right_claims,
+        dependency=_dependency(left_member, right_member, case_id=case_id),
+        limit=limit,
+        offset=offset,
+        snapshot_id=snapshot_id,
+        alignment_note=SNAPSHOT_ALIGNMENT_NOTE,
+        extra_caveats=(SNAPSHOT_CAVEAT,),
+    )
 
 
 __all__ = [

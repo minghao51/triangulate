@@ -1402,18 +1402,66 @@ def test_capture_window_http_rejects_bad_ranges_with_422(
 
 @pytest.mark.parametrize("selector", ["snapshotId", "snapshot_id"])
 @pytest.mark.parametrize("resource", ["claim", "evidence"])
-def test_snapshot_selectors_are_rejected_explicitly(
+def test_snapshot_aware_readers_resolve_or_404(
     client: TestClient, workbench: Workbench, selector: str, resource: str
 ) -> None:
+    """Supported selectors are accepted and an unknown snapshot is a 404.
+
+    A supplied selector must never silently fall back to the current rows, so an
+    unresolvable snapshot ID resolves explicitly instead of returning live data.
+    """
     path = {
         "claim": f"/api/cases/{workbench.case_id}/claims/{workbench.claim_id}",
         "evidence": (
             f"/api/cases/{workbench.case_id}/evidence/{workbench.evidence['exact']}"
         ),
     }[resource]
+    response = client.get(path, params={selector: "snapshot-missing"})
+    assert response.status_code == 404
+    assert "Snapshot snapshot-missing not found" in response.text
+
+
+@pytest.mark.parametrize("selector", ["snapshotId", "snapshot_id"])
+@pytest.mark.parametrize(
+    "path_template",
+    [
+        "/api/cases/{case_id}",
+        "/api/cases/{case_id}/claims",
+        "/api/cases/{case_id}/claims/overview",
+        "/api/cases/{case_id}/evidence",
+        "/api/cases/{case_id}/sources",
+        "/api/cases/{case_id}/citations/{citation_id}",
+        "/api/cases/{case_id}/parties",
+        "/api/cases/{case_id}/timeline",
+        "/api/cases/{case_id}/exceptions",
+        "/api/cases/{case_id}/run-history",
+        "/api/cases/{case_id}/report",
+        "/api/cases/{case_id}/investigation-runs",
+        "/api/cases/{case_id}/investigation-runs/run-x",
+        "/api/cases/{case_id}/investigation-runs/run-x/changes",
+        "/api/cases/{case_id}/snapshots/snap-x",
+        (
+            "/api/cases/{case_id}/evidence/{evidence_id}"
+            "/captures/{capture_id}"
+        ),
+    ],
+)
+def test_current_state_readers_reject_snapshot_selectors(
+    client: TestClient,
+    workbench: Workbench,
+    selector: str,
+    path_template: str,
+) -> None:
+    """Unsupported current-state readers fail explicitly instead of ignoring it."""
+    path = path_template.format(
+        case_id=workbench.case_id,
+        citation_id=workbench.citations["exact"],
+        evidence_id=workbench.evidence["exact"],
+        capture_id=workbench.captures["a_old"],
+    )
     response = client.get(path, params={selector: "abc"})
     assert response.status_code == 422
-    assert "Snapshot selectors are not supported yet" in response.text
+    assert "does not support snapshot selection" in response.text
 
 
 def test_http_404_for_unknown_and_cross_case_resources(

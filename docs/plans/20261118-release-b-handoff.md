@@ -1,9 +1,9 @@
 # Release B handoff: P03 review and Release C (R01–V01)
 
-Date: 2026-11-18. Status: **Release A and Release B are accepted; R01 and R02
-are committed, and R03a (snapshots/deltas/finalization/run APIs) is delivered and
-verified with its diff review pending. The snapshot-aware detail/comparison
-readers are the explicit R03b remainder.** Review evidence lives in the
+Date: 2026-11-18. Status: **Release A and Release B are accepted; R01, R02, R03a,
+R03b and the R03c change-origin ticket are delivered, independently reviewed and
+accepted; R01/R02/R03a are committed and R03b/R03c (plus the R01–R03a defect pass)
+are committed as `381303f`.** Review evidence lives in the
 [worker plan](20261114-evidence-workbench-worker-plan.md) §7 and the architecture
 docs. This document is the Release C handoff and remains self-contained for a
 fresh agent. Contract authority remains the
@@ -19,14 +19,15 @@ fresh agent. Contract authority remains the
 | P01 | `e95bfb2` — conservative source dependency groups |
 | P02 | `4d93c12` — deterministic comparison read API |
 | P03 | `4226856` — comparison navigation and panels; **Release B reviewed and accepted 2026-11-18** |
-| R01 | `ed8459f` — grouped invocation identity; migration 12; committed |
-| R02 | `0ea524a` — case writer admission/fencing + CLI interrupt; migration 13; committed |
-| R03a | delivered/verified 2026-11-18 (working tree) — snapshots/deltas, guarded finalization, run-specific reports, run/snapshot/changes GETs; migration 14; **diff review pending** |
-| R03b | **remaining** — snapshot-aware claim/evidence/comparison readers + selector acceptance |
-| Next ticket | **R03b — snapshot-aware historical readers (not started)** |
+| R01 | `ed8459f` — grouped invocation identity; migration 12; committed; **accepted 2026-11-18 after a defect pass** |
+| R02 | `0ea524a` — case writer admission/fencing + CLI interrupt; migration 13; committed; **accepted 2026-11-18 after a defect pass** |
+| R03a | `44b9870` — snapshots/deltas, guarded finalization, run-specific reports, run/snapshot/changes GETs; migration 14; committed; **accepted 2026-11-18 after a defect pass** |
+| R03b | `381303f` — snapshot-aware claim/evidence/comparison readers + selector acceptance; no migration; **accepted** |
+| R03c | `381303f` — change-origin honesty (`originRunId`/`observedByRunId`), count-free semantic projection, explicit read transaction, report path containment; no migration; **accepted** |
+| Next ticket | **R04 — changes and grouped history UI (not started)** |
 | Migrations | 1..14 (…12 grouped investigation runs, 13 case writer ownership, 14 immutable case snapshots) |
 | Frontend gate | `npm run check` green; `npm test -- --run` = **107 tests / 12 files** |
-| Backend gate | **487 passed, 9 deselected**; Ruff clean |
+| Backend gate | **553 passed, 9 deselected**; Ruff clean |
 | Scratch files | 382 removed after archive at `/tmp/triangulate-scratch-archive-20261118T005339Z.tar.gz` (382/382 verified, sha256 `6a38b51c41a7542819f30d23bddc0a83ebb07f8b9eda943df69e554314bad4e5`); no untracked scratch files remain |
 | Production data | untouched; B02 test-database incident remains disclosed |
 
@@ -49,8 +50,10 @@ P01/P02/P03 docs:
 4. ~~Record Release B acceptance in the worker plan and commit the documentation.~~
    Recorded (`aaa4f16`). R01 was committed (`ed8459f`) and R02 committed
    (`0ea524a`).
-5. R03a was delivered and verified (migration 14). **Review its diff, then
-   implement R03b only.** One bounded ticket at a time, parent review after each.
+5. R03a, R03b were delivered, then independently reviewed: the reviewers found
+   real gaps, so a bounded **defect pass** (R01/R02/R03a) plus **R03c** were
+   completed and re-reviewed before acceptance. **Implement R04 only.** One
+   bounded ticket at a time, parent review after each.
 
 ## 3. P03 delivered behaviour
 
@@ -115,7 +118,7 @@ the R03 ticket (snapshot-aware claim/evidence/comparison readers); S01 depends o
 E02/E03 and is technically independent of the R lane, but shared
 storage/event-store writers mean one application-code writer at a time.
 
-### R01 — Grouped invocation identity (internal only) — **delivered and committed**
+### R01 — Grouped invocation identity (internal only) — **delivered, accepted, committed**
 
 Delivered in the working tree on 2026-11-18 (migration 12, not committed): one
 `InvestigationRun` per `run_case` with per-case sequence, trigger, requested start
@@ -143,7 +146,7 @@ The original R01 scope (now delivered) was:
 - **Do not deploy/use grouped runs before R02 fencing and R03 finalization.**
   Migration/legacy regression tests required.
 
-### R02 — Case writer admission, fencing and explicit recovery — **delivered and committed**
+### R02 — Case writer admission, fencing and explicit recovery — **delivered, accepted, committed**
 
 Delivered in the working tree on 2026-11-18 (migration 13): nullable `owner_token`,
 `owner_kind`, `owner_ref_id` and `owner_claimed_at` on `topic_cases`, plus
@@ -176,7 +179,7 @@ The original R02 scope (now delivered) was:
 - Explicit test matrix per protected path; paused/finalized release ownership;
   resumed invocation gets a new owner; interrupted later commits fail.
 
-### R03a — Snapshots, deltas, finalization and run APIs — **delivered and verified**
+### R03a — Snapshots, deltas, finalization and run APIs — **delivered, accepted**
 
 Delivered in the working tree on 2026-11-18 (migration 14): immutable
 `CaseSnapshot` payloads with a stable semantic projection/hash and stored typed
@@ -191,20 +194,48 @@ and snapshot summary, with cross-case/unknown 404. Full gate **487 passed, 9
 deselected**, Ruff clean; see the worker plan §7 and
 [snapshot architecture](../architecture/20261118-case-snapshots.md).
 
-### R03b — Snapshot-aware historical readers — **remaining**
+### R03b — Snapshot-aware historical readers — **delivered and accepted**
 
-- Claim/evidence detail readers accept an optional `snapshotId`, resolve the
-  entity from that snapshot payload, and return explicit 404/unavailable states
-  instead of falling back to current rows.
-- Comparison accepts `snapshotId` and pairs the two pinned captures using that
-  snapshot's claims/links/citations; historical alignment is never silently
-  replaced by current links.
-- Remove the blanket 422 snapshot-selector rejection only where the selector is
-  genuinely supported; unsupported selectors still fail explicitly.
-- Readers must not invent actor attribution and must keep removed live claims
-  viewable with their frozen before/after text.
-- Focused tests for rewritten/deleted claims, historical comparisons, pending vs
-  unavailable snapshots, cross-case 404, and current-row independence.
+Delivered in the working tree on 2026-11-18 (no migration): `GET
+/claims/{claim_id}`, `GET /evidence/{evidence_id}` and `GET /comparison` accept an
+optional `snapshotId` (`snapshot_id` alias where the route already declared it)
+and resolve every entity from the snapshot's frozen `payload_json`, never from
+live joins. Claim detail returns frozen text/signature/status/type/party
+positions/stored counts and payload link passages whose `effectiveRelation` is
+resolved by the same policy; evidence detail returns frozen metadata, the frozen
+`currentCaptureId`, snapshot capture references (code-point length read only from
+the immutable capture row verified against the recorded hash) and frozen related
+claims; comparison pins both captures and pairs claims/links/citations from the
+payload with the same exact-signature/contradiction/dependency rules and an
+explicit pinned-observation caveat. Removed or rewritten claims stay readable
+(`liveState` reports present/text-matches), and no actor, truth, corroboration or
+independence is invented. Unknown/wrong-case snapshot → 404, entity absent from
+the snapshot → 404 (distinct message), malformed/conflicting/empty selector → 422,
+unverifiable capture body → `unavailableCaptureIds` (comparison 404s), and every
+reader without historical support (case detail, tabs, claims/overview lists,
+sources, citations, report, run/snapshot readers, capture windows) rejects the
+selector explicitly. Additive payload
+fidelity fields do not change `semanticHash`. Full gate in the disposable copy:
+**543 passed, 9 deselected; Ruff clean**; frontend type-only addition of the new optional fields with `npm run check` green and 107 tests / 12 files. See the
+[snapshot architecture](../architecture/20261118-case-snapshots.md).
+
+### R03c — Change-origin honesty and consistent observation — **delivered and accepted**
+
+Committed as `381303f` on 2026-11-18 (no migration). Each delta item now
+records the two separate facts: `originRunId` is the entity's recorded grouped run
+(`Event.investigation_run_id`, baseline observation for removals) or `null` when
+nothing recorded it, and `observedByRunId` is the run whose observation produced
+the item. Articles, exceptions and links have no run of their own, so they stay
+`unknown` instead of being attributed to the observer or inheriting the claim's
+origin. Derived counts (claim support/oppose/source-diversity, narrative source
+count) left the semantic projection, so a count-only difference can no longer
+change `semanticHash` or imply a change without a typed item. Snapshot composition
+opens an explicit SQLite read transaction (pysqlite does not issue `BEGIN` for
+plain queries), and report destinations are refused if any component below the
+case output directory is a symlink. Full gate **553 passed, 9 deselected; Ruff
+clean**; logs `/tmp/triangulate-defectpass-{full,ruff}.log`. Note: removing the
+counts changes `semanticHash` for observations taken after the fix; typed deltas
+are unaffected.
 
 ### R04 — Changes and grouped history UI
 
@@ -295,11 +326,17 @@ uv run ruff check src tests --output-format concise
 
 - P03 is committed and **accepted as Release B** (2026-11-18).
 - R01 (`ed8459f`, migration 12) and R02 (`0ea524a`, migration 13) are committed.
-- R03a is implemented in the working tree (migration 14) and verified; its diff
-  still needs owner/parent review. **R03b (snapshot-aware claim/evidence/
-  comparison readers) is not implemented**: those endpoints still reject a
-  snapshot selector with 422, so historical/removed claims and historical
-  comparisons are stored but not yet inspectable through them.
+- R03a (migration 14) and R03b (snapshot-aware readers) are implemented and
+  verified; their diffs still need owner/parent review. Historical/removed claims
+  and historical comparisons are now inspectable through the claim/evidence/
+  comparison readers. R04's historical change links can use them.
+- `snapshotId` names a *published* observation; a running invocation has no
+  snapshot ID, so there is no reader-side pending state (the run-level `changes`
+  contract keeps `initial|ready|pending|unavailable`).
+- Historical comparison sides require the immutable capture body: if a snapshot's
+  recorded hash no longer matches the stored capture row, evidence detail lists it
+  in `unavailableCaptureIds` and the comparison 404s instead of degrading
+  silently.
 - Local `main` is ahead of `origin/main` (Release B acceptance, R01, R02 and this
   R03a commit) and has not been pushed.
 - Snapshots are observations of committed state, not a whole-case transaction;
@@ -308,6 +345,15 @@ uv run ruff check src tests --output-format concise
 - A process death can leave a case ownership claim until an operator runs
   `triangulate case interrupt` (explicit CLI recovery); there is no elapsed-time
   or GET-side recovery, and external direct-SQL scripts remain unfenced.
+  `interrupt` now rejects a reference that is missing or not `RUNNING` (rolling the
+  ownership clear back) and exits nonzero on any non-interrupting path.
+- Change items report `originRunId` (the entity's recorded run, or null) separately
+  from `observedByRunId` (the observing run). Articles, exceptions and links have no
+  recorded run, so their origin is `null` by design — never the observer and never
+  the claim's event run. `originRunId` is provenance, not "who changed this field".
+- The semantic projection no longer includes derived claim/narrative counts, so
+  `semanticHash` values taken before that fix differ from later ones for identical
+  data; typed deltas are unaffected because they compare fields, not hashes.
 - The scratch archive is in `/tmp` and is not durable across a machine cleanup;
   copy it somewhere durable if the old one-offs must be retained.
 - P02 test fixtures now expose `seed_workbench(tmp_path)` for browser seeding;
@@ -318,33 +364,77 @@ uv run ruff check src tests --output-format concise
 - No `.pi-lens.json` ignore file was added; the scratch-file cascade is gone
   because the files were archived/removed.
 
-## 9. Paste-ready R03b dispatch brief
+## 9. Paste-ready R04 dispatch brief
 
 ```text
-Implement ticket R03b (the reader half of R03) from
-docs/plans/20261114-evidence-workbench-worker-plan.md (contract:
-docs/plans/20261114-evidence-workbench-specification.md §7).
-Start by reading docs/plans/20261118-release-b-handoff.md, the snapshot
-architecture doc (docs/architecture/20261118-case-snapshots.md), the R03a diff and
-the existing readers (src/cases/readers.py, comparison.py) plus their HTTP routes.
+Implement ticket R04 (changes and grouped history UI) from
+docs/plans/20261114-evidence-workbench-worker-plan.md
+(contract: docs/plans/20261114-evidence-workbench-specification.md §7).
 
-Scope: make claim and evidence detail readers accept an optional snapshotId and
-resolve the entity from that snapshot's canonical payload (frozen claim text/
-status/links/citations; evidence metadata and capture references at that
-observation). Make comparison accept snapshotId and pair the two pinned captures
-using the snapshot's claims/links/citations without substituting current rows.
-Remove the blanket 422 snapshot-selector rejection only for genuinely supported
-selectors; unsupported selectors must still fail explicitly. Return 404 when the
-entity is not in that snapshot; distinguish pending/unavailable from empty.
-Removed/rewritten live claims must remain viewable with frozen before/after text;
-never invent actor attribution or claim truth.
+Start by reading, in this order:
+1. docs/plans/20261118-release-b-handoff.md (current state, safety rules)
+2. docs/architecture/20261118-case-snapshots.md (R03a contracts and the R03b
+   snapshot-aware readers, including their 404/422/unavailable semantics)
+3. docs/architecture/20261118-investigation-runs.md and
+   docs/architecture/20261118-case-writer-fencing.md
+4. the frontend run-history surface, src/http/app.py run/snapshot routes,
+   src/http/mappers.py run mappers and src/cases/history.py readers.
 
-Do not add R04 UI, S01 search, new snapshots during GET, mutation endpoints,
-production deployment or unrelated refactors. Use the disposable backend copy and
-temporary DBs. Add focused tests plus the full backend suite and Ruff. Stop and
-report blockers rather than expanding scope.
+CURRENT STATE (2026-11-18)
+- Release A and Release B are accepted; R01, R02, R03a and R03b are delivered
+  and verified (R03a committed as 44b9870; R03b/R03c and the defect pass as
+  381303f). Local main
+  is 10+ commits ahead of origin/main and unpushed.
+- Migration history is 1..14. Backend 553 passed / 9 deselected, Ruff clean.
+  Frontend `npm run check` green, 107 tests / 12 files.
+- R04 is the only remaining ticket in the R (changes) lane before S01/S02.
 
-Return: behaviour delivered; exact files/contracts changed; snapshot resolution
-and failure-state semantics; real test output; remaining risks. Do not call
-partial work done.
+SCOPE
+- Add a small changes panel/tab to the existing run-history surface, DISTINCT
+  from stage attempts; keep /run-history stage-oriented.
+- Show baseline/target snapshot IDs, observation time, coverage and caveat,
+  paginated typed delta items with real before/after values and snapshot links.
+- Render `originRunId` and `observedByRunId` as separate facts ("recorded by run
+  X / observed by run Y"), and leave an unknown origin visibly unknown; never
+  phrase either as who changed a field.
+- Label initial/ready/pending/unavailable/unchanged correctly; partial coverage
+  must be conspicuous even when the delta is empty; an empty delta means "no
+  changes in observed data", never "all sources unchanged".
+- Historical entity links must use the snapshot-aware readers
+  (?snapshotId=) so removed/rewritten claims open the frozen observation; the
+  selector is rejected by readers without historical support, so do not add it to
+  case/claims/evidence list endpoints.
+- Extend the frontend API types with the new optional `snapshotId`, `liveState`
+  and `unavailableCaptureIds` fields when consuming them; render the
+  historical/present distinction from `liveState` and never from a live fetch.
+- No actor attribution, no "human decision" wording, no truth/corroboration or
+  independence claims; unknown origin stays unknown.
+- No-op runs create an observation with an empty delta and must not render a
+  change surge; failed/paused runs are not baselines.
+
+OUT OF SCOPE
+New backend snapshot/delta semantics beyond the delivered contracts, S01/S02
+search, any new mutation endpoint, production deployment, schema changes unless
+strictly required (allocate the next migration from the then-current registry and
+stop for review first), unrelated refactors.
+
+SAFETY
+- Run backend Python/tests only in the disposable copy recorded in
+  /tmp/triangulate-safety-verification-dir. Copy only src/ and tests/ plus
+  bias_taxonomy.toml.
+- Never touch data/, triangulate.db, .env, logs/, config.toml, the scratch
+  archive or the live database; no ingestion, cleanup or migration against it.
+- Browser checks follow the playwright-cli skill: temporary DB/config, isolated
+  session, intercepted or disposable-copy backend, record console/network
+  findings, close your own browser/server.
+- No commits, resets, branches, dependency changes, pushes or deletions without
+  owner instruction. Keep scratch work in /tmp.
+- One application-code writer at a time. Preserve the CLI-only mutation boundary,
+  the R02 case-owner guard and the GET-only read boundary.
+
+RETURN
+Behaviour delivered; exact files/components/contracts changed; pending vs
+unavailable vs empty semantics; historical-link behaviour; real migration/test
+output; frontend check/test/browser evidence; remaining risks/blockers. Do not
+call partial work done.
 ```

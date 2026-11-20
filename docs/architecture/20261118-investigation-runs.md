@@ -61,6 +61,15 @@ outcome per executed stage. Finalization:
 - a scoped run that does not include RETRIEVE reports `COMPLETE_REQUESTED_SCOPE`
   only when every requested stage completed; otherwise `UNKNOWN`.
 
+The grouped-run row and owner claim are committed before the in-memory context is
+built. A failure in that setup window (reloading the case, constructing or
+hydrating the context) now finalizes the invocation `FAILED` / coverage `FAILED`
+with `abandonedBeforeStage: true` and a bounded message, and releases ownership;
+without that, the case would stay `RUNNING` with a live owner and every later
+case-bound write would be rejected until a manual CLI interrupt. Persisted
+exception messages are bounded (500 characters plus a truncation marker); that is
+a size bound, not a claim to redact secrets.
+
 An unexpected error outside a stage transaction marks the invocation `FAILED`
 before the exception propagates. A bookkeeping failure never masks the original
 error.

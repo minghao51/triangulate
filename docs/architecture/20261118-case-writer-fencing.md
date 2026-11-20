@@ -92,6 +92,13 @@ triangulate case interrupt CASE_ID --run-id <owner-ref> --reason "..." [--yes]
 # or --token <active-token> for an orphaned short-writer claim
 ```
 
+An active RUN owner must resolve to a run row for that case with status
+`RUNNING`; a missing or already-finished run is rejected and the ownership clear
+is rolled back in the same transaction, so a rejected interrupt never reports a
+recovery that did not happen. Every path that does not actually interrupt
+(missing reason, missing reference, declined confirmation, rejected interrupt)
+exits **nonzero**, so automation cannot read a failed recovery as a success.
+
 `interrupt` requires a non-empty reason, explicit confirmation (prompt unless
 `--yes`) and a matching owner reference or token. It atomically clears ownership
 and marks the owning `RUNNING` investigation run `INTERRUPTED` with the reason;

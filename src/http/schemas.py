@@ -471,6 +471,20 @@ class ClaimCountsDTO(BaseModel):
     evidenceCount: int = 0
 
 
+class SnapshotLiveStateDTO(BaseModel):
+    """Whether a frozen snapshot entity still exists in the current rows.
+
+    Read-only, factual comparison; it never claims who changed anything. Fields
+    that do not apply to a given entity type stay null.
+    """
+
+    present: bool
+    claimSignature: str | None = None
+    textMatchesSnapshot: bool | None = None
+    currentCaptureId: str | None = None
+    currentCaptureMatchesSnapshot: bool | None = None
+
+
 class ClaimDetailDTO(BaseModel):
     """One claim with its evidence passages and policy-derived counts."""
 
@@ -487,6 +501,9 @@ class ClaimDetailDTO(BaseModel):
     partyPositions: dict[str, Any] = Field(default_factory=dict)
     counts: ClaimCountsDTO = Field(default_factory=ClaimCountsDTO)
     passages: list[ClaimEvidenceLinkDTO] = Field(default_factory=list)
+    # Historical selection (null on a current-state read).
+    snapshotId: str | None = None
+    liveState: SnapshotLiveStateDTO | None = None
 
 
 class EvidenceClaimReferenceDTO(BaseModel):
@@ -517,6 +534,10 @@ class EvidenceDetailDTO(EvidenceSourceDTO):
     currentCaptureId: str | None = None
     captures: list[CaptureSummaryDTO] = Field(default_factory=list)
     relatedClaims: list[EvidenceClaimReferenceDTO] = Field(default_factory=list)
+    # Historical selection (null/empty on a current-state read).
+    snapshotId: str | None = None
+    unavailableCaptureIds: list[str] = Field(default_factory=list)
+    liveState: SnapshotLiveStateDTO | None = None
 
 
 class SourcePolicyDTO(BaseModel):
@@ -741,6 +762,8 @@ class ComparisonDTO(BaseModel):
     claims: ComparisonClaimsPageDTO
     policy: ComparisonPolicyDTO
     caveats: list[str] = Field(default_factory=list)
+    # Set only when both sides were resolved from a pinned snapshot observation.
+    snapshotId: str | None = None
 
 
 class HealthResponse(BaseModel):
@@ -788,7 +811,11 @@ class ChangeItemDTO(BaseModel):
     entityId: str
     before: dict[str, Any] | None = None
     after: dict[str, Any] | None = None
+    #: Grouped run recorded as the entity's origin, or null when unknown. It is a
+    #: provenance reference, not a statement about who caused a field change.
     originRunId: str | None = None
+    #: The run whose successful observation produced this delta item.
+    observedByRunId: str | None = None
     observedAt: str | None = None
 
 

@@ -24,6 +24,12 @@ from typing import Any, cast
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from src.cases.history import (
+    get_case_snapshot,
+    snapshot_entities,
+    snapshot_entity_list,
+    snapshot_payload,
+)
 from src.storage import (
     Claim,
     ClaimCitation,
@@ -50,6 +56,17 @@ class CaptureRangeError(ValueError):
     Deliberately an exception rather than a ``None`` return: ``None`` already
     means "this capture is not yours / does not exist" (404), and a bad range
     must never be confused with a missing resource.
+    """
+
+
+class SnapshotNotFound(LookupError):
+    """The requested snapshot selector is unknown or belongs to another case.
+
+    A supplied but unresolvable snapshot is a distinct failure from an entity
+    that is absent *inside* a resolved snapshot (``None`` -> 404) and from a
+    reader that does not support historical selection at all (422). Raising
+    explicitly keeps a caller from believing it read historical state when the
+    selector was ignored.
     """
 
 
@@ -92,6 +109,74 @@ def _metadata(value: Any) -> dict[str, Any]:
     return dict(value) if isinstance(value, dict) else {}
 
 
+def _is_legacy_shaped_link(
+    *,
+    citation_id: str | None,
+    capture_id: str | None,
+    alignment_status: str | None,
+    assessment_origin: str | None,
+    assessment_version: str | None,
+    assessment_metadata: dict[str, Any],
+) -> bool:
+    """Positive evidence that a link predates the E02 quotation writer.
+
+    Shared by the live and snapshot claim readers so a historical claim cannot
+    acquire a stronger provenance than the same row would report when live.
+    """
+    return (
+        citation_id is None
+        and capture_id is None
+        and (
+            alignment_status is None
+            or alignment_status == DEFAULT_ALIGNMENT_STATUS
+        )
+        and assessment_origin is None
+        and assessment_version is None
+        and "relationship_policy" not in assessment_metadata
+    )
+
+
+def _link_reference_from_fields(
+    *,
+    relation: str | None,
+    alignment_status: str,
+    quote: str | None,
+    start_char: int | None,
+    end_char: int | None,
+    capture_id: str | None,
+    citation_id: str | None,
+    assessment_origin: str | None,
+    assessment_version: str | None,
+    diagnostic_reason: str | None,
+) -> dict[str, Any]:
+    """Policy-resolve one link reference from already-read values.
+
+    Used for live ORM links and for frozen snapshot link rows, so a historical
+    comparison resolves relationships with exactly the live policy.
+    """
+    resolution = resolve_effective_relationship(
+        stored_relation=relation,
+        alignment_status=alignment_status,
+        assessment_origin=assessment_origin,
+        assessment_version=assessment_version,
+        exact_anchor=(alignment_status == AlignmentStatus.EXACT.value),
+        collector_generated=(assessment_origin == COLLECTOR_ORIGIN),
+    )
+    return {
+        "relation": relation,
+        "effective_relation": resolution.effective_relationship,
+        "alignment_status": alignment_status,
+        "quote": quote,
+        "start_char": start_char,
+        "end_char": end_char,
+        "capture_id": capture_id,
+        "citation_id": citation_id,
+        "assessment_origin": assessment_origin,
+        "assessment_version": assessment_version,
+        "diagnostic_reason": diagnostic_reason,
+    }
+
+
 def link_read_model(link: ClaimEvidenceLink) -> dict[str, Any]:
     """Return the honest read model of one claim/evidence link.
 
@@ -101,34 +186,40 @@ def link_read_model(link: ClaimEvidenceLink) -> dict[str, Any]:
     recomputation in the case service, so a reader can never claim more support
     than the writer counted.
     """
-    relation = _as_str(link.relation)
-    alignment_status = _as_str(link.alignment_status) or DEFAULT_ALIGNMENT_STATUS
-    assessment_origin = _as_str(link.assessment_origin)
-    assessment_version = _as_str(link.assessment_version)
-    resolution = resolve_effective_relationship(
-        stored_relation=relation,
-        alignment_status=alignment_status,
-        assessment_origin=assessment_origin,
-        assessment_version=assessment_version,
-        exact_anchor=(alignment_status == AlignmentStatus.EXACT.value),
-        collector_generated=(assessment_origin == COLLECTOR_ORIGIN),
+    return _link_reference_from_fields(
+        relation=_as_str(link.relation),
+        alignment_status=_as_str(link.alignment_status)
+        or DEFAULT_ALIGNMENT_STATUS,
+        quote=_as_str(link.quote),
+        start_char=_as_int(link.start_char),
+        end_char=_as_int(link.end_char),
+        capture_id=_as_str(link.capture_id),
+        citation_id=_as_str(link.citation_id),
+        assessment_origin=_as_str(link.assessment_origin),
+        assessment_version=_as_str(link.assessment_version),
+        diagnostic_reason=_as_str(
+            _metadata(link.assessment_metadata).get("diagnostic_reason")
+        ),
     )
-    diagnostic_reason = _as_str(
-        _metadata(link.assessment_metadata).get("diagnostic_reason")
+
+
+def snapshot_link_read_model(link: dict[str, Any]) -> dict[str, Any]:
+    """Policy-resolve one **frozen snapshot** link row (camelCase payload keys)."""
+    return _link_reference_from_fields(
+        relation=_as_str(link.get("relation")),
+        alignment_status=_as_str(link.get("alignmentStatus"))
+        or DEFAULT_ALIGNMENT_STATUS,
+        quote=_as_str(link.get("quote")),
+        start_char=_as_int(link.get("startChar")),
+        end_char=_as_int(link.get("endChar")),
+        capture_id=_as_str(link.get("captureId")),
+        citation_id=_as_str(link.get("citationId")),
+        assessment_origin=_as_str(link.get("assessmentOrigin")),
+        assessment_version=_as_str(link.get("assessmentVersion")),
+        diagnostic_reason=_as_str(
+            _metadata(link.get("assessmentMetadata")).get("diagnostic_reason")
+        ),
     )
-    return {
-        "relation": relation,
-        "effective_relation": resolution.effective_relationship,
-        "alignment_status": alignment_status,
-        "quote": _as_str(link.quote),
-        "start_char": _as_int(link.start_char),
-        "end_char": _as_int(link.end_char),
-        "capture_id": _as_str(link.capture_id),
-        "citation_id": _as_str(link.citation_id),
-        "assessment_origin": assessment_origin,
-        "assessment_version": assessment_version,
-        "diagnostic_reason": diagnostic_reason,
-    }
 
 
 def _evidence_source_model(evidence: EvidenceItem) -> dict[str, Any]:
@@ -275,14 +366,27 @@ def read_citation(
 
 
 def read_claim_detail(
-    session: Session, *, case_id: str, claim_id: str
+    session: Session,
+    *,
+    case_id: str,
+    claim_id: str,
+    snapshot_id: str | None = None,
 ) -> dict[str, Any] | None:
     """Read one claim owned by ``case_id`` plus its evidence-linked passages.
 
     The claim is joined through ``Event.case_id``; a claim of another case is
     indistinguishable from an unknown claim (``None``). Counts are the stored
     policy-derived aggregates -- the reader never recomputes or inflates them.
+
+    With ``snapshot_id`` the claim is resolved from that snapshot's frozen
+    payload instead (see :func:`_read_claim_detail_from_snapshot`); current rows
+    are never substituted. Live behavior is unchanged when no selector is given.
     """
+    if snapshot_id is not None:
+        return _read_claim_detail_from_snapshot(
+            session, case_id=case_id, claim_id=claim_id, snapshot_id=snapshot_id
+        )
+
     claim = session.get(Claim, claim_id)
     if claim is None or not _claim_belongs_to_case(session, claim, case_id):
         return None
@@ -367,32 +471,169 @@ def _verification_provenance(links: list[ClaimEvidenceLink]) -> str:
     if not links:
         return "unknown"
     for link in links:
-        metadata = _metadata(link.assessment_metadata)
-        is_legacy_shaped = (
-            _as_str(link.citation_id) is None
-            and _as_str(link.capture_id) is None
-            and (
-                _as_str(link.alignment_status) is None
-                or _as_str(link.alignment_status) == DEFAULT_ALIGNMENT_STATUS
-            )
-            and _as_str(link.assessment_origin) is None
-            and _as_str(link.assessment_version) is None
-            and "relationship_policy" not in metadata
-        )
-        if not is_legacy_shaped:
+        if not _is_legacy_shaped_link(
+            citation_id=_as_str(link.citation_id),
+            capture_id=_as_str(link.capture_id),
+            alignment_status=_as_str(link.alignment_status),
+            assessment_origin=_as_str(link.assessment_origin),
+            assessment_version=_as_str(link.assessment_version),
+            assessment_metadata=_metadata(link.assessment_metadata),
+        ):
             return "unknown"
     return "legacy_unknown"
 
 
+def _snapshot_verification_provenance(links: list[dict[str, Any]]) -> str:
+    """Same provenance rule as :func:`_verification_provenance`, for frozen rows."""
+    if not links:
+        return "unknown"
+    for link in links:
+        if not _is_legacy_shaped_link(
+            citation_id=_as_str(link.get("citationId")),
+            capture_id=_as_str(link.get("captureId")),
+            alignment_status=_as_str(link.get("alignmentStatus")),
+            assessment_origin=_as_str(link.get("assessmentOrigin")),
+            assessment_version=_as_str(link.get("assessmentVersion")),
+            assessment_metadata=_metadata(link.get("assessmentMetadata")),
+        ):
+            return "unknown"
+    return "legacy_unknown"
+
+
+def _claim_live_state(
+    session: Session,
+    *,
+    case_id: str,
+    claim_id: str,
+    frozen_text: str,
+) -> dict[str, Any]:
+    """Report whether the live claim still exists, without inventing history.
+
+    A rewritten or deleted live claim must not erase a historical observation,
+    and the historical view must say honestly whether the current row still
+    matches the frozen text. Cross-case rows count as absent.
+    """
+    claim = session.get(Claim, claim_id)
+    if claim is None or not _claim_belongs_to_case(session, claim, case_id):
+        return {
+            "present": False,
+            "claim_signature": None,
+            "text_matches_snapshot": None,
+        }
+    live_text = _as_str(claim.claim_text) or ""
+    return {
+        "present": True,
+        "claim_signature": _as_str(claim.claim_signature),
+        "text_matches_snapshot": live_text == frozen_text,
+    }
+
+
+def _snapshot_passage(
+    link: dict[str, Any], evidence: dict[str, Any]
+) -> dict[str, Any]:
+    """One historical claim passage, mirroring the live passage read model."""
+    passage: dict[str, Any] = {
+        "id": _as_str(evidence.get("id")),
+        "evidence_id": _as_str(evidence.get("id")),
+        "title": _as_str(evidence.get("title")),
+        "publisher": _as_str(evidence.get("publisher")),
+        "origin_url": _as_str(evidence.get("originUrl")),
+        "canonical_url": _as_str(evidence.get("canonicalUrl")),
+        "source_type": _as_str(evidence.get("sourceType")),
+        "confidence_score": link.get("confidenceScore"),
+        "source_diversity_rank": _as_int(link.get("sourceDiversityRank")),
+    }
+    passage.update(snapshot_link_read_model(link))
+    return passage
+
+
+def _read_claim_detail_from_snapshot(
+    session: Session, *, case_id: str, claim_id: str, snapshot_id: str
+) -> dict[str, Any] | None:
+    """Resolve one claim from a pinned snapshot payload, never from live rows.
+
+    Returns ``None`` when the resolved snapshot does not contain the claim (404
+    for that entity) and raises :class:`SnapshotNotFound` when the selector itself
+    does not resolve for this case. Every entity attribute comes from the frozen
+    payload; the only live read is the explicit ``live_state`` comparison.
+    """
+    snapshot = get_case_snapshot(session, case_id=case_id, snapshot_id=snapshot_id)
+    if snapshot is None:
+        raise SnapshotNotFound(
+            f"Snapshot {snapshot_id} not found for case {case_id}"
+        )
+    payload = snapshot_payload(snapshot)
+    claim = snapshot_entities(payload, "claims").get(claim_id)
+    if claim is None:
+        return None
+
+    evidence_by_id = snapshot_entities(payload, "evidence")
+    passages: list[dict[str, Any]] = []
+    claim_links: list[dict[str, Any]] = []
+    for link in snapshot_entity_list(payload, "links"):
+        if _as_str(link.get("claimId")) != claim_id:
+            continue
+        claim_links.append(link)
+        evidence = evidence_by_id.get(_as_str(link.get("evidenceId")) or "")
+        if evidence is None:
+            # A link whose evidence is not part of this observation has no
+            # historical source metadata to show; it is not replaced by a live row.
+            continue
+        passages.append(_snapshot_passage(link, evidence))
+
+    frozen_text = _as_str(claim.get("text")) or ""
+    return {
+        "id": _as_str(claim.get("id")),
+        "case_id": case_id,
+        "event_id": _as_str(claim.get("eventId")),
+        "claim_text": frozen_text,
+        "claim_signature": _as_str(claim.get("claimSignature")),
+        "verification_status": _as_str(claim.get("verificationStatus")),
+        "verification_provenance": _snapshot_verification_provenance(claim_links),
+        "fact_allegation_type": _as_str(claim.get("factAllegationType")),
+        "narrative_cluster_id": _as_str(claim.get("narrativeClusterId")),
+        "controversy_score": claim.get("controversyScore"),
+        "party_positions": _metadata(claim.get("partyPositions")),
+        "counts": {
+            "support_count": _as_int(claim.get("supportCount")) or 0,
+            "oppose_count": _as_int(claim.get("opposeCount")) or 0,
+            "source_diversity_count": _as_int(claim.get("sourceDiversityCount")) or 0,
+            "evidence_count": len(passages),
+        },
+        "passages": passages,
+        "snapshot_id": snapshot_id,
+        "live_state": _claim_live_state(
+            session, case_id=case_id, claim_id=claim_id, frozen_text=frozen_text
+        ),
+    }
+
+
 def read_evidence_detail(
-    session: Session, *, case_id: str, evidence_id: str
+    session: Session,
+    *,
+    case_id: str,
+    evidence_id: str,
+    snapshot_id: str | None = None,
 ) -> dict[str, Any] | None:
     """Read one evidence item owned by ``case_id``, its captures and its claims.
 
     Capture **bodies** are deliberately absent: only IDs, hashes, kinds, times,
     frozen metadata and code-point lengths are returned. Source text is reachable
     only through :func:`read_capture_window`.
+
+    With ``snapshot_id`` the item, its capture **references** and its related
+    claims are resolved from that snapshot's frozen payload; a capture body is
+    read only from the immutable capture row named by the snapshot and only when
+    its recorded hash matches. Live behavior is unchanged without a selector.
     """
+    if snapshot_id is not None:
+        return _read_evidence_detail_from_snapshot(
+            session,
+            case_id=case_id,
+            evidence_id=evidence_id,
+            snapshot_id=snapshot_id,
+        )
+
     evidence = session.get(EvidenceItem, evidence_id)
     if evidence is None or not _belongs_to_case(evidence, case_id):
         return None
@@ -455,6 +696,188 @@ def read_evidence_detail(
     ]
     payload["related_claims"] = related_claims
     return payload
+
+
+def read_immutable_capture_text(
+    session: Session,
+    *,
+    capture_id: str,
+    evidence_id: str,
+    recorded_text_sha256: str | None,
+) -> str | None:
+    """Return the immutable capture body a snapshot points at, or ``None``.
+
+    The snapshot records a capture reference (ID + hash), never the body. The
+    body is read from the append-only capture row **only** when that row belongs
+    to the same evidence, the snapshot recorded a hash for it, and the stored hash
+    still equals that recorded hash. Anything else is explicitly unavailable
+    instead of being filled in from another version: a missing recorded hash fails
+    closed, because the body could not then be tied to this observation.
+    """
+    capture = session.get(EvidenceCapture, capture_id)
+    if capture is None or _as_str(capture.evidence_id) != evidence_id:
+        return None
+    recorded = _as_str(recorded_text_sha256)
+    if recorded is None or _as_str(capture.text_sha256) != recorded:
+        return None
+    return cast(str, capture.text)
+
+
+def _snapshot_capture_summary(
+    capture: dict[str, Any],
+    *,
+    char_length: int,
+    current_capture_id: str | None,
+) -> dict[str, Any]:
+    """One snapshot capture reference plus its immutable body length."""
+    capture_id = _as_str(capture.get("id"))
+    return {
+        "id": capture_id,
+        "evidence_id": _as_str(capture.get("evidenceId")),
+        "text_sha256": _as_str(capture.get("textSha256")),
+        "normalized_text_sha256": _as_str(
+            capture.get("normalizedTextSha256")
+        ),
+        "normalization_version": _as_str(capture.get("normalizationVersion")),
+        "capture_kind": _as_str(capture.get("captureKind")),
+        "recorded_at": _as_str(capture.get("recordedAt")),
+        "observed_at": _as_str(capture.get("observedAt")),
+        "metadata": _metadata(capture.get("metadata")),
+        "char_length": char_length,
+        "is_current": bool(capture_id) and capture_id == current_capture_id,
+    }
+
+
+def _evidence_live_state(
+    session: Session,
+    *,
+    case_id: str,
+    evidence_id: str,
+    snapshot_current_capture_id: str | None,
+) -> dict[str, Any]:
+    """Report whether the live evidence row still exists and how it advanced."""
+    evidence = session.get(EvidenceItem, evidence_id)
+    if evidence is None or not _belongs_to_case(evidence, case_id):
+        return {
+            "present": False,
+            "current_capture_id": None,
+            "current_capture_matches_snapshot": None,
+        }
+    live_current_capture_id = _as_str(evidence.current_capture_id)
+    return {
+        "present": True,
+        "current_capture_id": live_current_capture_id,
+        "current_capture_matches_snapshot": (
+            None
+            if snapshot_current_capture_id is None
+            else live_current_capture_id == snapshot_current_capture_id
+        ),
+    }
+
+
+def _read_evidence_detail_from_snapshot(
+    session: Session, *, case_id: str, evidence_id: str, snapshot_id: str
+) -> dict[str, Any] | None:
+    """Resolve one evidence item from a pinned snapshot payload.
+
+    ``None`` means the evidence is not part of that observation (404); an
+    unresolvable selector raises :class:`SnapshotNotFound`. Capture bodies stay in
+    the immutable captures: a capture reference whose body/hash cannot be
+    verified is listed in ``unavailable_capture_ids`` rather than substituted.
+    """
+    snapshot = get_case_snapshot(session, case_id=case_id, snapshot_id=snapshot_id)
+    if snapshot is None:
+        raise SnapshotNotFound(
+            f"Snapshot {snapshot_id} not found for case {case_id}"
+        )
+    payload = snapshot_payload(snapshot)
+    evidence = snapshot_entities(payload, "evidence").get(evidence_id)
+    if evidence is None:
+        return None
+
+    current_capture_id = _as_str(evidence.get("currentCaptureId"))
+    captures: list[dict[str, Any]] = []
+    unavailable_capture_ids: list[str] = []
+    for capture in snapshot_entity_list(payload, "captures"):
+        if _as_str(capture.get("evidenceId")) != evidence_id:
+            continue
+        capture_id = _as_str(capture.get("id"))
+        if capture_id is None:
+            continue
+        body = read_immutable_capture_text(
+            session,
+            capture_id=capture_id,
+            evidence_id=evidence_id,
+            recorded_text_sha256=_as_str(capture.get("textSha256")),
+        )
+        if body is None:
+            unavailable_capture_ids.append(capture_id)
+            continue
+        captures.append(
+            _snapshot_capture_summary(
+                capture,
+                char_length=len(body),
+                current_capture_id=current_capture_id,
+            )
+        )
+
+    claims_by_id = snapshot_entities(payload, "claims")
+    related_claims: list[dict[str, Any]] = []
+    for link in snapshot_entity_list(payload, "links"):
+        if _as_str(link.get("evidenceId")) != evidence_id:
+            continue
+        claim = claims_by_id.get(_as_str(link.get("claimId")) or "")
+        if claim is None:
+            # A link to a claim outside this observation is not shown with a
+            # current claim row substituted for it.
+            continue
+        reference = snapshot_link_read_model(link)
+        related_claims.append(
+            {
+                "claim_id": _as_str(claim.get("id")),
+                "claim_text": _as_str(claim.get("text")) or "",
+                "claim_signature": _as_str(claim.get("claimSignature")),
+                "link_id": _as_str(link.get("id")),
+                "effective_relation": reference["effective_relation"],
+                "relation": reference["relation"],
+                "alignment_status": reference["alignment_status"],
+                "citation_id": reference["citation_id"],
+                "capture_id": reference["capture_id"],
+                "quote": reference["quote"],
+                "start_char": reference["start_char"],
+                "end_char": reference["end_char"],
+                "diagnostic_reason": reference["diagnostic_reason"],
+            }
+        )
+
+    result: dict[str, Any] = {
+        "id": _as_str(evidence.get("id")),
+        "event_id": _as_str(evidence.get("eventId")),
+        "case_article_id": _as_str(evidence.get("caseArticleId")),
+        "evidence_type": _as_str(evidence.get("evidenceType")),
+        "source_type": _as_str(evidence.get("sourceType")),
+        "title": _as_str(evidence.get("title")),
+        "origin_url": _as_str(evidence.get("originUrl")),
+        "canonical_url": _as_str(evidence.get("canonicalUrl")),
+        "publisher": _as_str(evidence.get("publisher")),
+        "published_at": _as_str(evidence.get("publishedAt")),
+        "verification_status": _as_str(evidence.get("verificationStatus")),
+        "credibility_tier": _as_str(evidence.get("credibilityTier")),
+        "requires_human_review": bool(evidence.get("requiresHumanReview")),
+        "capture_metadata": _metadata(evidence.get("captureMetadata")),
+        "current_capture_id": current_capture_id,
+        "captures": captures,
+        "related_claims": related_claims,
+        "snapshot_id": snapshot_id,
+        "unavailable_capture_ids": unavailable_capture_ids,
+        "live_state": _evidence_live_state(
+            session,
+            case_id=case_id,
+            evidence_id=evidence_id,
+            snapshot_current_capture_id=current_capture_id,
+        ),
+    }
+    return result
 
 
 def read_capture_window(
@@ -526,9 +949,12 @@ __all__ = [
     "CaptureRangeError",
     "DEFAULT_CAPTURE_WINDOW_LENGTH",
     "MAX_CAPTURE_WINDOW_LENGTH",
+    "SnapshotNotFound",
     "link_read_model",
     "read_capture_window",
     "read_citation",
     "read_claim_detail",
     "read_evidence_detail",
+    "read_immutable_capture_text",
+    "snapshot_link_read_model",
 ]

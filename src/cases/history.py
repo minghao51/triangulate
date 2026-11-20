@@ -79,6 +79,72 @@ def _sorted(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return sorted(rows, key=lambda item: str(item.get("id") or ""))
 
 
+def _as_str(value: Any) -> str | None:
+    return value if isinstance(value, str) else None
+
+
+def _first_known_origin(*values: str | None) -> str | None:
+    for value in values:
+        if value:
+            return value
+    return None
+
+
+def _origin_index(payload: dict[str, Any]) -> dict[str, dict[str, str | None]]:
+    """Map entity IDs to the grouped run recorded as their origin, when known.
+
+    ``Event.investigation_run_id`` is the only stored origin reference. An entity
+    whose event carries none -- and every entity type without one (articles,
+    exceptions) -- resolves to ``None``: an observation never attributes a change
+    to the observing run merely because it was the one that saw it.
+    """
+    entity_lists = {
+        name: payload.get(name)
+        for name in ("events", "claims", "evidence", "links", "reviews")
+    }
+
+    def rows(name: str) -> list[dict[str, Any]]:
+        value = entity_lists.get(name)
+        if not isinstance(value, list):
+            return []
+        return [row for row in value if isinstance(row, dict)]
+
+    events = {
+        str(row.get("id")): _as_str(row.get("investigationRunId"))
+        for row in rows("events")
+        if row.get("id") is not None
+    }
+    claims = {
+        str(row.get("id")): events.get(str(row.get("eventId")))
+        for row in rows("claims")
+        if row.get("id") is not None
+    }
+    evidence = {
+        str(row.get("id")): events.get(str(row.get("eventId")))
+        for row in rows("evidence")
+        if row.get("id") is not None
+    }
+    # A link row records no run of its own. Inheriting the claim's or evidence's
+    # event run would attribute a later-added or edited link to an earlier run, so
+    # link changes keep an unknown origin.
+    links: dict[str, str | None] = {
+        str(row.get("id")): None
+        for row in rows("links")
+        if row.get("id") is not None
+    }
+    reviews = {
+        str(row.get("id")): events.get(str(row.get("eventId")))
+        for row in rows("reviews")
+        if row.get("id") is not None
+    }
+    return {
+        "claims": claims,
+        "evidence": evidence,
+        "links": links,
+        "reviews": reviews,
+    }
+
+
 def compose_case_snapshot(session: Session, *, case_id: str) -> dict[str, Any]:
     """Compose the canonical snapshot payload for one case.
 
@@ -261,6 +327,7 @@ def compose_case_snapshot(session: Session, *, case_id: str) -> dict[str, Any]:
                     "locationLon": row.location_lon,
                     "workflowRoute": row.workflow_route,
                     "sourceUrl": row.source_url,
+                    "investigationRunId": row.investigation_run_id,
                 }
                 for row in events
             ]
@@ -280,6 +347,7 @@ def compose_case_snapshot(session: Session, *, case_id: str) -> dict[str, Any]:
                     "supportCount": row.support_count,
                     "opposeCount": row.oppose_count,
                     "sourceDiversityCount": row.source_diversity_count,
+                    "narrativeClusterId": row.narrative_cluster_id,
                     "arbiterReasoning": row.arbiter_reasoning,
                 }
                 for row in claims
@@ -303,6 +371,7 @@ def compose_case_snapshot(session: Session, *, case_id: str) -> dict[str, Any]:
                     "alignmentStatus": row.alignment_status,
                     "assessmentOrigin": row.assessment_origin,
                     "assessmentVersion": row.assessment_version,
+                    "assessmentMetadata": row.assessment_metadata or {},
                 }
                 for row in links
             ]
@@ -346,6 +415,7 @@ def compose_case_snapshot(session: Session, *, case_id: str) -> dict[str, Any]:
                     "verificationStatus": _enum_value(row.verification_status),
                     "credibilityTier": row.credibility_tier,
                     "requiresHumanReview": bool(row.requires_human_review),
+                    "captureMetadata": row.capture_metadata or {},
                 }
                 for row in evidence
             ]
@@ -480,9 +550,6 @@ def semantic_view(payload: dict[str, Any]) -> dict[str, Any]:
                 "factAllegationType",
                 "partyPositions",
                 "controversyScore",
-                "supportCount",
-                "opposeCount",
-                "sourceDiversityCount",
             ),
         ),
         "links": entities(
@@ -560,7 +627,7 @@ def semantic_view(payload: dict[str, Any]) -> dict[str, Any]:
         ),
         "narratives": entities(
             "narratives",
-            ("id", "clusterId", "stanceSummary", "sourceCount", "keyThemes", "mainEntities"),
+            ("id", "clusterId", "stanceSummary", "keyThemes", "mainEntities"),
         ),
     }
 
@@ -608,6 +675,8 @@ def build_snapshot_delta(
     baseline_semantic = semantic_view(baseline_payload)
     changes: list[dict[str, Any]] = []
     authoritative = authoritative_event_ids or set()
+    origin_before = _origin_index(baseline_payload)
+    origin_after = _origin_index(current_payload)
 
     def index(semantic: dict[str, Any], name: str) -> dict[str, dict[str, Any]]:
         return {str(row.get("id")): row for row in semantic.get(name, [])}
@@ -622,7 +691,8 @@ def build_snapshot_delta(
                 "entityId": entity_id,
                 "before": None,
                 "after": now_articles[entity_id],
-                "originRunId": run_id,
+                "originRunId": None,
+                "observedByRunId": run_id,
                 "observedAt": observed_at,
             }
         )
@@ -642,7 +712,8 @@ def build_snapshot_delta(
                         "currentCaptureId": before.get("currentCaptureId")
                     },
                     "after": {"currentCaptureId": after.get("currentCaptureId")},
-                    "originRunId": run_id,
+                    "originRunId": origin_after["evidence"].get(entity_id),
+                    "observedByRunId": run_id,
                     "observedAt": observed_at,
                 }
             )
@@ -658,7 +729,8 @@ def build_snapshot_delta(
                 "entityId": entity_id,
                 "before": None,
                 "after": {"text": after.get("text"), "claimSignature": after.get("claimSignature")},
-                "originRunId": run_id,
+                "originRunId": origin_after["claims"].get(entity_id),
+                "observedByRunId": run_id,
                 "observedAt": observed_at,
             }
         )
@@ -673,7 +745,8 @@ def build_snapshot_delta(
                 "entityId": entity_id,
                 "before": {"text": before.get("text"), "claimSignature": before.get("claimSignature")},
                 "after": None,
-                "originRunId": run_id,
+                "originRunId": origin_before["claims"].get(entity_id),
+                "observedByRunId": run_id,
                 "observedAt": observed_at,
             }
         )
@@ -700,7 +773,8 @@ def build_snapshot_delta(
                     "entityId": entity_id,
                     "before": {field: value["before"] for field, value in changed.items()},
                     "after": {field: value["after"] for field, value in changed.items()},
-                    "originRunId": run_id,
+                    "originRunId": origin_after["claims"].get(entity_id),
+                    "observedByRunId": run_id,
                     "observedAt": observed_at,
                 }
             )
@@ -729,7 +803,8 @@ def build_snapshot_delta(
                     "entityId": entity_id,
                     "before": before,
                     "after": after,
-                    "originRunId": run_id,
+                    "originRunId": _first_known_origin(origin_after["links"].get(entity_id), origin_before["links"].get(entity_id)),
+                    "observedByRunId": run_id,
                     "observedAt": observed_at,
                 }
             )
@@ -747,7 +822,8 @@ def build_snapshot_delta(
                     "entityId": entity_id,
                     "before": {field: value["before"] for field, value in changed.items()},
                     "after": {field: value["after"] for field, value in changed.items()},
-                    "originRunId": run_id,
+                    "originRunId": origin_after["links"].get(entity_id),
+                    "observedByRunId": run_id,
                     "observedAt": observed_at,
                 }
             )
@@ -765,7 +841,8 @@ def build_snapshot_delta(
                     "entityId": entity_id,
                     "before": before,
                     "after": after,
-                    "originRunId": run_id,
+                    "originRunId": _first_known_origin(origin_after["reviews"].get(entity_id), origin_before["reviews"].get(entity_id)),
+                    "observedByRunId": run_id,
                     "observedAt": observed_at,
                 }
             )
@@ -783,7 +860,8 @@ def build_snapshot_delta(
                     "entityId": entity_id,
                     "before": before,
                     "after": after,
-                    "originRunId": run_id,
+                    "originRunId": None,
+                    "observedByRunId": run_id,
                     "observedAt": observed_at,
                 }
             )
@@ -839,6 +917,50 @@ def snapshot_for_run(session: Session, *, run_id: str) -> CaseSnapshot | None:
         .scalars()
         .first()
     )
+
+
+def get_case_snapshot(
+    session: Session, *, case_id: str, snapshot_id: str
+) -> CaseSnapshot | None:
+    """Return one snapshot owned by ``case_id`` (``None`` for unknown/cross-case).
+
+    Read-only: no snapshot is composed or published on a GET.
+    """
+    snapshot = session.get(CaseSnapshot, snapshot_id)
+    if snapshot is None or snapshot.case_id != case_id:
+        return None
+    return snapshot
+
+
+def snapshot_payload(snapshot: CaseSnapshot) -> dict[str, Any]:
+    """Return the frozen payload mapping (an absent payload is an empty one)."""
+    payload = snapshot.payload_json
+    return payload if isinstance(payload, dict) else {}
+
+
+def snapshot_entities(
+    payload: dict[str, Any], name: str
+) -> dict[str, dict[str, Any]]:
+    """Index one payload entity list by stored ID, ignoring malformed rows."""
+    index: dict[str, dict[str, Any]] = {}
+    rows = payload.get(name)
+    if not isinstance(rows, list):
+        return index
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        entity_id = row.get("id")
+        if isinstance(entity_id, str) and entity_id not in index:
+            index[entity_id] = row
+    return index
+
+
+def snapshot_entity_list(payload: dict[str, Any], name: str) -> list[dict[str, Any]]:
+    """Return one payload entity list in stored (already sorted) order."""
+    rows = payload.get(name)
+    if not isinstance(rows, list):
+        return []
+    return [row for row in rows if isinstance(row, dict)]
 
 
 def _run_summary(run: InvestigationRun, snapshot: CaseSnapshot | None) -> dict[str, Any]:
@@ -1003,8 +1125,12 @@ __all__ = [
     "semantic_view",
     "semantic_hash_for_payload",
     "build_snapshot_delta",
+    "get_case_snapshot",
     "latest_snapshot_before",
     "snapshot_for_run",
+    "snapshot_payload",
+    "snapshot_entity_list",
+    "snapshot_entities",
     "read_investigation_runs",
     "read_investigation_run",
     "read_run_changes",

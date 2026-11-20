@@ -397,11 +397,30 @@ export interface EvidenceClaimReference {
   diagnosticReason: string | null;
 }
 
+/**
+ * Frozen-vs-current comparison for a snapshot entity (R03b).
+ *
+ * Present only when a `snapshotId` selected a historical observation. It reports
+ * what the current row is, never who changed anything or whether a claim is true.
+ */
+export interface SnapshotLiveState {
+  present: boolean;
+  claimSignature: string | null;
+  textMatchesSnapshot: boolean | null;
+  currentCaptureId: string | null;
+  currentCaptureMatchesSnapshot: boolean | null;
+}
+
 /** `GET /api/cases/{case_id}/evidence/{evidence_id}` (no capture bodies). */
 export interface EvidenceDetail extends EvidenceSource {
   currentCaptureId: string | null;
   captures: CaptureSummary[];
   relatedClaims: EvidenceClaimReference[];
+  /** Set when the read was resolved from a pinned snapshot observation. */
+  snapshotId?: string | null;
+  /** Snapshot capture references whose immutable body/hash cannot be verified. */
+  unavailableCaptureIds?: string[];
+  liveState?: SnapshotLiveState | null;
 }
 
 /** `GET /api/cases/{case_id}/citations/{citation_id}`. */
@@ -452,6 +471,9 @@ export interface ClaimDetail {
   partyPositions: Record<string, unknown>;
   counts: ClaimCounts;
   passages: ClaimEvidenceLink[];
+  /** Set when the read was resolved from a pinned snapshot observation. */
+  snapshotId?: string | null;
+  liveState?: SnapshotLiveState | null;
 }
 
 export interface CaseDetail {
@@ -606,4 +628,6 @@ export interface Comparison {
   claims: ComparisonClaimsPage;
   policy: ComparisonPolicy;
   caveats: string[];
+  /** Set when both sides were resolved from a pinned snapshot observation. */
+  snapshotId?: string | null;
 }
