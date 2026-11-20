@@ -1,0 +1,50 @@
+.case-search {
+  display: grid;
+  gap: 1rem;
+  color: var(--text-primary, #1f2937);
+}
+
+.case-search-header h2 { margin: 0; }
+.case-search-header p, .case-search-result p { margin: .35rem 0 0; color: var(--text-secondary, #64748b); }
+.case-search-form { display: grid; gap: .65rem; }
+.case-search-form label { font-weight: 600; }
+.case-search-query-row { display: flex; gap: .5rem; }
+.case-search-query-row input { flex: 1; min-width: 8rem; }
+.case-search input, .case-search select {
+  min-height: 2.5rem;
+  border: 1px solid var(--border-color, #cbd5e1);
+  border-radius: .375rem;
+  padding: .4rem .6rem;
+  color: inherit;
+  background: var(--surface, #fff);
+}
+.case-search-filters {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(8rem, 1fr));
+  align-items: end;
+  gap: .55rem;
+  margin-top: .35rem;
+}
+.case-search-filters label { grid-row: auto; }
+.case-search-filters button { justify-self: start; }
+.case-search :focus-visible { outline: 3px solid #2563eb; outline-offset: 2px; }
+.case-search-loading, .case-search-idle, .case-search-empty { padding: 1rem; }
+.case-search-error { border-left: 4px solid #b91c1c; padding: .75rem 1rem; background: #fef2f2; }
+.case-search-error h3 { margin: 0 0 .4rem; }
+.case-search-error p { margin: .35rem 0; }
+.case-search-count { font-weight: 600; }
+.case-search-results { display: grid; gap: .75rem; list-style: none; padding: 0; margin: 0; }
+.case-search-result { border: 1px solid var(--border-color, #cbd5e1); border-radius: .5rem; padding: .85rem; }
+.case-search-result-heading { display: flex; align-items: center; gap: .65rem; font-weight: 600; }
+.case-search-result-heading a { color: var(--link-color, #1d4ed8); }
+.case-search-snippet { white-space: pre-wrap; overflow-wrap: anywhere; }
+.case-search-metadata { display: flex; flex-wrap: wrap; gap: .45rem 1rem; margin-top: .6rem; font-size: .9rem; }
+.case-search-pagination { display: flex; justify-content: center; align-items: center; gap: .75rem; flex-wrap: wrap; }
+
+@media (max-width: 700px) {
+  .case-search-filters { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 420px) {
+  .case-search-filters { grid-template-columns: 1fr; }
+  .case-search-query-row { align-items: stretch; flex-direction: column; }
+}

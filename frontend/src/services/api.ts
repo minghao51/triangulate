@@ -1,5 +1,6 @@
 import type {
   CaseDetail,
+  CaseSearchResponse,
   CaptureWindow,
   CitationDetail,
   Claim,
@@ -104,6 +105,35 @@ export const getClaimsForCase = async (caseId: string): Promise<Claim[]> =>
 
 export const getEvidenceForCase = async (caseId: string): Promise<Evidence[]> =>
   request(`/api/cases/${caseId}/evidence`);
+
+export interface CaseSearchQuery {
+  q: string;
+  type?: 'claim' | 'evidence' | null;
+  publisher?: string | null;
+  status?: string | null;
+  publishedFrom?: string | null;
+  publishedTo?: string | null;
+  limit?: number;
+  offset?: number;
+}
+
+/** Case-scoped lexical search; this reader issues GET only. */
+export const getCaseSearch = async (
+  caseId: string,
+  query: CaseSearchQuery
+): Promise<CaseSearchResponse> => {
+  const params = new URLSearchParams();
+  params.set('q', query.q);
+  for (const key of ['type', 'publisher', 'status', 'publishedFrom', 'publishedTo'] as const) {
+    const value = query[key];
+    if (typeof value === 'string' && value.trim()) params.set(key, value.trim());
+  }
+  if (typeof query.limit === 'number') params.set('limit', String(query.limit));
+  if (typeof query.offset === 'number') params.set('offset', String(query.offset));
+  return request(
+    `/api/cases/${encodeURIComponent(caseId)}/search?${params.toString()}`
+  );
+};
 
 /** E03 inspector readers (GET-only). */
 function snapshotQuery(snapshotId?: string | null): string {

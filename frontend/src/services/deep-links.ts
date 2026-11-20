@@ -284,3 +284,80 @@ export function buildChangesUrl(
     .join('&');
   return query ? `${path}?${query}` : path;
 }
+
+// ---------------------------------------------------------------------------
+// S02 case-search selection
+// ---------------------------------------------------------------------------
+
+export const SEARCH_PARAMS = {
+  q: 'q',
+  type: 'type',
+  publisher: 'publisher',
+  status: 'status',
+  publishedFrom: 'publishedFrom',
+  publishedTo: 'publishedTo',
+  offset: 'offset',
+} as const;
+
+export interface SearchSelection {
+  q?: string | null;
+  type?: 'claim' | 'evidence' | null;
+  publisher?: string | null;
+  status?: string | null;
+  publishedFrom?: string | null;
+  publishedTo?: string | null;
+  offset?: number | null;
+}
+
+export interface ParsedSearchSelection {
+  q: string;
+  type: 'claim' | 'evidence' | null;
+  publisher: string | null;
+  status: string | null;
+  publishedFrom: string | null;
+  publishedTo: string | null;
+  offset: number;
+}
+
+export function toSearchSearchParams(selection: SearchSelection): URLSearchParams {
+  const params = new URLSearchParams();
+  const q = cleaned(selection.q);
+  const publisher = cleaned(selection.publisher);
+  const status = cleaned(selection.status);
+  const from = cleaned(selection.publishedFrom);
+  const to = cleaned(selection.publishedTo);
+  const offset = cleanedOffset(selection.offset, 0);
+  if (q) params.set(SEARCH_PARAMS.q, q);
+  if (selection.type === 'claim' || selection.type === 'evidence') {
+    params.set(SEARCH_PARAMS.type, selection.type);
+  }
+  if (publisher) params.set(SEARCH_PARAMS.publisher, publisher);
+  if (status) params.set(SEARCH_PARAMS.status, status);
+  if (from) params.set(SEARCH_PARAMS.publishedFrom, from);
+  if (to) params.set(SEARCH_PARAMS.publishedTo, to);
+  if (offset !== null && offset > 0) params.set(SEARCH_PARAMS.offset, String(offset));
+  return params;
+}
+
+export function parseSearchSelection(params: URLSearchParams): ParsedSearchSelection {
+  const rawOffset = params.get(SEARCH_PARAMS.offset);
+  const offset = rawOffset === null ? null : cleanedOffset(Number(rawOffset), 0);
+  const rawType = params.get(SEARCH_PARAMS.type);
+  return {
+    q: cleaned(params.get(SEARCH_PARAMS.q)) ?? '',
+    type: rawType === 'claim' || rawType === 'evidence' ? rawType : null,
+    publisher: cleaned(params.get(SEARCH_PARAMS.publisher)),
+    status: cleaned(params.get(SEARCH_PARAMS.status)),
+    publishedFrom: cleaned(params.get(SEARCH_PARAMS.publishedFrom)),
+    publishedTo: cleaned(params.get(SEARCH_PARAMS.publishedTo)),
+    offset: offset ?? 0,
+  };
+}
+
+export function buildSearchUrl(caseId: string, selection: SearchSelection): string {
+  const path = `/cases/${encodeURIComponent(caseId)}/search`;
+  const query = [...toSearchSearchParams(selection).entries()]
+    .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
+    .join('&');
+  return query ? `${path}?${query}` : path;
+}

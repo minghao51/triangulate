@@ -1,3 +1,36 @@
+export interface CaseSearchAppliedFilters {
+  type: 'claim' | 'evidence' | null;
+  publisher: string | null;
+  status: string | null;
+  publishedFrom: string | null;
+  publishedTo: string | null;
+}
+
+export interface CaseSearchItem {
+  resultType: 'claim' | 'evidence';
+  id: string;
+  claimId: string | null;
+  evidenceId: string | null;
+  eventId: string | null;
+  captureId: string | null;
+  title: string | null;
+  snippet: string;
+  matchedField: 'title' | 'body';
+  publisher: string | null;
+  status: string | null;
+  publishedAt: string | null;
+}
+
+export interface CaseSearchResponse {
+  caseId: string;
+  query: string;
+  total: number;
+  limit: number;
+  offset: number;
+  appliedFilters: CaseSearchAppliedFilters;
+  items: CaseSearchItem[];
+}
+
 export type CaseStage =
   | 'BOOTSTRAP'
   | 'RETRIEVE'
