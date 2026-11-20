@@ -21,6 +21,7 @@ The active documentation tree is organized by purpose instead of by date.
 - [Delivered case writer admission and fencing](architecture/20261118-case-writer-fencing.md): R02 owner-token admission, protected-path validation, CLI interrupt, migration 13 and residual risks
 - [Delivered case snapshots and run reports](architecture/20261118-case-snapshots.md): R03 snapshot/delta composition, guarded run finalization, run-specific reports, run/snapshot/changes GETs and the R03b snapshot-aware claim/evidence/comparison readers
 - [Delivered changes and grouped history UI](architecture/20261120-changes-ui.md): R04 case-scoped changes tab, truthful initial/pending/unavailable/unchanged states, coverage warnings, origin/observed provenance and snapshot-aware historical links
+- [Release C completion map](plans/20261120-release-c-completion-map.md): single brief for finishing S01 (transactional FTS index), S02 (search API + UI) and V01 (Release C verification); D01 and deployment are owner gates
 - [E02 pass B handoff](plans/20261115-e02-pass-b-handoff.md): self-contained continuation brief for quotation integration, fallback protection, aggregates and review hashes
 - [E04 handoff](plans/20261115-e04-handoff.md): self-contained brief for the evidence inspector and deep links (Release A gate) — what exists from E03, scope, acceptance, gates, safety rules
 - [Product comparison and enhancement roadmap](plans/20261114-product-enhancement-roadmap.md): comparable web apps and proposed priorities; not approved implementation

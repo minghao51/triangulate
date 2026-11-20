@@ -2,8 +2,10 @@
 
 Date: 2026-11-20. Status: **Release A and Release B are accepted; R01, R02, R03a,
 R03b and R03c are delivered, independently reviewed, accepted and pushed, and R04
-(changes/grouped-history UI) is delivered and verified with its diff review
-pending. Next ticket is S01.** Review evidence lives in the
+(changes/grouped-history UI) is delivered, verified and committed locally as
+`44f1e58` with its diff review pending. The remaining Release C work is mapped in
+the [completion map](20261120-release-c-completion-map.md): S01 → S02 → V01, then
+stop; D01 and deployment are owner gates.** Review evidence lives in the
 [worker plan](20261114-evidence-workbench-worker-plan.md) §7 and the architecture
 docs. This document is the Release C handoff and remains self-contained for a
 fresh agent. Contract authority remains the
@@ -24,8 +26,8 @@ fresh agent. Contract authority remains the
 | R03a | `44b9870` — snapshots/deltas, guarded finalization, run-specific reports, run/snapshot/changes GETs; migration 14; committed; **accepted 2026-11-18 after a defect pass** |
 | R03b | `6c67f86` — snapshot-aware claim/evidence/comparison readers + selector acceptance; no migration; **accepted** |
 | R03c | `6c67f86` — change-origin honesty (`originRunId`/`observedByRunId`), count-free semantic projection, explicit read transaction, report path containment; no migration; **accepted** |
-| R04 | working tree — case-scoped Changes tab with truthful initial/pending/unavailable/unchanged states, coverage warnings, origin/observed provenance and snapshot-aware historical links; no migration; **diff review pending** |
-| Next ticket | **S01 — transactional case FTS index and explicit rebuild (not started)** |
+| R04 | `44f1e58` — case-scoped Changes tab with truthful initial/pending/unavailable/unchanged states, coverage warnings, origin/observed provenance and snapshot-aware historical links; no migration; **diff review pending** |
+| Next ticket | **S01 → S02 → V01 per the [completion map](20261120-release-c-completion-map.md)**; D01 and deployment remain owner gates |
 | Migrations | 1..14 (…12 grouped investigation runs, 13 case writer ownership, 14 immutable case snapshots) |
 | Frontend gate | `npm run check` green; `npm test -- --run` = **132 tests / 13 files** |
 | Backend gate | **553 passed, 9 deselected**; Ruff clean |
@@ -54,8 +56,10 @@ P01/P02/P03 docs:
 5. R03a/R03b were independently reviewed; a bounded **defect pass**
    (R01/R02/R03a) plus **R03c** were completed, re-reviewed and pushed. **R04 is
    now delivered and verified** (frontend-only, 132 tests / 13 files, isolated
-   browser check). **Implement S01 only.** One bounded ticket at a time, parent
-   review after each.
+   browser check, committed `44f1e58`). **Continue with the
+   [Release C completion map](20261120-release-c-completion-map.md): S01, then S02,
+   then V01, one bounded ticket at a time with an independent reviewer pass after
+   each, then stop.** D01 and production deployment are separate owner gates.
 
 ## 3. P03 delivered behaviour
 
@@ -352,7 +356,11 @@ uv run ruff check src tests --output-format concise
 - P03 is committed and **accepted as Release B** (2026-11-18).
 - R01 (`ed8459f`, migration 12) and R02 (`0ea524a`, migration 13) are committed.
 - R03a, R03b, R03c and the R01–R03a defect pass are accepted and pushed; R04 is
-  implemented and verified with its diff review pending.
+  committed (`44f1e58`, not pushed) and verified with its diff review pending.
+- The remaining tickets are sequenced in the
+  [completion map](20261120-release-c-completion-map.md); S01 expects migration 15,
+  S02 none, V01 none. Migrations stay additive and must be re-allocated from the
+  live registry.
 - R04 does not poll pending runs: Refresh refetches the run list and the selected
   delta, and the case header keeps its existing case-detail polling. Link-level
   (`relationship_changed`) rows show before/after without a navigation link because
@@ -391,60 +399,59 @@ uv run ruff check src tests --output-format concise
 - No `.pi-lens.json` ignore file was added; the scratch-file cascade is gone
   because the files were archived/removed.
 
-## 9. Paste-ready S01 dispatch brief
+## 9. Paste-ready Release C completion brief
 
 ```text
-Implement ticket S01 (transactional case FTS index and explicit rebuild) from
-docs/plans/20261114-evidence-workbench-worker-plan.md
-(contract: docs/plans/20261114-evidence-workbench-specification.md §8).
+Finish Release C by implementing S01, then S02, then V01, following
+docs/plans/20261120-release-c-completion-map.md (which is the single brief and
+contains the per-ticket scope, acceptance, stop conditions, commands and return
+format). Contract authority: docs/plans/20261114-evidence-workbench-specification.md
+§8 and §11.
 
 Start by reading, in this order:
-1. docs/plans/20261118-release-b-handoff.md (current state, safety rules)
-2. docs/architecture/20261120-changes-ui.md (what R04 consumes) and
+1. docs/plans/20261120-release-c-completion-map.md
+2. docs/plans/20261118-release-b-handoff.md
+3. docs/architecture/20261120-changes-ui.md and
    docs/architecture/20261118-case-snapshots.md
-3. the storage layer (src/storage/database.py, models.py, migrations.py,
-   event_store.py, captures.py), the case service mutation paths and the CLI
-   command surface (src/cli/main.py, src/cli/commands/cases.py).
-4. specification §8 (search) and the audit note on why LIKE fallbacks and
-   best-effort async indexing are rejected.
+4. src/storage/{database,models,migrations,write_guard,event_store,captures}.py,
+   the case service mutation paths, and src/cli/{main.py,commands/cases.py}
+5. specification §8 (search) and §11 (verification)
 
 CURRENT STATE (2026-11-20)
-- Release A/B accepted; R01, R02, R03a, R03b, R03c pushed; R04 delivered and
-  verified (frontend 132 tests / 13 files, check green) with review pending.
-- Backend 553 passed / 9 deselected, Ruff clean; migrations 1..14.
-- Next ticket after S01 is S02 (search API + workspace UI).
+- Release A/B accepted; R01, R02, R03a, R03b, R03c pushed; R04 committed as
+  44f1e58 (not pushed) with diff review pending.
+- Backend 553 passed / 9 deselected, Ruff clean; frontend 132 tests / 13 files,
+  npm run check green; migrations 1..14.
 
-SCOPE
-- Add one transactional case-scoped FTS5 index over current evidence and current
-  individual claims, with an additive migration and an explicit capability probe.
-- Index writes must be part of the same transaction as the case-bound write that
-  changes the row (no best-effort or async queue), and must respect the R02
-  owner/fencing rules. No GET may create or rebuild the index.
-- Unsupported FTS must report an explicit capability status; no silent LIKE or
-  scan fallback, and no cross-case/global index in this ticket.
-- Add a narrow CLI rebuild command that is case-owned, repeatable and idempotent;
-  a rebuild must refuse a case with an active foreign writer.
-- Probe FTS5 availability in a temporary database and keep every test hermetic.
+SEQUENCE
+- S01: transactional case FTS5 index (current evidence + current individual
+  claims), capability probe, additive migration ~15, one authoritative
+  transactional sync mechanism, narrow case-owned CLI rebuild, no GET writes and no
+  LIKE fallback.
+- S02: GET /api/cases/{case_id}/search with literal all-term semantics, type/
+  publisher/status/date filters, deterministic rank+pagination, plain-text
+  snippets, 404/422/503 semantics, plus a case-workspace search surface with
+  URL-persisted state and snapshot-aware result links.
+- V01: Release C verification — deterministic fixtures/E2E on a scratch runtime/DB,
+  all gates, GET-only boundary, safe rendering, docs, benchmark evidence, residual
+  risks. Release C review gate only.
 
-OUT OF SCOPE
-Search read API and UI (S02), vector/semantic search, production deployment,
-historical-data recovery, unrelated refactors, snapshots or changes work.
-
-SAFETY
-- Run backend Python/tests only in the disposable copy recorded in
-  /tmp/triangulate-safety-verification-dir. Copy only src/ and tests/ plus
-  bias_taxonomy.toml.
-- Never touch data/, triangulate.db, .env, logs/, config.toml or the scratch
-  archive; no ingestion, cleanup or migration against the live database.
-- Allocate the next migration number from the then-current registry and stop for
-  review if more than an additive index table is required.
-- No commits, resets, branches, dependency changes, pushes or deletions without
-  owner instruction. Keep scratch work in /tmp. One application-code writer.
-- Preserve the CLI-only mutation boundary and the GET-only read boundary.
+HARD STOPS
+- D01 (historical data recovery) and production deployment are owner gates: do not
+  start them.
+- Stop and report if a migration would need to modify/drop/backfill existing rows,
+  if search needs a new mutation endpoint or a GET-side write, or if FTS5
+  unavailability cannot be represented as an explicit capability state.
+- No commits, pushes, resets, branches, dependency changes or deletions without
+  owner instruction. Backend Python/tests only in the disposable copy; browser
+  checks only with a temporary DB/config or a Vite-only server with intercepted
+  APIs. Never touch data/, triangulate.db, .env, logs/, config.toml or the live
+  database.
 
 RETURN
-Behaviour delivered; exact files/symbols/migration changed; index capability and
-failure semantics; write-path and rebuild idempotency evidence; real migration and
-test output (focused, full, Ruff); remaining risks/blockers. Do not call partial
-work done.
+Per ticket: behaviour delivered; files/symbols/migration changed; capability and
+failure semantics; transactional/idempotency evidence; real focused/full/Ruff and
+check/test/browser output; remaining risks. After each ticket get an independent
+reviewer pass, fix confirmed findings, record the evidence in worker plan §7 and
+the map, then continue. Do not call partial work done.
 ```
