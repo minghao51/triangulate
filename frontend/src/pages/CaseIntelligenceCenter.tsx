@@ -16,6 +16,7 @@ import {
   MessageSquare,
   Flag,
   CheckCheck,
+  History,
 } from 'lucide-react';
 import type { TopicCase } from '../types/backend-models';
 import {
@@ -44,6 +45,7 @@ import TimelineTab from './tabs/TimelineTab';
 import MapTab from './tabs/MapTab';
 import ReportTab from './tabs/ReportTab';
 import RunHistoryTab from './tabs/RunHistoryTab';
+import ChangesTab from './tabs/ChangesTab';
 import { Map } from 'lucide-react';
 
 interface TabConfig {
@@ -116,6 +118,7 @@ const CaseIntelligenceCenter: React.FC = () => {
       badge: activeCase?.openExceptionsCount || 0,
     },
     { id: 'report', label: 'Report', icon: <FileText size={16} />, path: 'report' },
+    { id: 'changes', label: 'Changes', icon: <History size={16} />, path: 'changes' },
     { id: 'run-history', label: 'Run History', icon: <Play size={16} />, path: 'run-history' },
   ];
 
@@ -333,6 +336,10 @@ const CaseIntelligenceCenter: React.FC = () => {
           <Route
             path="report"
             element={<ReportTab caseId={id!} />}
+          />
+          <Route
+            path="changes"
+            element={<ChangesTab caseId={id!} />}
           />
           <Route
             path="run-history"

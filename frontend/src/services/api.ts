@@ -15,6 +15,9 @@ import type {
   ReportData,
   ReviewActivity,
   ReviewAnnotation,
+  InvestigationRun,
+  InvestigationRunList,
+  RunChanges,
   RunHistoryItem,
   TimelineEvent,
   TopicCase,
@@ -103,18 +106,28 @@ export const getEvidenceForCase = async (caseId: string): Promise<Evidence[]> =>
   request(`/api/cases/${caseId}/evidence`);
 
 /** E03 inspector readers (GET-only). */
+function snapshotQuery(snapshotId?: string | null): string {
+  return snapshotId ? `?snapshotId=${encodeURIComponent(snapshotId)}` : '';
+}
+
 export const getClaimDetail = async (
   caseId: string,
-  claimId: string
+  claimId: string,
+  snapshotId?: string | null
 ): Promise<ClaimDetail> =>
-  request(`/api/cases/${encodeURIComponent(caseId)}/claims/${encodeURIComponent(claimId)}`);
+  request(
+    `/api/cases/${encodeURIComponent(caseId)}/claims/${encodeURIComponent(claimId)}` +
+      snapshotQuery(snapshotId)
+  );
 
 export const getEvidenceDetail = async (
   caseId: string,
-  evidenceId: string
+  evidenceId: string,
+  snapshotId?: string | null
 ): Promise<EvidenceDetail> =>
   request(
-    `/api/cases/${encodeURIComponent(caseId)}/evidence/${encodeURIComponent(evidenceId)}`
+    `/api/cases/${encodeURIComponent(caseId)}/evidence/${encodeURIComponent(evidenceId)}` +
+      snapshotQuery(snapshotId)
   );
 
 export const getCitationDetail = async (
@@ -180,6 +193,47 @@ export const getTimelineForCase = async (caseId: string): Promise<TimelineEvent[
 
 export const getRunHistoryForCase = async (caseId: string): Promise<RunHistoryItem[]> =>
   request(`/api/cases/${caseId}/run-history`);
+
+export interface RunQuery {
+  limit?: number;
+  offset?: number;
+}
+
+function runQueryString(query: RunQuery = {}): string {
+  const params = new URLSearchParams();
+  if (typeof query.limit === 'number') params.set('limit', String(query.limit));
+  if (typeof query.offset === 'number') params.set('offset', String(query.offset));
+  const rendered = params.toString();
+  return rendered ? `?${rendered}` : '';
+}
+
+/** R04 grouped invocations, newest sequence first (distinct from stage history). */
+export const getInvestigationRuns = async (
+  caseId: string,
+  query: RunQuery = {}
+): Promise<InvestigationRunList> =>
+  request(
+    `/api/cases/${encodeURIComponent(caseId)}/investigation-runs${runQueryString(query)}`
+  );
+
+export const getInvestigationRun = async (
+  caseId: string,
+  runId: string
+): Promise<InvestigationRun> =>
+  request(
+    `/api/cases/${encodeURIComponent(caseId)}/investigation-runs/${encodeURIComponent(runId)}`
+  );
+
+/** R04 typed changes for one run; pending/unavailable are not empty deltas. */
+export const getRunChanges = async (
+  caseId: string,
+  runId: string,
+  query: RunQuery = {}
+): Promise<RunChanges> =>
+  request(
+    `/api/cases/${encodeURIComponent(caseId)}/investigation-runs/` +
+      `${encodeURIComponent(runId)}/changes${runQueryString(query)}`
+  );
 
 export const getReportForCase = async (caseId: string): Promise<ReportData> =>
   request(`/api/cases/${caseId}/report`);

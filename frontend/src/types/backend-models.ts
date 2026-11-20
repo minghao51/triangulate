@@ -245,6 +245,94 @@ export interface RunHistoryItem {
   message: string | null;
 }
 
+// ---------------------------------------------------------------------------
+// R04 grouped investigation runs and typed changes
+// ---------------------------------------------------------------------------
+
+export type InvestigationRunStatus =
+  | 'running'
+  | 'succeeded'
+  | 'paused'
+  | 'failed'
+  | 'interrupted';
+
+export type InvestigationCoverage =
+  | 'complete_requested_scope'
+  | 'partial'
+  | 'failed'
+  | 'not_attempted'
+  | 'unknown';
+
+export type InvestigationTrigger = 'initial' | 'rerun' | 'monitor';
+
+/** One grouped `run_case` invocation (distinct from a stage attempt). */
+export interface InvestigationRun {
+  id: string;
+  caseId: string;
+  sequence: number;
+  trigger: InvestigationTrigger | string;
+  requestedStartStage: string | null;
+  status: InvestigationRunStatus | string;
+  coverage: InvestigationCoverage | string;
+  startedAt: string | null;
+  completedAt: string | null;
+  predecessorRunId: string | null;
+  baselineSnapshotId: string | null;
+  resultSnapshotId: string | null;
+  /** The published snapshot for this run; null when none was published. */
+  snapshotId: string | null;
+  errorMessage: string | null;
+}
+
+/** `GET /api/cases/{case_id}/investigation-runs` */
+export interface InvestigationRunList {
+  items: InvestigationRun[];
+  total: number;
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+}
+
+export type ChangeAvailability = 'initial' | 'ready' | 'pending' | 'unavailable';
+
+export type ChangeType =
+  | 'article_added'
+  | 'capture_changed'
+  | 'claim_added'
+  | 'claim_no_longer_extracted'
+  | 'classification_changed'
+  | 'relationship_changed'
+  | 'review_state_changed'
+  | 'exception_changed';
+
+/** One typed change observed between two snapshots. */
+export interface ChangeItem {
+  type: ChangeType | string;
+  entityType: string;
+  entityId: string;
+  before: Record<string, unknown> | null;
+  after: Record<string, unknown> | null;
+  /** Run recorded as the entity's origin; null means unknown, never "the observer". */
+  originRunId: string | null;
+  /** Run whose successful observation produced this item. */
+  observedByRunId: string | null;
+  observedAt: string | null;
+}
+
+/** `GET /api/cases/{case_id}/investigation-runs/{run_id}/changes` */
+export interface RunChanges {
+  availability: ChangeAvailability;
+  baselineSnapshotId: string | null;
+  targetSnapshotId: string | null;
+  coverage: InvestigationCoverage | string;
+  coverageNote: string | null;
+  items: ChangeItem[];
+  total: number;
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+}
+
 export interface ReportData {
   status: 'generated' | 'pending';
   markdownPath: string | null;

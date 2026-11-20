@@ -14,6 +14,9 @@ const apiMocks = vi.hoisted(() => ({
   getPartiesForCase: vi.fn(),
   getTimelineForCase: vi.fn(),
   getRunHistoryForCase: vi.fn(),
+  getInvestigationRuns: vi.fn(),
+  getRunChanges: vi.fn(),
+  getClaimDetail: vi.fn(),
   getReportForCase: vi.fn(),
   downloadManifestReport: vi.fn(),
   downloadMarkdownReport: vi.fn(),
@@ -66,6 +69,7 @@ const routeExpectations = [
   { initialEntry: '/cases/case-12345678/timeline', heading: 'Investigation Timeline' },
   { initialEntry: '/cases/case-12345678/exceptions', heading: 'Exception Queue' },
   { initialEntry: '/cases/case-12345678/report', heading: 'Final Investigation Report' },
+  { initialEntry: '/cases/case-12345678/changes', heading: 'Changes between observations' },
   { initialEntry: '/cases/case-12345678/run-history', heading: 'Pipeline Execution History' },
 ];
 
@@ -171,6 +175,13 @@ describe('CaseIntelligenceCenter routes', () => {
         locationLon: 103.8198,
       },
     ]);
+    apiMocks.getInvestigationRuns.mockResolvedValue({
+      items: [],
+      total: 0,
+      limit: 50,
+      offset: 0,
+      hasMore: false,
+    });
     apiMocks.getRunHistoryForCase.mockResolvedValue([
       {
         id: 'run-1',

@@ -2,11 +2,14 @@ import { describe, expect, it } from 'vitest';
 import {
   buildCaseTabUrl,
   buildCitationUrl,
+  buildChangesUrl,
   buildComparisonUrl,
   buildClaimEvidenceUrl,
   buildInspectorUrl,
+  parseChangesSelection,
   parseComparisonSelection,
   parseInspectorSelection,
+  toChangesSearchParams,
   toComparisonSearchParams,
   toInspectorSearchParams,
 } from './deep-links';
@@ -32,7 +35,25 @@ describe('deep-link helpers', () => {
       citationId: 'citation?3',
       start: 40,
       length: 20000,
+      snapshotId: null,
     });
+  });
+
+  it('carries a pinned snapshot selector only when one is supplied', () => {
+    const url = buildInspectorUrl('case-1', {
+      claimId: 'claim-1',
+      snapshotId: 'snap/1',
+    });
+    expect(url).toBe(
+      '/cases/case-1/evidence?claim=claim-1&snapshot=snap%2F1'
+    );
+    const parsed = parseInspectorSelection(
+      new URL(url, 'https://example.test').searchParams
+    );
+    expect(parsed.claimId).toBe('claim-1');
+    expect(parsed.snapshotId).toBe('snap/1');
+
+    expect(toInspectorSearchParams({ snapshotId: '  ' }).toString()).toBe('');
   });
 
   it('keeps the legacy claim evidence link byte-identical', () => {
@@ -108,5 +129,40 @@ describe('comparison deep links', () => {
   it('serialises offset=0 explicitly and omits absent selectors', () => {
     expect(toComparisonSearchParams({ offset: 0 }).toString()).toBe('offset=0');
     expect(toComparisonSearchParams({ leftId: null, offset: null }).toString()).toBe('');
+  });
+});
+
+describe('changes deep links', () => {
+  it('encodes the run, frozen claim, snapshot and page offset', () => {
+    const url = buildChangesUrl('case/one', {
+      runId: 'run 1',
+      claimId: 'claim/2',
+      snapshotId: 'snap 3',
+      offset: 25,
+    });
+    expect(url).toBe(
+      '/cases/case%2Fone/changes?run=run%201&claim=claim%2F2&snapshot=snap%203&offset=25'
+    );
+    expect(
+      parseChangesSelection(new URL(url, 'https://example.test').searchParams)
+    ).toEqual({
+      runId: 'run 1',
+      claimId: 'claim/2',
+      snapshotId: 'snap 3',
+      offset: 25,
+      limit: null,
+    });
+  });
+
+  it('omits absent selectors and rejects malformed offsets', () => {
+    expect(toChangesSearchParams({ runId: 'run-1', offset: null }).toString()).toBe(
+      'run=run-1'
+    );
+    const parsed = parseChangesSelection(
+      new URLSearchParams('run=run-1&offset=-1&limit=abc')
+    );
+    expect(parsed.runId).toBe('run-1');
+    expect(parsed.offset).toBeNull();
+    expect(parsed.limit).toBeNull();
   });
 });

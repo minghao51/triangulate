@@ -186,7 +186,7 @@ interface EvidenceInspectorProps {
 export const EvidenceInspector: React.FC<EvidenceInspectorProps> = ({ caseId }) => {
   const [searchParams, setSearchParams] = useSearchParams();
   const selection = useMemo(() => parseInspectorSelection(searchParams), [searchParams]);
-  const { claimId, evidenceId, captureId, citationId, start } = selection;
+  const { claimId, evidenceId, captureId, citationId, start, snapshotId } = selection;
 
   const headingRef = useRef<HTMLHeadingElement>(null);
 
@@ -197,15 +197,15 @@ export const EvidenceInspector: React.FC<EvidenceInspectorProps> = ({ caseId }) 
     retry: false,
   });
   const evidenceQuery = useQuery({
-    queryKey: ['evidence-inspector', caseId, evidenceId],
-    queryFn: () => getEvidenceDetail(caseId, evidenceId!),
+    queryKey: ['evidence-inspector', caseId, evidenceId, snapshotId],
+    queryFn: () => getEvidenceDetail(caseId, evidenceId!, snapshotId),
     enabled: Boolean(caseId && evidenceId && !citationId),
     retry: false,
   });
   // Claim detail enriches assessment provenance but never blocks the passage view.
   const claimQuery = useQuery({
-    queryKey: ['claim-inspector', caseId, claimId],
-    queryFn: () => getClaimDetail(caseId, claimId!),
+    queryKey: ['claim-inspector', caseId, claimId, snapshotId],
+    queryFn: () => getClaimDetail(caseId, claimId!, snapshotId),
     enabled: Boolean(caseId && claimId && !citationId),
     retry: false,
   });
@@ -226,6 +226,30 @@ export const EvidenceInspector: React.FC<EvidenceInspectorProps> = ({ caseId }) 
   // A requested older version must exist in the reported capture list.
   const captureSelectionKnown =
     !evidenceDetail || !captureId || captures.some((item) => item.id === captureId);
+
+  const historicalNote = useMemo(() => {
+    if (claimDetail?.liveState) {
+      const liveState = claimDetail.liveState;
+      if (!liveState.present) {
+        return 'The live case no longer contains this claim. The text and passages below are frozen as observed.';
+      }
+      if (liveState.textMatchesSnapshot === false) {
+        return 'The live claim has changed since this observation. The text and passages below are frozen as observed; this view does not say who changed it.';
+      }
+      return 'The live claim still matches this observation. Values below are read from the snapshot, not from current rows.';
+    }
+    if (evidenceDetail?.liveState) {
+      const liveState = evidenceDetail.liveState;
+      if (!liveState.present) {
+        return 'The live case no longer contains this evidence item. The metadata below is frozen as observed.';
+      }
+      if (liveState.currentCaptureMatchesSnapshot === false) {
+        return 'A newer capture exists in the live case. This view shows the capture recorded at this observation, not the current one.';
+      }
+      return 'The live current capture still matches this observation. Values below are frozen metadata and captured text.';
+    }
+    return 'Values below are resolved from the pinned observation, not from current rows.';
+  }, [claimDetail, evidenceDetail]);
 
   const passage = useMemo<InspectedPassage | null>(() => {
     if (citation) return citationPassage(citation);
@@ -312,8 +336,9 @@ export const EvidenceInspector: React.FC<EvidenceInspectorProps> = ({ caseId }) 
           <div>
             <strong>{label} not found for this case.</strong>
             <p>
-              It may belong to another case, or the record may no longer exist. The
-              workspace never substitutes another case&apos;s data.
+              {snapshotId
+                ? 'It may belong to another case, or it may not be present in the selected snapshot. The workspace never substitutes current rows for a historical observation.'
+                : 'It may belong to another case, or the record may no longer exist. The workspace never substitutes another case’s data.'}
             </p>
             <button type="button" className="btn btn-secondary" onClick={closeInspector}>
               Close inspector
@@ -359,6 +384,13 @@ export const EvidenceInspector: React.FC<EvidenceInspectorProps> = ({ caseId }) 
         </button>
       </div>
 
+      {snapshotId && !citationId && (
+        <div className="inspector-banner" role="status">
+          <strong>Historical observation {shortId(snapshotId)}.</strong>
+          <p>{historicalNote}</p>
+        </div>
+      )}
+
       {primaryQuery.isLoading && (
         <div className="inspector-state" role="status">
           Loading {citationId ? 'frozen citation' : 'evidence source'}…
@@ -373,6 +405,11 @@ export const EvidenceInspector: React.FC<EvidenceInspectorProps> = ({ caseId }) 
             void primaryQuery.refetch();
           }
         )}
+
+      {claimQuery.error != null &&
+        renderQueryError(claimQuery.error, 'Claim', () => {
+          void claimQuery.refetch();
+        })}
 
       {!primaryQuery.isLoading && !primaryQuery.error && !activeEvidence && (
         <div className="inspector-state" role="status">

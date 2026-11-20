@@ -1,9 +1,9 @@
 # Release B handoff: P03 review and Release C (R01–V01)
 
-Date: 2026-11-18. Status: **Release A and Release B are accepted; R01, R02, R03a,
-R03b and the R03c change-origin ticket are delivered, independently reviewed and
-accepted; R01/R02/R03a are committed and R03b/R03c (plus the R01–R03a defect pass)
-are committed as `6c67f86`.** Review evidence lives in the
+Date: 2026-11-20. Status: **Release A and Release B are accepted; R01, R02, R03a,
+R03b and R03c are delivered, independently reviewed, accepted and pushed, and R04
+(changes/grouped-history UI) is delivered and verified with its diff review
+pending. Next ticket is S01.** Review evidence lives in the
 [worker plan](20261114-evidence-workbench-worker-plan.md) §7 and the architecture
 docs. This document is the Release C handoff and remains self-contained for a
 fresh agent. Contract authority remains the
@@ -24,9 +24,10 @@ fresh agent. Contract authority remains the
 | R03a | `44b9870` — snapshots/deltas, guarded finalization, run-specific reports, run/snapshot/changes GETs; migration 14; committed; **accepted 2026-11-18 after a defect pass** |
 | R03b | `6c67f86` — snapshot-aware claim/evidence/comparison readers + selector acceptance; no migration; **accepted** |
 | R03c | `6c67f86` — change-origin honesty (`originRunId`/`observedByRunId`), count-free semantic projection, explicit read transaction, report path containment; no migration; **accepted** |
-| Next ticket | **R04 — changes and grouped history UI (not started)** |
+| R04 | working tree — case-scoped Changes tab with truthful initial/pending/unavailable/unchanged states, coverage warnings, origin/observed provenance and snapshot-aware historical links; no migration; **diff review pending** |
+| Next ticket | **S01 — transactional case FTS index and explicit rebuild (not started)** |
 | Migrations | 1..14 (…12 grouped investigation runs, 13 case writer ownership, 14 immutable case snapshots) |
-| Frontend gate | `npm run check` green; `npm test -- --run` = **107 tests / 12 files** |
+| Frontend gate | `npm run check` green; `npm test -- --run` = **132 tests / 13 files** |
 | Backend gate | **553 passed, 9 deselected**; Ruff clean |
 | Scratch files | 382 removed after archive at `/tmp/triangulate-scratch-archive-20261118T005339Z.tar.gz` (382/382 verified, sha256 `6a38b51c41a7542819f30d23bddc0a83ebb07f8b9eda943df69e554314bad4e5`); no untracked scratch files remain |
 | Production data | untouched; B02 test-database incident remains disclosed |
@@ -50,10 +51,11 @@ P01/P02/P03 docs:
 4. ~~Record Release B acceptance in the worker plan and commit the documentation.~~
    Recorded (`aaa4f16`). R01 was committed (`ed8459f`) and R02 committed
    (`0ea524a`).
-5. R03a, R03b were delivered, then independently reviewed: the reviewers found
-   real gaps, so a bounded **defect pass** (R01/R02/R03a) plus **R03c** were
-   completed and re-reviewed before acceptance. **Implement R04 only.** One
-   bounded ticket at a time, parent review after each.
+5. R03a/R03b were independently reviewed; a bounded **defect pass**
+   (R01/R02/R03a) plus **R03c** were completed, re-reviewed and pushed. **R04 is
+   now delivered and verified** (frontend-only, 132 tests / 13 files, isolated
+   browser check). **Implement S01 only.** One bounded ticket at a time, parent
+   review after each.
 
 ## 3. P03 delivered behaviour
 
@@ -237,7 +239,30 @@ clean**; logs `/tmp/triangulate-defectpass-{full,ruff}.log`. Note: removing the
 counts changes `semanticHash` for observations taken after the fix; typed deltas
 are unaffected.
 
-### R04 — Changes and grouped history UI
+### R04 — Changes and grouped history UI — **delivered and verified**
+
+Delivered on 2026-11-20 (frontend-only, no migration): a case-scoped **Changes**
+tab (`/cases/{case_id}/changes`) showing grouped runs separately from the untouched
+stage-oriented Run History, driven entirely by the URL (`run`, `offset`, plus
+`claim`+`snapshot` for the inline frozen-claim panel). States are distinct —
+`initial` (“not a surge of new changes”), `pending`, `unavailable` (“not an empty
+delta”, plus “failed/paused/interrupted never advances the successful baseline”),
+`ready` with items, `ready` with none (“unchanged — no changes in observed data”).
+Incomplete coverage is conspicuous even for an empty delta, including the “not
+that every source was unchanged” caveat. Each row separates `originRunId`
+(“Recorded by run …”, or “origin not recorded”) from `observedByRunId` and never
+says who changed a value; “no longer extracted” is not a retraction. Historical
+links use the snapshot readers: inline frozen claim (target, or baseline for a
+removed claim) with live-state wording and passages, evidence inspector with the
+pinned `snapshotId` for capture changes, safe external links for articles, and no
+invented link for link-level/review/exception rows. Gates: `npm run check` green,
+**132 tests / 13 files**; isolated Vite-only browser check with intercepted APIs
+(no backend, no database) verified every state plus removed-claim readability, the
+pinned-snapshot inspector link, 390 px single-column layout, **0 non-GET requests
+and 0 console errors** after interception. Evidence:
+`/tmp/r04-changes-desktop.png`, `/tmp/r04-browser-result.txt`,
+`/tmp/r04-vite.log`. See the
+[changes UI architecture](../architecture/20261120-changes-ui.md).
 
 - Existing run-history tab plus a small changes panel/tab; DISTINCT from stage
   attempts. Baseline/target/coverage, real delta items, snapshot links.
@@ -326,10 +351,12 @@ uv run ruff check src tests --output-format concise
 
 - P03 is committed and **accepted as Release B** (2026-11-18).
 - R01 (`ed8459f`, migration 12) and R02 (`0ea524a`, migration 13) are committed.
-- R03a (migration 14) and R03b (snapshot-aware readers) are implemented and
-  verified; their diffs still need owner/parent review. Historical/removed claims
-  and historical comparisons are now inspectable through the claim/evidence/
-  comparison readers. R04's historical change links can use them.
+- R03a, R03b, R03c and the R01–R03a defect pass are accepted and pushed; R04 is
+  implemented and verified with its diff review pending.
+- R04 does not poll pending runs: Refresh refetches the run list and the selected
+  delta, and the case header keeps its existing case-detail polling. Link-level
+  (`relationship_changed`) rows show before/after without a navigation link because
+  no link reader exists.
 - `snapshotId` names a *published* observation; a running invocation has no
   snapshot ID, so there is no reader-side pending state (the run-level `changes`
   contract keeps `initial|ready|pending|unavailable`).
@@ -364,77 +391,60 @@ uv run ruff check src tests --output-format concise
 - No `.pi-lens.json` ignore file was added; the scratch-file cascade is gone
   because the files were archived/removed.
 
-## 9. Paste-ready R04 dispatch brief
+## 9. Paste-ready S01 dispatch brief
 
 ```text
-Implement ticket R04 (changes and grouped history UI) from
+Implement ticket S01 (transactional case FTS index and explicit rebuild) from
 docs/plans/20261114-evidence-workbench-worker-plan.md
-(contract: docs/plans/20261114-evidence-workbench-specification.md §7).
+(contract: docs/plans/20261114-evidence-workbench-specification.md §8).
 
 Start by reading, in this order:
 1. docs/plans/20261118-release-b-handoff.md (current state, safety rules)
-2. docs/architecture/20261118-case-snapshots.md (R03a contracts and the R03b
-   snapshot-aware readers, including their 404/422/unavailable semantics)
-3. docs/architecture/20261118-investigation-runs.md and
-   docs/architecture/20261118-case-writer-fencing.md
-4. the frontend run-history surface, src/http/app.py run/snapshot routes,
-   src/http/mappers.py run mappers and src/cases/history.py readers.
+2. docs/architecture/20261120-changes-ui.md (what R04 consumes) and
+   docs/architecture/20261118-case-snapshots.md
+3. the storage layer (src/storage/database.py, models.py, migrations.py,
+   event_store.py, captures.py), the case service mutation paths and the CLI
+   command surface (src/cli/main.py, src/cli/commands/cases.py).
+4. specification §8 (search) and the audit note on why LIKE fallbacks and
+   best-effort async indexing are rejected.
 
-CURRENT STATE (2026-11-18)
-- Release A and Release B are accepted; R01, R02, R03a and R03b are delivered
-  and verified (R03a committed as 44b9870; R03b/R03c and the defect pass as
-  6c67f86). Local main
-  is 10+ commits ahead of origin/main and unpushed.
-- Migration history is 1..14. Backend 553 passed / 9 deselected, Ruff clean.
-  Frontend `npm run check` green, 107 tests / 12 files.
-- R04 is the only remaining ticket in the R (changes) lane before S01/S02.
+CURRENT STATE (2026-11-20)
+- Release A/B accepted; R01, R02, R03a, R03b, R03c pushed; R04 delivered and
+  verified (frontend 132 tests / 13 files, check green) with review pending.
+- Backend 553 passed / 9 deselected, Ruff clean; migrations 1..14.
+- Next ticket after S01 is S02 (search API + workspace UI).
 
 SCOPE
-- Add a small changes panel/tab to the existing run-history surface, DISTINCT
-  from stage attempts; keep /run-history stage-oriented.
-- Show baseline/target snapshot IDs, observation time, coverage and caveat,
-  paginated typed delta items with real before/after values and snapshot links.
-- Render `originRunId` and `observedByRunId` as separate facts ("recorded by run
-  X / observed by run Y"), and leave an unknown origin visibly unknown; never
-  phrase either as who changed a field.
-- Label initial/ready/pending/unavailable/unchanged correctly; partial coverage
-  must be conspicuous even when the delta is empty; an empty delta means "no
-  changes in observed data", never "all sources unchanged".
-- Historical entity links must use the snapshot-aware readers
-  (?snapshotId=) so removed/rewritten claims open the frozen observation; the
-  selector is rejected by readers without historical support, so do not add it to
-  case/claims/evidence list endpoints.
-- Extend the frontend API types with the new optional `snapshotId`, `liveState`
-  and `unavailableCaptureIds` fields when consuming them; render the
-  historical/present distinction from `liveState` and never from a live fetch.
-- No actor attribution, no "human decision" wording, no truth/corroboration or
-  independence claims; unknown origin stays unknown.
-- No-op runs create an observation with an empty delta and must not render a
-  change surge; failed/paused runs are not baselines.
+- Add one transactional case-scoped FTS5 index over current evidence and current
+  individual claims, with an additive migration and an explicit capability probe.
+- Index writes must be part of the same transaction as the case-bound write that
+  changes the row (no best-effort or async queue), and must respect the R02
+  owner/fencing rules. No GET may create or rebuild the index.
+- Unsupported FTS must report an explicit capability status; no silent LIKE or
+  scan fallback, and no cross-case/global index in this ticket.
+- Add a narrow CLI rebuild command that is case-owned, repeatable and idempotent;
+  a rebuild must refuse a case with an active foreign writer.
+- Probe FTS5 availability in a temporary database and keep every test hermetic.
 
 OUT OF SCOPE
-New backend snapshot/delta semantics beyond the delivered contracts, S01/S02
-search, any new mutation endpoint, production deployment, schema changes unless
-strictly required (allocate the next migration from the then-current registry and
-stop for review first), unrelated refactors.
+Search read API and UI (S02), vector/semantic search, production deployment,
+historical-data recovery, unrelated refactors, snapshots or changes work.
 
 SAFETY
 - Run backend Python/tests only in the disposable copy recorded in
   /tmp/triangulate-safety-verification-dir. Copy only src/ and tests/ plus
   bias_taxonomy.toml.
-- Never touch data/, triangulate.db, .env, logs/, config.toml, the scratch
-  archive or the live database; no ingestion, cleanup or migration against it.
-- Browser checks follow the playwright-cli skill: temporary DB/config, isolated
-  session, intercepted or disposable-copy backend, record console/network
-  findings, close your own browser/server.
+- Never touch data/, triangulate.db, .env, logs/, config.toml or the scratch
+  archive; no ingestion, cleanup or migration against the live database.
+- Allocate the next migration number from the then-current registry and stop for
+  review if more than an additive index table is required.
 - No commits, resets, branches, dependency changes, pushes or deletions without
-  owner instruction. Keep scratch work in /tmp.
-- One application-code writer at a time. Preserve the CLI-only mutation boundary,
-  the R02 case-owner guard and the GET-only read boundary.
+  owner instruction. Keep scratch work in /tmp. One application-code writer.
+- Preserve the CLI-only mutation boundary and the GET-only read boundary.
 
 RETURN
-Behaviour delivered; exact files/components/contracts changed; pending vs
-unavailable vs empty semantics; historical-link behaviour; real migration/test
-output; frontend check/test/browser evidence; remaining risks/blockers. Do not
-call partial work done.
+Behaviour delivered; exact files/symbols/migration changed; index capability and
+failure semantics; write-path and rebuild idempotency evidence; real migration and
+test output (focused, full, Ruff); remaining risks/blockers. Do not call partial
+work done.
 ```

@@ -617,3 +617,122 @@ describe('EvidenceInspector case scoping', () => {
     expect(screen.queryByText('Case A source')).toBeNull();
   });
 });
+
+describe('EvidenceInspector historical observations', () => {
+  it('resolves a claim from the pinned snapshot and states the live difference', async () => {
+    apiMocks.getEvidenceDetail.mockResolvedValue(
+      evidenceDetail({
+        snapshotId: 'snap-1',
+        liveState: {
+          present: true,
+          claimSignature: null,
+          textMatchesSnapshot: null,
+          currentCaptureId: 'cap-1',
+          currentCaptureMatchesSnapshot: true,
+        },
+      })
+    );
+    apiMocks.getClaimDetail.mockResolvedValue(
+      claimDetail({
+        snapshotId: 'snap-1',
+        liveState: {
+          present: true,
+          claimSignature: 'sig-2',
+          textMatchesSnapshot: false,
+          currentCaptureId: null,
+          currentCaptureMatchesSnapshot: null,
+        },
+      })
+    );
+    apiMocks.getCaptureWindow.mockResolvedValue(windowFor('Example body text'));
+
+    renderInspector(
+      '/cases/case-1/evidence?evidence=ev-1&claim=claim-1&snapshot=snap-1'
+    );
+
+    expect(
+      await screen.findByText(/Historical observation snap-1/i)
+    ).toBeDefined();
+    expect(
+      await screen.findByText(/live claim has changed since this observation/i)
+    ).toBeDefined();
+    expect(apiMocks.getClaimDetail).toHaveBeenCalledWith('case-1', 'claim-1', 'snap-1');
+    expect(apiMocks.getEvidenceDetail).toHaveBeenCalledWith('case-1', 'ev-1', 'snap-1');
+    // The historical view never says who changed anything.
+    expect(document.body.textContent ?? '').not.toMatch(/changed by/i);
+  });
+
+  it('reports a frozen claim that the live case no longer contains', async () => {
+    apiMocks.getEvidenceDetail.mockResolvedValue(
+      evidenceDetail({ snapshotId: 'snap-1' })
+    );
+    apiMocks.getClaimDetail.mockResolvedValue(
+      claimDetail({
+        snapshotId: 'snap-1',
+        liveState: {
+          present: false,
+          claimSignature: null,
+          textMatchesSnapshot: null,
+          currentCaptureId: null,
+          currentCaptureMatchesSnapshot: null,
+        },
+      })
+    );
+    apiMocks.getCaptureWindow.mockResolvedValue(windowFor('Example body text'));
+
+    renderInspector(
+      '/cases/case-1/evidence?evidence=ev-1&claim=claim-1&snapshot=snap-1'
+    );
+
+    expect(
+      await screen.findByText(/live case no longer contains this claim/i)
+    ).toBeDefined();
+  });
+
+  it('resolves evidence metadata from the pinned snapshot and notes a newer capture', async () => {
+    apiMocks.getEvidenceDetail.mockResolvedValue(
+      evidenceDetail({
+        snapshotId: 'snap-1',
+        liveState: {
+          present: true,
+          claimSignature: null,
+          textMatchesSnapshot: null,
+          currentCaptureId: 'cap-2',
+          currentCaptureMatchesSnapshot: false,
+        },
+      })
+    );
+    apiMocks.getCaptureWindow.mockResolvedValue(windowFor('Example body text'));
+
+    renderInspector('/cases/case-1/evidence?evidence=ev-1&snapshot=snap-1');
+
+    expect(
+      await screen.findByText(/Historical observation snap-1/i)
+    ).toBeDefined();
+    expect(
+      await screen.findByText(/newer capture exists in the live case/i)
+    ).toBeDefined();
+    expect(apiMocks.getEvidenceDetail).toHaveBeenCalledWith('case-1', 'ev-1', 'snap-1');
+  });
+
+  it('explains that a snapshot 404 can mean the entity is absent from that observation', async () => {
+    apiMocks.getEvidenceDetail.mockRejectedValue(new ApiError('missing', 404));
+
+    renderInspector('/cases/case-1/evidence?evidence=ev-1&snapshot=snap-1');
+
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent ?? '').toMatch(/may not be present in the selected snapshot/i);
+    expect(alert.textContent ?? '').not.toMatch(/no longer exist/i);
+  });
+
+  it('does not pass a snapshot selector to the immutable citation reader', async () => {
+    apiMocks.getCitationDetail.mockResolvedValue(citation());
+    apiMocks.getCaptureWindow.mockResolvedValue(windowFor('abcde tail'));
+
+    renderInspector('/cases/case-1/evidence?citation=cit-1&snapshot=snap-1');
+
+    expect(await screen.findByRole('heading', { name: /Frozen citation/ })).toBeDefined();
+    expect(apiMocks.getCitationDetail).toHaveBeenCalledWith('case-1', 'cit-1');
+    expect(apiMocks.getCitationDetail).toHaveBeenCalledTimes(1);
+  });
+});
