@@ -1,11 +1,12 @@
 # Release B handoff: P03 review and Release C (R01–V01)
 
-Date: 2026-11-20. Status: **Release A and Release B are accepted; R01, R02, R03a,
-R03b and R03c are delivered, independently reviewed, accepted and pushed, and R04
-(changes/grouped-history UI) is delivered, verified and committed locally as
-`44f1e58` with its diff review pending. The remaining Release C work is mapped in
-the [completion map](20261120-release-c-completion-map.md): S01 → S02 → V01, then
-stop; D01 and deployment are owner gates.** Review evidence lives in the
+Date: 2026-11-20 (updated 2026-11-21). Status: **Release A and Release B are accepted; R01, R02, R03a,
+R03b and R03c are delivered, independently reviewed, accepted and pushed; R04
+(changes/grouped-history UI) is accepted after its review fix (`dfc809c`), and
+Release C (S01, S02, V01) is implemented, reviewed and verified locally —
+committed (`3096c0f`, `5501842`, `0ae9359`, `b92c453`, `ff838cc`, `3594d1c`,
+`2fd91a2`, `19f42e3`, `0db8971`) and not pushed. Nothing remains to implement;
+the next step is owner review/push. D01 and deployment are owner gates.** Review evidence lives in the
 [worker plan](20261114-evidence-workbench-worker-plan.md) §7 and the architecture
 docs. This document is the Release C handoff and remains self-contained for a
 fresh agent. Contract authority remains the
@@ -16,7 +17,7 @@ fresh agent. Contract authority remains the
 
 | Item | State |
 |---|---|
-| Local `main` | Ahead of `origin/main` by the Release B acceptance, R01, R02 and this R03a commit — **not pushed** |
+| Local `main` | 13 commits ahead of `origin/main` (`81b8778`); code head `0db8971` plus this documentation commit — Release B acceptance, R01–R04 and all of Release C — **not pushed** |
 | Release A | Accepted: B00–B03, E01–E04; E04 = `8ee32eb` |
 | P01 | `e95bfb2` — conservative source dependency groups |
 | P02 | `4d93c12` — deterministic comparison read API |
@@ -26,11 +27,14 @@ fresh agent. Contract authority remains the
 | R03a | `44b9870` — snapshots/deltas, guarded finalization, run-specific reports, run/snapshot/changes GETs; migration 14; committed; **accepted 2026-11-18 after a defect pass** |
 | R03b | `6c67f86` — snapshot-aware claim/evidence/comparison readers + selector acceptance; no migration; **accepted** |
 | R03c | `6c67f86` — change-origin honesty (`originRunId`/`observedByRunId`), count-free semantic projection, explicit read transaction, report path containment; no migration; **accepted** |
-| R04 | `44f1e58` — case-scoped Changes tab with truthful initial/pending/unavailable/unchanged states, coverage warnings, origin/observed provenance and snapshot-aware historical links; no migration; **diff review pending** |
-| Next ticket | **S01 → S02 → V01 per the [completion map](20261120-release-c-completion-map.md)**; D01 and deployment remain owner gates |
-| Migrations | 1..14 (…12 grouped investigation runs, 13 case writer ownership, 14 immutable case snapshots) |
-| Frontend gate | `npm run check` green; `npm test -- --run` = **132 tests / 13 files** |
-| Backend gate | **553 passed, 9 deselected**; Ruff clean |
+| R04 | `44f1e58` — case-scoped Changes tab with truthful initial/pending/unavailable/unchanged states, coverage warnings, origin/observed provenance and snapshot-aware historical links; no migration; **accepted after review fix `dfc809c`** |
+| S01 | `3096c0f`, `5501842` — transactional case FTS5 index (migration 15), deterministic rowids, CLI `case rebuild-search`; **implemented, reviewed and verified locally, not pushed** |
+| S02 | `0ae9359`, `b92c453`, `ff838cc`, `3594d1c` — `GET /api/cases/{case_id}/search` and the workspace Search tab with URL-persisted state; **implemented, reviewed and verified locally, not pushed** |
+| V01 | `2fd91a2`, `19f42e3`, `0db8971` — Release C journey test/fixture, browser E2E and documentation; **verified locally, not pushed** |
+| Next ticket | **None — Release C is complete locally.** Next step is owner review/push per the [completion map](20261120-release-c-completion-map.md); D01 and deployment remain owner gates |
+| Migrations | 1..15 (…12 grouped investigation runs, 13 case writer ownership, 14 immutable case snapshots, 15 optional case FTS5 index) |
+| Frontend gate | `npm run check` exit 0; `npm test -- --run` = **164 tests / 14 files** |
+| Backend gate | **614 passed, 9 deselected** (`tests/test_v01_e2e.py` is the 614th); Ruff clean over `src tests scripts` |
 | Scratch files | 382 removed after archive at `/tmp/triangulate-scratch-archive-20261118T005339Z.tar.gz` (382/382 verified, sha256 `6a38b51c41a7542819f30d23bddc0a83ebb07f8b9eda943df69e554314bad4e5`); no untracked scratch files remain |
 | Production data | untouched; B02 test-database incident remains disclosed |
 
@@ -55,11 +59,26 @@ P01/P02/P03 docs:
    (`0ea524a`).
 5. R03a/R03b were independently reviewed; a bounded **defect pass**
    (R01/R02/R03a) plus **R03c** were completed, re-reviewed and pushed. **R04 is
-   now delivered and verified** (frontend-only, 132 tests / 13 files, isolated
-   browser check, committed `44f1e58`). **Continue with the
-   [Release C completion map](20261120-release-c-completion-map.md): S01, then S02,
-   then V01, one bounded ticket at a time with an independent reviewer pass after
-   each, then stop.** D01 and production deployment are separate owner gates.
+   accepted** after its review fix (`dfc809c`; frontend-only, 132 tests / 13 files
+   at delivery, isolated browser check, committed `44f1e58`). **Release C is now
+   complete locally**: S01 (`3096c0f`, `5501842`), S02 (`0ae9359`, `b92c453`,
+   `ff838cc`, `3594d1c`) and V01 (`2fd91a2`, `19f42e3`, `0db8971`) are
+   implemented, reviewed and verified locally and not pushed. Verification
+   evidence (worker-plan §7 final entries): backend **614 passed / 9 deselected**
+   with Ruff clean over `src tests scripts`; frontend `npm run check` exit 0 with
+   **164 tests / 14 files**; clean-export fresh install green (init reaches
+   migration 15); journey test 275 GET-only requests with byte-identical
+   index/`_migrations` dumps and unchanged live DB sha256 (`049a8a9d…d9f86`);
+   Chrome Playwright-CLI browser run covering search, filters, URL persistence,
+   inspector (capture + historical `snapshot` key), the Changes-tab frozen-claim
+   link, empty/404/503-with-remedy states, keyboard submit and literal
+   markup-title rendering (no Firefox/Safari matrix, no load test, no mobile
+   viewport). Final docs: [search index](../architecture/20261120-search-index.md),
+   [search read API](../architecture/20261120-search-api.md),
+   [HTTP API](../reference/http-api.md), [CLI](../reference/cli.md),
+   [CLI operations](../reference/cli-operations.md) (503 runbook and the
+   `VITE_API_BASE_URL` requirement). Next: owner review/push; D01 and production
+   deployment are separate owner gates.
 
 ## 3. P03 delivered behaviour
 
@@ -119,7 +138,8 @@ Previous browser evidence (isolated session, temp DB/config):
 ## 5. Remaining work map
 
 Because R01/R02 are committed and R03a is delivered, the remaining order after
-the R03a review is **R03b → R04 → S01 → S02 → V01**. R03b is the other half of
+the R03a review is **R03b → R04 → S01 → S02 → V01**. All of these are now
+delivered; S01/S02/V01 are verified locally and recorded below. R03b is the other half of
 the R03 ticket (snapshot-aware claim/evidence/comparison readers); S01 depends on
 E02/E03 and is technically independent of the R lane, but shared
 storage/event-store writers mean one application-code writer at a time.
@@ -276,7 +296,7 @@ and 0 console errors** after interception. Evidence:
 - No-op creates no change surge; failed/paused are not successful baselines;
   unknown review origin stays unknown. Frontend gates + fixture browser check.
 
-### S01 — Transactional case FTS index and explicit rebuild
+### S01 — Transactional case FTS index and explicit rebuild — **delivered, reviewed and verified locally**
 
 - `src/storage/search.py`, additive FTS migration/capability checks, write hooks,
   narrow CLI rebuild command, index tests.
@@ -286,7 +306,7 @@ and 0 console errors** after interception. Evidence:
 - No auto-index on GET; no silent `LIKE` fallback; unsupported index has explicit
   capability status. Rebuild repeatable and case-owned only.
 
-### S02 — Search API and workspace UI
+### S02 — Search API and workspace UI — **delivered, reviewed and verified locally**
 
 - Resource-specific search reader/DTO/GET, case workspace search component,
   URL/filter/link helpers, unit/API/component/browser tests.
@@ -297,7 +317,7 @@ and 0 console errors** after interception. Evidence:
 - Missing FTS → 503 with operator remedy. Measure the documented synthetic
   benchmark without brittle timing unit tests.
 
-### V01 — Release C verification and documentation
+### V01 — Release C verification and documentation — **delivered and verified locally**
 
 - Deterministic fixtures/E2E, CI paths, current architecture/API/operator docs,
   residual risk notes.
@@ -327,7 +347,8 @@ Release C implementation.
   browser/server. A prior seed helper is
   `tests.test_p02_comparison_api.seed_workbench(tmp_path)`.
 - No commits, resets, branches, dependency changes, pushes or deletions on `main`
-  without owner instruction. Local `main` is already 7 commits ahead of origin.
+  without owner instruction. Local `main` is already 13 commits ahead of origin
+  (the head is the Release C documentation commit on top of `0db8971`).
 - One application-code writer at a time. New migrations: allocate the next
   number from the then-current registry; do not reserve conflicting versions.
 - Preserve the CLI-only mutation boundary; no new public mutation endpoints.
@@ -357,10 +378,10 @@ uv run ruff check src tests --output-format concise
 - R01 (`ed8459f`, migration 12) and R02 (`0ea524a`, migration 13) are committed.
 - R03a, R03b, R03c and the R01–R03a defect pass are accepted and pushed; R04 is
   committed (`44f1e58`, not pushed) and verified with its diff review pending.
-- The remaining tickets are sequenced in the
-  [completion map](20261120-release-c-completion-map.md); S01 expects migration 15,
-  S02 none, V01 none. Migrations stay additive and must be re-allocated from the
-  live registry.
+- The remaining tickets were sequenced in the
+  [completion map](20261120-release-c-completion-map.md) and are all delivered:
+  S01 took migration 15, S02 and V01 none. Migrations stay additive and must be
+  re-allocated from the live registry.
 - R04 does not poll pending runs: Refresh refetches the run list and the selected
   delta, and the case header keeps its existing case-detail polling. Link-level
   (`relationship_changed`) rows show before/after without a navigation link because
@@ -372,8 +393,9 @@ uv run ruff check src tests --output-format concise
   recorded hash no longer matches the stored capture row, evidence detail lists it
   in `unavailableCaptureIds` and the comparison 404s instead of degrading
   silently.
-- Local `main` is ahead of `origin/main` (Release B acceptance, R01, R02 and this
-  R03a commit) and has not been pushed.
+- Local `main` is 13 commits ahead of `origin/main` (`81b8778`) — Release B
+  acceptance, R01–R04 and all of Release C, code head `0db8971` plus the
+  documentation commit — and has not been pushed.
 - Snapshots are observations of committed state, not a whole-case transaction;
   report publishing is now run-specific and only a successful guarded
   finalization moves the current report pointers.

@@ -52,6 +52,15 @@ The frontend-facing API exposes:
 - `GET /api/cases/{case_id}`
 - Tab-oriented case detail endpoints under `/api/cases/{case_id}/...`
 
+Case search: migration 15 adds an optional case-scoped FTS5 index
+(`case_search_index`) kept transactionally in sync with case writes, and
+`GET /api/cases/{case_id}/search` is a read-only lexical search over it. No GET
+writes or repairs the index; the only repair path is
+`triangulate case rebuild-search CASE_ID`. When the index is unavailable (no
+FTS5 in the SQLite build, or migration 15 not applied) search returns 503 with
+that remedy. See [`20261120-search-index.md`](20261120-search-index.md) and
+[`20261120-search-api.md`](20261120-search-api.md).
+
 The HTTP boundary is intentionally read-only. Case creation, reruns, reviews, exception handling,
 ingestion, and monitoring are triggered outside the website via CLI or background operators.
 
@@ -63,7 +72,9 @@ The frontend calls the HTTP API via `frontend/src/services/api.ts` and reads its
 
 - case index
 - CLI launch guidance
-- case detail tabs
+- case detail tabs, including a case-scoped Search tab (needs a real API backend;
+  with `VITE_API_BASE_URL` unset the app serves static `/data/*.json` fixtures and
+  search does not work — see [`reference/cli-operations.md`](../reference/cli-operations.md))
 
 ## Non-Goals for This Doc
 

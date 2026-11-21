@@ -27,6 +27,7 @@ uv run triangulate case show <case-id>
 uv run triangulate case review <case-id>
 uv run triangulate case rerun <case-id>
 uv run triangulate case exception <case-id> <exception-id> --action resolve
+uv run triangulate case rebuild-search <case-id>
 uv run triangulate run-pipeline
 uv run triangulate monitor --start --topics ./topics.yaml --interval 30
 uv run triangulate interactive
@@ -41,6 +42,21 @@ uv run triangulate process-url <url>
 uv run triangulate review
 uv run triangulate query --days 7
 ```
+
+## Case Search Index
+
+`triangulate case rebuild-search CASE_ID` rebuilds one case's rows in the
+optional FTS5 search index (migration 15, `case_search_index`). It claims the
+case with a short R02 `evidence` owner, deletes and re-inserts only that case's
+current evidence and claim rows in one transaction, validates and releases the
+owner, then commits once. A foreign active writer is refused with a clean
+non-zero exit (`Search rebuild rejected`); there is no force/steal path.
+Repeating the rebuild is idempotent: the same rows and counts come back. The
+output reports either the rebuilt counts or, when the index cannot exist, the
+capability reason (FTS5 module missing from the SQLite build, or
+`case_search_index` missing because migration 15 is not applied). The command
+touches only the named case and is the only repair path for a search 503 — see
+[`./cli-operations.md`](./cli-operations.md).
 
 ## Notes
 

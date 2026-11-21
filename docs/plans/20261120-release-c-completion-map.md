@@ -1,10 +1,12 @@
 # Release C completion map: S01, S02, V01 (D01 gated)
 
-Date: 2026-11-20. Status: **S01 defect pass implemented and verified (564 passed, Ruff clean); independent diff review pending.** Release A and
-Release B are accepted. R01, R02, R03a, R03b, R03c and the R01–R03a defect pass are
-accepted and pushed; R04 is committed (`44f1e58`) with its owner/parent diff review
-pending. This map is the single brief for finishing Release C: accept/review **S01**,
-then implement **S02** and **V01 in that order**, then stop. **D01 and production
+Date: 2026-11-20 (updated 2026-11-21). Status: **Release C is implemented,
+reviewed and verified locally (S01 `3096c0f`/`5501842`, S02
+`0ae9359`/`b92c453`/`ff838cc`/`3594d1c`, V01 `2fd91a2`/`19f42e3`/`0db8971`) — not
+pushed.** Release A and
+Release B are accepted. R01–R04 are accepted; the R04 review fix is `dfc809c`.
+This map remains the single brief for Release C; the next step is owner
+review/push of the local commits. **D01 and production
 deployment are separate owner gates and must not be started.**
 
 Contract authority remains the
@@ -16,13 +18,14 @@ state lives in the [Release C handoff](20261118-release-b-handoff.md).
 
 | Item | Value |
 |---|---|
-| Local `main` / `origin/main` | `81b8778` pushed; R04 is committed locally as `44f1e58` and **not pushed** |
+| Local `main` / `origin/main` | `origin/main` at `81b8778`; local `main` is **13 commits ahead, nothing pushed** — code head `0db8971` plus this documentation commit (R04 `44f1e58` + review fix `dfc809c`, S01 `3096c0f`/`5501842`, S02 `0ae9359`/`b92c453`/`ff838cc`/`3594d1c`, V01 `2fd91a2`/`19f42e3`/`0db8971`, plus doc maps `96a7d15`) |
 | Migrations | 1..15 (12 grouped runs, 13 case-writer ownership, 14 immutable snapshots, 15 optional case FTS5 index) |
-| Backend gate | Baseline **553 passed, 9 deselected**; S01 **556 passed, 9 deselected**, Ruff clean (disposable copy) |
-| Frontend gate | `npm run check` green; **132 tests / 13 files** |
+| Backend gate | Final **614 passed, 9 deselected** (`tests/test_v01_e2e.py` is the 614th), Ruff clean over `src tests scripts` (disposable copy) |
+| Frontend gate | `npm run check` exit 0; **164 tests / 14 files** |
+| Fresh install | `git archive HEAD` → `uv sync --frozen --extra dev` green; `triangulate init-db` reaches migration 15 |
 | Frontend consistency | React 18 + Vite + TanStack Query; `src/services/api.ts`, `src/services/deep-links.ts`, `src/types/backend-models.ts` are the API seams |
-| Research lane | R01–R04 delivered; S01 implemented/verified (independent review pending), then S02, then V01 |
-| Production data | untouched; the B02 test-database incident remains disclosed |
+| Research lane | R01–R04 delivered and accepted (R04 review fix `dfc809c`); **S01, S02 and V01 implemented, reviewed and verified locally — not pushed** |
+| Production data | untouched (V01 recorded the live DB sha256 `049a8a9d…d9f86` unchanged); the B02 test-database incident remains disclosed |
 | Scratch | 382 files archived at `/tmp/triangulate-scratch-archive-20261118T005339Z.tar.gz` |
 
 Read first, in this order: this map, the handoff, worker plan §5/§7, specification
@@ -75,9 +78,9 @@ Read first, in this order: this map, the handoff, worker plan §5/§7, specifica
 
 | # | Ticket | Lane | Depends on | Migration |
 |---|---|---|---|---|
-| 1 | S01 — transactional case FTS index + explicit rebuild (**implemented; review pending**) | backend | R01/R02, current schema | 15 |
-| 2 | S02 — search read API + workspace UI | backend + frontend | S01 | none expected |
-| 3 | V01 — Release C verification, E2E, docs | full stack | S01, S02 | none |
+| 1 | S01 — transactional case FTS index + explicit rebuild (**implemented, reviewed and verified locally, not pushed**) | backend | R01/R02, current schema | 15 |
+| 2 | S02 — search read API + workspace UI (**implemented, reviewed and verified locally, not pushed**) | backend + frontend | S01 | none |
+| 3 | V01 — Release C verification, E2E, docs (**implemented, reviewed and verified locally, not pushed**) | full stack | S01, S02 | none |
 | — | D01 — historical data recovery | — | **owner gate, do not start** | — |
 
 S01 must land and be verified before S02 starts: the API contract depends on the
@@ -85,6 +88,11 @@ index's actual capability/failure semantics. V01 starts only when S01 and S02 ar
 accepted by their gates.
 
 ## 4. S01 — Transactional case FTS index and explicit rebuild
+
+Status: **implemented (`3096c0f`, `5501842`), reviewed and verified locally; not
+pushed.** Migration **15** is applied; the final gate numbers and defect record
+are in the worker-plan §7 S01/S01-perf final entries and the
+[search index architecture](../architecture/20261120-search-index.md).
 
 **Goal:** one authoritative, transactional, case-scoped FTS5 index over *current*
 evidence text and *current individual claims*, with an explicit capability probe
@@ -150,6 +158,14 @@ async/background indexing, article/narrative indexing, D01.
 
 ## 5. S02 — Search read API and workspace UI
 
+Status: **implemented (backend `0ae9359`/`b92c453`, workspace UI
+`ff838cc`/`3594d1c`), reviewed and verified locally; not pushed.** See the
+[search read API architecture](../architecture/20261120-search-api.md) and the
+worker-plan §7 S02 final entry for the recorded gate output, benchmark and
+defect record. The UI persists `q`, filters and `offset` in the URL and deep-links
+results into the inspector with the `snapshot` key for historical selections
+(`snapshotId` is not a supported URL key).
+
 **Goal:** `GET /api/cases/{case_id}/search` plus a case-workspace search surface,
 over the S01 index only.
 
@@ -206,6 +222,15 @@ endpoints, production deployment.
   disabled).
 
 ## 6. V01 — Release C verification and documentation
+
+Status: **implemented and verified locally (`2fd91a2`, `19f42e3`, `0db8971`);
+not pushed.** Gates: backend **614 passed, 9 deselected**, Ruff clean over
+`src tests scripts`; frontend `npm run check` exit 0, **164 tests / 14 files**;
+clean-export fresh install green (init reaches migration 15); the journey test
+records 275 GET-only requests with byte-identical index/`_migrations` dumps and
+an unchanged live DB sha256 (`049a8a9d…d9f86`). Browser evidence and the
+not-proven list are in the worker-plan §7 V01 final entry. **Release C review
+gate only; production deployment is separately approved.**
 
 **Goal:** prove the Release C journey end-to-end and leave current docs; this is
 the Release C review gate, **not** production deployment.

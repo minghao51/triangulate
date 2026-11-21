@@ -100,6 +100,8 @@ The local database also contains a separate `CaseArticle` table not mapped by th
 
 `src/http/app.py` exposes health, case list/detail, claims overview, evidence, parties, exceptions, timeline, run history, report data, and Markdown/manifest downloads. DTOs and mapper functions translate service payloads into frontend shapes. Report downloads read persisted filesystem paths; the manifest endpoint can fall back to the stored report bundle.
 
+Case-scoped lexical search (`GET /api/cases/{case_id}/search`, migration 15's optional `case_search_index`) is a read-only reader over current evidence and claims; the only index repair is `triangulate case rebuild-search CASE_ID`. See the [search index](20261120-search-index.md) and [search read API](20261120-search-api.md) notes.
+
 There are no API authentication/authorization dependencies in the reviewed application. Keep it local/trusted unless access controls are added. `/health` is a basic process response, not proof that retrieval, migrations, the LLM provider, or all cases are healthy.
 
 Generated exports and captures belong under `output/`; logs under `logs/`; the configured SQLite file is local state. These, `.env`, environments, and caches must remain outside source control and must not be deleted merely because Git ignores them.
