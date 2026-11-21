@@ -153,7 +153,7 @@ def materialize(out: Path) -> dict:
         case = asyncio.run(ingest())
 
     # Freeze a claim in the initial snapshot, then move its live row on. The
-    # historical claim URL must therefore use snapshotId in the browser phase.
+    # browser inspector uses the spec's `snapshot` query key (not `snapshotId`).
     session = get_database().get_session_sync()
     try:
         sources = list(
@@ -191,6 +191,76 @@ def materialize(out: Path) -> dict:
     finally:
         session.close()
 
+    changed_articles = [
+        {
+            **article,
+            "content": article["content"] + " Updated evacuation context was confirmed at noon.",
+        }
+        for article in ARTICLES
+    ]
+    install_fakes(
+        service,
+        articles=changed_articles,
+        claim_text="Officials revised the evacuation order near the harbour.",
+    )
+
+    async def ingest_change():
+        return await service.run_case(
+            query="V01 Harbour evacuation fixture",
+            output_dir=out,
+            conflict="ukraine_war",
+        )
+
+    with deterministic_uuids(start=5000):
+        asyncio.run(ingest_change())
+
+    session = get_database().get_session_sync()
+    try:
+        runs = list(
+            session.execute(
+                select(InvestigationRun)
+                .where(InvestigationRun.case_id == case.id)
+                .order_by(InvestigationRun.sequence)
+            ).scalars()
+        )
+        snapshots = list(
+            session.execute(
+                select(CaseSnapshot)
+                .where(CaseSnapshot.case_id == case.id)
+                .order_by(CaseSnapshot.created_at)
+            ).scalars()
+        )
+        changes = service.get_run_changes(case.id, runs[-1].id)
+        version = session.execute(text("SELECT MAX(version) FROM _migrations")).scalar_one()
+        indexed = session.execute(
+            text(
+                "SELECT COUNT(*) FROM case_search_index "
+                "WHERE case_id = :case_id AND body LIKE :term"
+            ),
+            {"case_id": case.id, "term": f"%{BODY_TERM}%"},
+        ).scalar_one()
+    finally:
+        session.close()
+    change_run = runs[-1]
+    change_snapshot = snapshots[-1]
+    assert len(runs) == 2 and len(snapshots) == 2
+    assert changes is not None
+    assert changes["availability"] == "ready" and changes["total"] > 0
+    assert version == 15 and indexed > 0
+    frozen_change_claim = next(
+        item for item in changes["items"] if item["type"] == "claim_added"
+    )
+    frozen_change_claim_id = frozen_change_claim["entityId"]
+    frozen_change_claim_text = frozen_change_claim["after"]["text"]
+    session = get_database().get_session_sync()
+    try:
+        live_change_claim = session.get(Claim, frozen_change_claim_id)
+        assert live_change_claim is not None
+        live_change_claim.claim_text = "Current live claim text differs from the frozen observation."
+        session.commit()
+    finally:
+        session.close()
+
     foreign_article = {
         "url": "https://foreign.example/tungsten",
         "title": "Tungsten briefing",
@@ -215,11 +285,29 @@ def materialize(out: Path) -> dict:
     with deterministic_uuids(start=10000):
         foreign_case = asyncio.run(ingest_foreign())
 
+    change_type_labels = {
+        "article_added": "Article added",
+        "capture_changed": "Capture changed",
+        "claim_added": "Claim added",
+        "claim_no_longer_extracted": "No longer extracted",
+        "classification_changed": "Classification changed",
+        "relationship_changed": "Relationship changed",
+        "review_state_changed": "Review state changed",
+        "exception_changed": "Exception changed",
+    }
     manifest = {
         "caseId": case.id,
         "snapshotId": snapshot.id,
         "runId": run.id,
+        "changeRunId": change_run.id,
+        "changeSnapshotId": change_snapshot.id,
+        "baselineSnapshotId": change_run.baseline_snapshot_id,
         "historicalClaimId": historical_claim_id,
+        "historicalClaimText": CLAIM_TEXT,
+        "currentClaimText": "Rewritten current claim; historical text remains frozen.",
+        "frozenChangeClaimId": frozen_change_claim_id,
+        "frozenChangeClaimText": frozen_change_claim_text,
+        "currentChangeClaimText": "Current live claim text differs from the frozen observation.",
         "evidenceIds": [source.id for source in sources],
         "captureIds": [source.current_capture_id for source in sources],
         "otherCaseId": foreign_case.id,
@@ -229,13 +317,32 @@ def materialize(out: Path) -> dict:
             "claimTerm": CLAIM_TERM,
             "filteredQuery": FILTER_QUERY,
         },
+        "expectedDeltaRows": [
+            {
+                "type": item["type"],
+                "entityId": item["entityId"],
+                "labels": [
+                    change_type_labels.get(item["type"], item["type"].replace("_", " ")),
+                    {
+                        "article": "Article",
+                        "claim": "Claim",
+                        "evidence": "Evidence",
+                        "link": "Claim/evidence link",
+                        "review": "Review",
+                        "exception": "Exception",
+                    }.get(item["entityType"], item["entityType"]),
+                ],
+            }
+            for item in changes["items"]
+        ],
         "expectedCounts": {
             "evidence": len(sources),
             "captures": len(captures),
             "claims": len(claims),
-            "runs": 1,
-            "snapshots": 1,
+            "runs": 2,
+            "snapshots": 2,
             "searchMigration": version,
+            "searchMatches": indexed,
             "cases": 2,
         },
     }
