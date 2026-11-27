@@ -1,6 +1,6 @@
 # R07 — Integrated audit and release (Gate)
 
-**Status:** Ready for worker · **Release authority:** the main orchestrator alone executes staging, commit and push; this card produces the audit and gate evidence and a ready-to-run release checklist.  
+**Status:** Implemented and verified in `34ca121` ([evidence](../20261124-audit-remediation-evidence.md)) · **Release authority:** the main orchestrator alone executes staging, commit and push; this card produces the audit and gate evidence and a ready-to-run release checklist.  
 **Baseline:** `d589359` plus the existing staged, unstaged and untracked refinement worktree. The candidate is the whole reviewed tree, never a clean rebuild from `HEAD`.  
 [Specification](../20261124-audit-remediation-specification.md) · [Refinement contracts](../20261123-web-app-refinement-contracts.md) · [F16 gate](../20261123-web-app-refinement-handoffs/20261123-f16-core-integration-and-release-gate.md) · [F21 gate](../20261123-web-app-refinement-handoffs/20261123-f21-extended-history-release-gate.md)
 

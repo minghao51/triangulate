@@ -1,6 +1,8 @@
 # Audit remediation specification — P1/P2
 
-**Status:** Ready for implementation handoff; not implemented or release-approved by this document.  
+**Status:** Implemented and released in `34ca121`; gates, audit findings and residual risks are
+recorded in [execution evidence](20261124-audit-remediation-evidence.md). This document remains the
+requirement, not the acceptance record.  
 **Baseline:** `d589359` (`origin/main` at audit time) **plus the existing staged, unstaged and untracked refinement worktree**. A clean worktree made from that commit alone lacks parts of the input.  
 **Delivery:** One integrated bundle. Apply the six fixes, audit the complete candidate, run the gates, then commit and push directly. No split PRs. No code changes, commit or push are implied by preparing these handoffs.
 

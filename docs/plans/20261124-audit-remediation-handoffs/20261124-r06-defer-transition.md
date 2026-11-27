@@ -1,6 +1,6 @@
 # R06 — Preserve review decisions on defer (P2)
 
-**Status:** Ready for worker · **Dependency:** none.  
+**Status:** Implemented and verified in `34ca121` ([evidence](../20261124-audit-remediation-evidence.md)) · **Dependency:** none.  
 [Specification](../20261124-audit-remediation-specification.md) · [HTTP review surface](../../reference/http-api.md) · [CLI reference](../../reference/cli.md)
 
 ## Problem and read-before-edit

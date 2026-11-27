@@ -1,6 +1,6 @@
 # R02 — Preserve historical context in deep links (P1)
 
-**Status:** Ready for worker · **Sequencing:** after R01 when sharing the checkout.  
+**Status:** Implemented and verified in `34ca121` ([evidence](../20261124-audit-remediation-evidence.md)) · **Sequencing:** after R01 when sharing the checkout.  
 [Specification](../20261124-audit-remediation-specification.md) · [URL contract §3](../20261123-web-app-refinement-contracts.md#3-client-state-paging-and-url-contract)
 
 ## Problem and read-before-edit
