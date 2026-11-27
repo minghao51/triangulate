@@ -39,6 +39,7 @@ import {
   isExactAlignment,
   knownOrUnknown,
   relationLabel,
+  resolveInspectorDiagnostic,
   safeExternalUrl,
   splitHighlight,
   summariseProvenance,
@@ -174,6 +175,11 @@ const ExternalUrlField: React.FC<{ label: string; url: string | null | undefined
 
 interface EvidenceInspectorProps {
   caseId: string;
+  /**
+   * Optional invoking control to focus when the inspector closes. Without it the
+   * element that was focused when the selection opened is used.
+   */
+  returnFocusTo?: HTMLElement | null;
 }
 
 /**
@@ -183,12 +189,19 @@ interface EvidenceInspectorProps {
  * case changes all re-derive the inspector from `?citation`, `?evidence`,
  * `?capture`, `?claim` and `?start`. Every request is a GET.
  */
-export const EvidenceInspector: React.FC<EvidenceInspectorProps> = ({ caseId }) => {
+export const EvidenceInspector: React.FC<EvidenceInspectorProps> = ({
+  caseId,
+  returnFocusTo = null,
+}) => {
   const [searchParams, setSearchParams] = useSearchParams();
   const selection = useMemo(() => parseInspectorSelection(searchParams), [searchParams]);
   const { claimId, evidenceId, captureId, citationId, start, snapshotId } = selection;
 
   const headingRef = useRef<HTMLHeadingElement>(null);
+  // The control that opened the inspector, so closing can return focus there.
+  const openerRef = useRef<HTMLElement | null>(null);
+  const sectionRef = useRef<HTMLElement>(null);
+  const hasSelection = Boolean(citationId || evidenceId || claimId);
 
   const citationQuery = useQuery({
     queryKey: ['citation-inspector', caseId, citationId],
@@ -256,6 +269,13 @@ export const EvidenceInspector: React.FC<EvidenceInspectorProps> = ({ caseId }) 
     return evidencePassage(evidenceDetail, claimDetail, claimId, effectiveCaptureId);
   }, [citation, evidenceDetail, claimDetail, claimId, effectiveCaptureId]);
 
+  // One explicit diagnostic per passage, derived from the frozen record only.
+  const diagnostic = useMemo(
+    () =>
+      passage ? resolveInspectorDiagnostic(passage.alignmentStatus, passage.quote) : null,
+    [passage]
+  );
+
   const passageMatchesCapture =
     !passage?.captureId || passage.captureId === effectiveCaptureId;
 
@@ -300,12 +320,35 @@ export const EvidenceInspector: React.FC<EvidenceInspectorProps> = ({ caseId }) 
 
   // Move focus to the selected inspector heading (keyboard + deep-link parity).
   const focusKey = `${citationId ?? ''}|${evidenceId ?? ''}|${effectiveCaptureId ?? ''}|${claimId ?? ''}`;
+  // Record the invoking control before focus moves into the inspector. This
+  // effect is declared before the heading-focus effect so it observes the
+  // opener, not our own heading.
+  useEffect(() => {
+    if (!hasSelection || openerRef.current) return;
+    const active = document.activeElement;
+    if (
+      active instanceof HTMLElement &&
+      active !== document.body &&
+      !sectionRef.current?.contains(active)
+    ) {
+      openerRef.current = active;
+    }
+  }, [hasSelection, focusKey]);
+
   useEffect(() => {
     if (!citationId && !evidenceId && !claimId) return;
     headingRef.current?.focus();
   }, [focusKey, citationId, evidenceId, claimId]);
 
   if (!citationId && !evidenceId && !claimId) return null;
+
+  const restoreFocus = () => {
+    const target = returnFocusTo ?? openerRef.current;
+    openerRef.current = null;
+    if (target && target.isConnected) {
+      target.focus();
+    }
+  };
 
   const closeInspector = () => {
     updateSelection({
@@ -316,6 +359,7 @@ export const EvidenceInspector: React.FC<EvidenceInspectorProps> = ({ caseId }) 
       start: null,
       length: null,
     });
+    restoreFocus();
   };
 
   const primaryQuery = citationId ? citationQuery : evidenceQuery;
@@ -372,7 +416,11 @@ export const EvidenceInspector: React.FC<EvidenceInspectorProps> = ({ caseId }) 
   };
 
   return (
-    <section className="evidence-inspector glass-panel" aria-label="Evidence inspector">
+    <section
+      className="evidence-inspector glass-panel"
+      aria-label="Evidence inspector"
+      ref={sectionRef}
+    >
       <div className="inspector-header">
         <h3 ref={headingRef} tabIndex={-1} className="inspector-heading">
           {heading}
@@ -391,6 +439,20 @@ export const EvidenceInspector: React.FC<EvidenceInspectorProps> = ({ caseId }) 
         <div className="inspector-banner" role="status">
           <strong>Historical observation {shortId(snapshotId)}.</strong>
           <p>{historicalNote}</p>
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            onClick={() => {
+              // Explicit transition: strip the pinned observation and read live
+              // rows. Nothing else changes, and no fetch happens before the
+              // operator chooses this.
+              const next = new URLSearchParams(searchParams);
+              next.delete('snapshot');
+              setSearchParams(next);
+            }}
+          >
+            Open current {evidenceId ? 'evidence' : 'claim'}
+          </button>
         </div>
       )}
 
@@ -438,8 +500,17 @@ export const EvidenceInspector: React.FC<EvidenceInspectorProps> = ({ caseId }) 
               as they were assessed.
             </div>
           )}
-          <section className="inspector-section" aria-labelledby="frozen-claim-heading">
+          <section
+            className="inspector-section"
+            aria-labelledby="frozen-claim-heading"
+            data-frozen="true"
+            data-readonly="true"
+          >
             <h4 id="frozen-claim-heading">Frozen claim text</h4>
+            <p className="inspector-note">
+              Frozen citation context: these values are read from the immutable
+              citation record and cannot be edited here.
+            </p>
             <blockquote className="inspector-claim-text">{citation.claimText}</blockquote>
             <div className="inspector-fields">
               <Field label="Claim signature">
@@ -515,9 +586,32 @@ export const EvidenceInspector: React.FC<EvidenceInspectorProps> = ({ caseId }) 
         </div>
       )}
 
-      {passage && (
+      {passage && diagnostic && (
         <section className="inspector-section" aria-labelledby="passage-heading">
           <h4 id="passage-heading">Validated passage</h4>
+          <div
+            className={`inspector-alignment inspector-alignment--${diagnostic.tone}`}
+            data-state={diagnostic.attribute}
+          >
+            <strong>{diagnostic.label}</strong>
+            {passage.diagnosticReason && (
+              <p className="inspector-diagnostic">{passage.diagnosticReason}</p>
+            )}
+            <p className="inspector-note">{diagnostic.message}</p>
+          </div>
+          {diagnostic.state !== 'exact' && (
+            <div
+              className={`inspector-diagnostic-state inspector-diagnostic-state--${diagnostic.state}`}
+              data-state={diagnostic.attribute}
+              role="status"
+            >
+              <AlertTriangle size={16} aria-hidden />
+              <div>
+                <strong>{diagnostic.label}</strong>
+                <p>{diagnostic.message}</p>
+              </div>
+            </div>
+          )}
           <div className={`inspector-relation inspector-relation--${passage.effectiveRelation}`}>
             <span className="inspector-relation-label">Relationship</span>
             <strong>{relationLabel(passage.effectiveRelation)}</strong>
@@ -526,16 +620,6 @@ export const EvidenceInspector: React.FC<EvidenceInspectorProps> = ({ caseId }) 
                 Raw stored value (diagnostic): {passage.rawRelation}
               </span>
             )}
-          </div>
-          <div className="inspector-alignment">
-            <strong>{alignmentLabel(passage.alignmentStatus)}</strong>
-            {passage.diagnosticReason && (
-              <p className="inspector-diagnostic">{passage.diagnosticReason}</p>
-            )}
-            <p className="inspector-note">
-              Exact alignment means the quotation matches the captured text. It does
-              not confirm the claim or turn reporting into corroboration.
-            </p>
           </div>
           {!passageMatchesCapture && (
             <div className="inspector-state" role="status">
@@ -930,7 +1014,7 @@ const CaptureWindowView: React.FC<CaptureWindowViewProps> = ({
           This window starts at the end of the capture, so there is no text to show.
         </div>
       ) : (
-        <pre className="inspector-capture-text" data-testid="capture-text">
+        <pre className="inspector-capture-text" data-testid="capture-text" data-readonly="true">
           {highlight ? (
             <>
               <span>{highlight.before}</span>

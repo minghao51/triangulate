@@ -1,0 +1,49 @@
+<!-- viewport: 375×812 mobile -->
+<svg xmlns="http://www.w3.org/2000/svg" width="375" height="812" viewBox="0 0 375 812" role="img" aria-labelledby="wf-title wf-desc">
+  <title id="wf-title">Changes — unchanged with partial coverage — mobile</title>
+  <desc id="wf-desc">Changes — unchanged with partial coverage — mobile (mobile, 375x812). Proposal wireframe with synthetic data, not implementation evidence. Numbered regions: 1 Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest; 2 Changes — unchanged with partial coverage header — title, synthetic context and available actions; 3 Unchanged state — a valid delta with zero typed rows. · frame 1 of 1; 4 Coverage warning — persistent alongside an empty delta. · frame 1 of 1; 5 State scope note — what the state does and does not assert. · frame 1 of 1.</desc>
+  <g id="ui" font-family="-apple-system, system-ui, sans-serif">
+    <rect x="0" y="0" width="368" height="808" fill="#fff"/>
+    <rect x="8" y="8" width="352" height="792" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <rect x="16" y="32" width="328" height="48" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="32" y="56" font-size="14" fill="#000" font-weight="600">TRIANGULATE</text>
+    <rect x="264" y="40" width="64" height="32" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="296" y="56" text-anchor="middle" font-size="12" fill="#000">Menu</text>
+    <rect x="16" y="104" width="328" height="112" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="32" y="144" font-size="14" fill="#000" font-weight="600">Changes — unchanged with</text>
+    <text x="32" y="176" font-size="14" fill="#000" font-weight="600">partial coverage</text>
+    <text x="32" y="200" font-size="12" fill="#666">Proposal · synthetic · not built</text>
+    <g data-pane="p1">
+    <rect x="16" y="240" width="328" height="160" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="32" y="280" font-size="14" fill="#000" font-weight="600">Delta</text>
+    <rect x="32" y="288" width="296" height="96" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="48" y="328" font-size="14" fill="#000">Unchanged — no changes in obs…</text>
+    <text x="48" y="352" font-size="12" fill="#666">Between snapshot-s002 and snapshot…</text>
+    </g>
+    <g data-pane="p2">
+    <rect x="16" y="424" width="328" height="96" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <rect x="32" y="440" width="296" height="64" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="48" y="464" font-size="14" fill="#000" font-weight="600">Coverage: partial · 2 of 3 so…</text>
+    <text x="48" y="488" font-size="12" fill="#666">An empty list means no changes in…</text>
+    </g>
+    <g data-pane="p3">
+    <rect x="16" y="544" width="328" height="136" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="32" y="584" font-size="14" fill="#000" font-weight="600">What this is not</text>
+    <text x="32" y="608" font-size="12" fill="#666">Partial coverage limits the claim</text>
+    <text x="32" y="632" font-size="12" fill="#666">Scope is recorded per run</text>
+    <text x="32" y="656" font-size="12" fill="#666">No surge wording</text>
+    </g>
+  </g>
+  <g id="annotations" font-family="-apple-system, system-ui, sans-serif">
+    <rect data-region="1" x="8" y="24" width="344" height="64" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="2" x="8" y="96" width="344" height="128" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="3" x="8" y="232" width="344" height="176" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="4" x="8" y="416" width="344" height="112" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="5" x="8" y="536" width="344" height="152" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <text x="0" y="48" font-size="12" font-weight="600" fill="#000">1</text>
+    <text x="0" y="120" font-size="12" font-weight="600" fill="#000">2</text>
+    <text x="0" y="256" font-size="12" font-weight="600" fill="#000">3</text>
+    <text x="0" y="440" font-size="12" font-weight="600" fill="#000">4</text>
+    <text x="0" y="560" font-size="12" font-weight="600" fill="#000">5</text>
+  </g>
+</svg>

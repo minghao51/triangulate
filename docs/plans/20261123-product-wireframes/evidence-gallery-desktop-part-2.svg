@@ -1,0 +1,55 @@
+<!-- viewport: 1280×800 desktop -->
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="800" viewBox="0 0 1280 800" role="img" aria-labelledby="wf-title wf-desc">
+  <title id="wf-title">Evidence gallery — part 2 of 2 — desktop</title>
+  <desc id="wf-desc">Evidence gallery — part 2 of 2 — desktop (desktop, 1280x800). Proposal wireframe with synthetic data, not implementation evidence. Numbered regions: 1 Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest; 2 Evidence gallery — frame 2 of 2; full coverage continues in the named companion frame; 3 Selected source pane — title, capture pointer, provided tier and stored verification metadata labelled model/legacy_unknown; never certified truth. · frame 2 of 2; 4 Selected-source actions — Inspect source, safe HTTP(S) Open source and Verification details. · frame 2 of 2; 5 Pagination — filter and page state is URL-persisted; no synthetic total. · frame 2 of 2.</desc>
+  <g id="ui" font-family="-apple-system, system-ui, sans-serif">
+    <rect x="0" y="0" width="1280" height="800" fill="#fff"/>
+    <rect x="8" y="8" width="1264" height="784" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <rect x="32" y="32" width="1224" height="48" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="48" y="56" font-size="14" fill="#000" font-weight="600">TRIANGULATE</text>
+    <rect x="1176" y="40" width="64" height="32" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="1208" y="56" text-anchor="middle" font-size="12" fill="#000">Menu</text>
+    <rect x="296" y="104" width="960" height="112" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="312" y="152" font-size="20" fill="#000" font-weight="600">Evidence gallery</text>
+    <text x="312" y="176" font-size="12" fill="#666">Part 2 of 2 · companion frames carry the rest</text>
+    <text x="312" y="200" font-size="12" fill="#666">previous: evidence-gallery-desktop.svg</text>
+    <g data-pane="p3">
+    <rect x="296" y="240" width="960" height="160" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="312" y="280" font-size="14" fill="#000" font-weight="600">Selected source</text>
+    <text x="312" y="312" font-size="14" fill="#000">Regional Herald (synthetic)</text>
+    <text x="1240" y="304" text-anchor="end" font-size="12" fill="#000">ev-c71a</text>
+    <text x="312" y="344" font-size="14" fill="#000">Captured cap-9f31 · tier High</text>
+    <text x="1240" y="336" text-anchor="end" font-size="12" fill="#000">provided</text>
+    <text x="312" y="376" font-size="14" fill="#000">Verification: model · legacy_unknown</text>
+    <text x="1240" y="368" text-anchor="end" font-size="12" fill="#000">recorded</text>
+    </g>
+    <g data-pane="p4">
+    <rect x="296" y="424" width="960" height="64" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <rect x="312" y="440" width="136" height="32" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="320" y="464" font-size="12" fill="#000">Inspect source</text>
+    <rect x="456" y="440" width="112" height="32" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="464" y="464" font-size="12" fill="#000">Open source</text>
+    <rect x="576" y="440" width="176" height="32" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="584" y="464" font-size="12" fill="#000">Verification details</text>
+    </g>
+    <g data-pane="p5">
+    <rect x="296" y="512" width="960" height="64" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <rect x="312" y="528" width="128" height="32" fill="#e6e6e6" stroke="#000" stroke-width="1.5"/>
+    <text x="320" y="552" font-size="12" fill="#666">Previous page…</text>
+    <rect x="448" y="528" width="96" height="32" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="456" y="552" font-size="12" fill="#000">Next page</text>
+    </g>
+  </g>
+  <g id="annotations" font-family="-apple-system, system-ui, sans-serif">
+    <rect data-region="1" x="24" y="24" width="1240" height="64" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="2" x="288" y="96" width="976" height="128" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="3" x="288" y="232" width="976" height="176" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="4" x="288" y="416" width="976" height="80" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="5" x="288" y="504" width="976" height="80" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <text x="16" y="48" font-size="12" font-weight="600" fill="#000">1</text>
+    <text x="280" y="120" font-size="12" font-weight="600" fill="#000">2</text>
+    <text x="280" y="256" font-size="12" font-weight="600" fill="#000">3</text>
+    <text x="280" y="440" font-size="12" font-weight="600" fill="#000">4</text>
+    <text x="280" y="528" font-size="12" font-weight="600" fill="#000">5</text>
+  </g>
+</svg>

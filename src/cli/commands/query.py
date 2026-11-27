@@ -6,6 +6,7 @@ from rich.console import Console
 from rich.table import Table
 
 from src.storage import get_database, Event, VerificationStatus, Review, ReviewStatus
+from src.storage.models import verification_status_value
 
 logger = logging.getLogger(__name__)
 console = Console()
@@ -92,7 +93,8 @@ def cmd_query(
 
             table.add_row(
                 status_emoji.get(
-                    event.verification_status, event.verification_status.value
+                    event.verification_status,
+                    verification_status_value(event.verification_status),
                 ),
                 event.timestamp.strftime("%Y-%m-%d"),
                 event.title[:60],

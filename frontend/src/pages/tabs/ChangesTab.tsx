@@ -18,19 +18,29 @@ import {
   getInvestigationRun,
   getInvestigationRuns,
   getRunChanges,
+  getSnapshotComparison,
 } from '../../services/api';
 import { isNotFound } from '../../services/api-error';
 import {
+  CHANGES_MODE_AD_HOC,
   buildChangesUrl,
+  buildCitationUrl,
   buildInspectorUrl,
-  toChangesSearchParams,
+  parseAdHocChangesSelection,
   parseChangesSelection,
+  toChangesSearchParams,
 } from '../../services/deep-links';
+import type { AdHocChangesSelection } from '../../services/deep-links';
 import type {
   ChangeItem,
   ClaimDetail,
   InvestigationRun,
   RunChanges,
+  SnapshotComparison,
+  SnapshotComparisonItem,
+  SnapshotComparisonRef,
+  SnapshotComparisonSide,
+  SnapshotComparisonUnavailableReason,
 } from '../../types/backend-models';
 import './ChangesTab.css';
 
@@ -56,11 +66,28 @@ const CHANGE_TYPE_LABELS: Record<string, string> = {
 
 const ENTITY_TYPE_LABELS: Record<string, string> = {
   article: 'Article',
+  articles: 'Article',
+  case: 'Case',
   claim: 'Claim',
+  claims: 'Claim',
   evidence: 'Evidence',
   link: 'Claim/evidence link',
+  links: 'Claim/evidence link',
+  event: 'Event',
+  events: 'Event',
+  citation: 'Citation',
+  citations: 'Citation',
+  capture: 'Capture',
+  captures: 'Capture',
+  party: 'Party',
+  parties: 'Party',
+  partyInvestigations: 'Party investigation',
+  narrative: 'Narrative',
+  narratives: 'Narrative',
   review: 'Review',
+  reviews: 'Review',
   exception: 'Exception',
+  exceptions: 'Exception',
 };
 
 const FIELD_LABELS: Record<string, string> = {
@@ -603,6 +630,7 @@ interface FrozenClaimPanelProps {
   caseId: string;
   claimId: string;
   snapshotId: string;
+  runId: string | null;
   onClose: () => void;
 }
 
@@ -611,12 +639,15 @@ interface FrozenClaimPanelProps {
  *
  * Resolved with the snapshot-aware claim reader, so a claim that no longer exists
  * in the live rows is still readable exactly as observed. Passage links open the
- * evidence inspector with the same pinned observation.
+ * evidence inspector with the same pinned observation. The panel is read-only:
+ * leaving the observation is an explicit "Open current claim" transition that is
+ * the only control which removes the historical selector from the URL.
  */
 const FrozenClaimPanel: React.FC<FrozenClaimPanelProps> = ({
   caseId,
   claimId,
   snapshotId,
+  runId,
   onClose,
 }) => {
   const query = useQuery({
@@ -633,12 +664,21 @@ const FrozenClaimPanel: React.FC<FrozenClaimPanelProps> = ({
         <h4>
           Frozen claim <code title={claimId}>{shortenRef(claimId)}</code>
         </h4>
-        <Button variant="ghost" size="sm" onClick={onClose} icon={<X size={14} />}>
-          Close
-        </Button>
+        <div className="changes-frozen-actions">
+          <Link
+            className="changes-link changes-frozen-current"
+            to={buildChangesUrl(caseId, { runId, claimId })}
+          >
+            Open current claim
+          </Link>
+          <Button variant="ghost" size="sm" onClick={onClose} icon={<X size={14} />}>
+            Close
+          </Button>
+        </div>
       </div>
       <p className="changes-frozen-snapshot">
-        Observation <code title={snapshotId}>{shortenRef(snapshotId)}</code>
+        Observation <code title={snapshotId}>{shortenRef(snapshotId)}</code> — read-only,
+        frozen as observed.
       </p>
 
       {query.isLoading ? (
@@ -738,9 +778,573 @@ const FrozenClaimPanel: React.FC<FrozenClaimPanelProps> = ({
   );
 };
 
+// ---------------------------------------------------------------------------
+// X01 ad-hoc snapshot comparison (F18)
+//
+// This panel is deliberately separate from the recorded-changes view: the delta
+// below is computed on request between two explicitly pinned observations and
+// was never recorded by a run. It therefore has no `observedByRun`, actor or
+// causal field, and "absent from a later observation" is never read as a
+// deletion, a retraction or a "no longer extracted" verdict.
+// ---------------------------------------------------------------------------
+
+const AD_HOC_CHANGE_KIND_LABELS: Record<string, string> = {
+  entity_added: 'Present only in the target observation',
+  entity_absent: 'Absent from a later observation',
+  field_changed: 'Fields changed between observations',
+};
+
+const AD_HOC_REASON_TEXT: Record<SnapshotComparisonUnavailableReason, string> = {
+  incompatible_schema:
+    'the two observations were saved by schema versions that are not comparable.',
+  incompatible_identity:
+    'the two observations were saved by identity versions that are not comparable.',
+  incompatible_policy:
+    'the two observations were recorded under comparison policies that are not comparable.',
+  unknown_version:
+    'at least one observation records a version this build does not support, or an unreadable version value.',
+  payload_unreadable:
+    'the stored payload of at least one observation cannot be read.',
+};
+
+function adHocChangeKindLabel(kind: string): string {
+  return AD_HOC_CHANGE_KIND_LABELS[kind] ?? kind.replace(/_/g, ' ');
+}
+
+function adHocChangeKindVariant(kind: string): 'info' | 'warning' | 'neutral' {
+  switch (kind) {
+    case 'entity_added':
+      return 'info';
+    case 'entity_absent':
+      return 'warning';
+    default:
+      return 'neutral';
+  }
+}
+
+function adHocReasonText(reason: string | null): string {
+  if (!reason) return 'the pair cannot be compared.';
+  return (
+    AD_HOC_REASON_TEXT[reason as SnapshotComparisonUnavailableReason] ??
+    'the pair cannot be compared.'
+  );
+}
+
+/**
+ * Frozen references for one side of one comparison item.
+ *
+ * Only ids that side actually recorded become links, and only to the recorded
+ * claim/evidence/capture/citation readers. A citation is frozen by its own id
+ * and the citation/capture GETs reject a snapshot selector, so no snapshot is
+ * forwarded to those two; a capture link needs the evidence id it belongs to.
+ */
+function adHocRefLinks(
+  caseId: string,
+  ref: SnapshotComparisonRef,
+  side: 'baseline' | 'target'
+): ChangeLink[] {
+  const links: ChangeLink[] = [];
+  const prefix = side === 'baseline' ? 'Baseline' : 'Target';
+  if (ref.claimId) {
+    links.push({
+      to: buildChangesUrl(caseId, {
+        claimId: ref.claimId,
+        snapshotId: ref.snapshotId,
+      }),
+      label: `${prefix} frozen claim`,
+    });
+  }
+  if (ref.evidenceId) {
+    links.push({
+      to: buildInspectorUrl(caseId, {
+        evidenceId: ref.evidenceId,
+        snapshotId: ref.snapshotId,
+      }),
+      label: `${prefix} frozen evidence`,
+    });
+  }
+  if (ref.evidenceId && ref.captureId) {
+    links.push({
+      to: buildInspectorUrl(caseId, {
+        evidenceId: ref.evidenceId,
+        captureId: ref.captureId,
+        snapshotId: ref.snapshotId,
+      }),
+      label: `${prefix} frozen capture`,
+    });
+  }
+  if (ref.citationId) {
+    links.push({
+      to: buildCitationUrl(caseId, ref.citationId),
+      label: `${prefix} frozen citation`,
+    });
+  }
+  return links;
+}
+
+const AdHocFields: React.FC<{
+  value: Record<string, unknown> | null;
+  side: 'baseline' | 'target';
+}> = ({ value, side }) => {
+  if (!value) {
+    return (
+      <p className="changes-value-empty">
+        {side === 'target'
+          ? 'Absent from a later observation'
+          : 'Absent from the baseline observation'}
+      </p>
+    );
+  }
+  return <ChangeFields value={value} />;
+};
+
+const AdHocItemRow: React.FC<{ item: SnapshotComparisonItem; caseId: string }> = ({
+  item,
+  caseId,
+}) => {
+  const links = [
+    ...adHocRefLinks(caseId, item.refs.baseline, 'baseline'),
+    ...adHocRefLinks(caseId, item.refs.target, 'target'),
+  ];
+  return (
+    <li className="changes-adhoc-item">
+      <div className="changes-item-head">
+        <Badge variant={adHocChangeKindVariant(item.changeKind)}>
+          {adHocChangeKindLabel(item.changeKind)}
+        </Badge>
+        <span className="changes-entity">
+          {entityTypeLabel(item.entityType)}
+          <code title={item.entityId}>{shortenRef(item.entityId)}</code>
+        </span>
+      </div>
+      {item.changedFields.length > 0 ? (
+        <p className="changes-adhoc-fields">
+          <span>Changed fields:</span>{' '}
+          {item.changedFields.map((field) => (
+            <code className="changes-adhoc-field" key={field}>
+              {fieldLabel(field)}
+            </code>
+          ))}
+        </p>
+      ) : null}
+      <div className="changes-item-body">
+        <div>
+          <h5>Baseline fields</h5>
+          <AdHocFields value={item.before} side="baseline" />
+        </div>
+        <div>
+          <h5>Target fields</h5>
+          <AdHocFields value={item.after} side="target" />
+        </div>
+      </div>
+      {links.length > 0 ? (
+        <div className="changes-item-foot">
+          {links.map((link) => (
+            <Link className="changes-link" key={`${link.label}:${link.to}`} to={link.to}>
+              {link.label}
+            </Link>
+          ))}
+        </div>
+      ) : null}
+    </li>
+  );
+};
+
+interface AdHocObservationProps {
+  caseId: string;
+  side: 'baseline' | 'target';
+  snapshotId: string;
+  runId: string;
+  coverage: string;
+  metadata: SnapshotComparisonSide;
+}
+
+/** One explicitly labelled side of the comparison, with its own recorded facts. */
+const AdHocObservation: React.FC<AdHocObservationProps> = ({
+  caseId,
+  side,
+  snapshotId,
+  runId,
+  coverage,
+  metadata,
+}) => (
+  <article className="changes-adhoc-observation" data-observation={side}>
+    <h5>
+      <Badge variant="neutral">ad-hoc</Badge>
+      {side === 'baseline' ? 'Baseline observation' : 'Target observation'}
+    </h5>
+    <dl className="changes-fields">
+      <div className="changes-field">
+        <dt>Snapshot ID</dt>
+        <dd>
+          <code title={snapshotId}>{snapshotId}</code>
+        </dd>
+      </div>
+      <div className="changes-field">
+        <dt>Owning run</dt>
+        <dd>
+          <code title={runId}>{runId}</code>
+        </dd>
+      </div>
+      <div className="changes-field">
+        <dt>Snapshot saved at</dt>
+        <dd>{formatTimestamp(metadata.createdAt)}</dd>
+      </div>
+      <div className="changes-field">
+        <dt>Run sequence</dt>
+        <dd>{metadata.sequence}</dd>
+      </div>
+      <div className="changes-field">
+        <dt>Schema version</dt>
+        <dd>
+          <code>{metadata.schemaVersion}</code>
+        </dd>
+      </div>
+      <div className="changes-field">
+        <dt>Identity version</dt>
+        <dd>
+          <code>{metadata.identityVersion}</code>
+        </dd>
+      </div>
+      <div className="changes-field">
+        <dt>Policy version</dt>
+        <dd>
+          <code>{metadata.policyVersion}</code>
+        </dd>
+      </div>
+      <div className="changes-field">
+        <dt>Coverage</dt>
+        <dd>
+          <Badge variant={coverageVariant(coverage)}>{coverageLabel(coverage)}</Badge>
+        </dd>
+      </div>
+    </dl>
+    <p className="changes-adhoc-links">
+      <Link className="changes-link" to={buildInspectorUrl(caseId, { snapshotId })}>
+        Open the {side} observation in the evidence view
+      </Link>
+      <Link className="changes-link" to={buildChangesUrl(caseId, { runId, snapshotId })}>
+        Open recorded changes pinned to the {side} observation
+      </Link>
+    </p>
+  </article>
+);
+
+interface AdHocComparisonPanelProps {
+  caseId: string;
+  selection: AdHocChangesSelection;
+  offset: number;
+}
+
+const AdHocComparisonPanel: React.FC<AdHocComparisonPanelProps> = ({
+  caseId,
+  selection,
+  offset,
+}) => {
+  const [, setSearchParams] = useSearchParams();
+  const baselineSnapshotId = selection.baselineSnapshotId;
+  const targetSnapshotId = selection.targetSnapshotId;
+  const complete = Boolean(baselineSnapshotId && targetSnapshotId);
+
+  const commit = useCallback(
+    (patch: {
+      baselineSnapshotId?: string | null;
+      targetSnapshotId?: string | null;
+      offset?: number | null;
+    }) => {
+      setSearchParams(
+        toChangesSearchParams({
+          mode: CHANGES_MODE_AD_HOC,
+          baselineSnapshotId:
+            patch.baselineSnapshotId !== undefined
+              ? patch.baselineSnapshotId
+              : baselineSnapshotId,
+          targetSnapshotId:
+            patch.targetSnapshotId !== undefined
+              ? patch.targetSnapshotId
+              : targetSnapshotId,
+          offset: patch.offset !== undefined ? patch.offset : offset > 0 ? offset : null,
+        })
+      );
+    },
+    [baselineSnapshotId, targetSnapshotId, offset, setSearchParams]
+  );
+
+  const comparisonQuery = useQuery({
+    queryKey: [
+      'snapshot-comparison',
+      caseId,
+      baselineSnapshotId,
+      targetSnapshotId,
+      offset,
+    ],
+    queryFn: () =>
+      getSnapshotComparison(caseId, {
+        baseline: baselineSnapshotId as string,
+        target: targetSnapshotId as string,
+        limit: PAGE_SIZE,
+        offset,
+      }),
+    // Both selectors are required: an incomplete selection never requests and
+    // never falls back to the newest snapshot.
+    enabled: Boolean(caseId) && complete,
+    retry: false,
+  });
+
+  const handleSubmit = useCallback(
+    (event: React.FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      const data = new FormData(event.currentTarget);
+      const read = (name: string): string | null => {
+        const value = data.get(name);
+        if (typeof value !== 'string') return null;
+        const trimmed = value.trim();
+        return trimmed === '' ? null : trimmed;
+      };
+      commit({
+        baselineSnapshotId: read('baseline'),
+        targetSnapshotId: read('target'),
+        offset: null,
+      });
+    },
+    [commit]
+  );
+
+  const missing = [
+    baselineSnapshotId ? null : 'baseline',
+    targetSnapshotId ? null : 'target',
+  ].filter((side): side is string => side !== null);
+
+  const changes: SnapshotComparison | null =
+    complete && comparisonQuery.isSuccess ? comparisonQuery.data ?? null : null;
+
+  const coverageIncomplete = Boolean(
+    changes &&
+      (changes.baselineCoverage !== 'complete_requested_scope' ||
+        changes.targetCoverage !== 'complete_requested_scope')
+  );
+  const first = changes && changes.offset > 0 ? changes.offset + 1 : 1;
+  const last = changes ? changes.offset + changes.items.length : 0;
+
+  return (
+    <section
+      className="changes-adhoc"
+      data-mode="ad_hoc"
+      aria-labelledby="changes-adhoc-heading"
+    >
+      <header className="changes-adhoc-header">
+        <div>
+          <h4 id="changes-adhoc-heading">Ad-hoc snapshot comparison</h4>
+          <p className="changes-adhoc-intro">
+            Two explicitly pinned observations of this case, compared on request. No run
+            recorded this delta, so it is not a run change and it identifies no actor or
+            cause.
+          </p>
+        </div>
+      </header>
+
+      <form className="changes-adhoc-selectors" onSubmit={handleSubmit}>
+        <div className="changes-adhoc-selector">
+          <label htmlFor="changes-adhoc-baseline">Baseline snapshot ID</label>
+          <input
+            id="changes-adhoc-baseline"
+            key={`baseline:${baselineSnapshotId ?? ''}`}
+            name="baseline"
+            defaultValue={baselineSnapshotId ?? ''}
+            placeholder="snapshot id"
+            autoComplete="off"
+            spellCheck={false}
+          />
+        </div>
+        <div className="changes-adhoc-selector">
+          <label htmlFor="changes-adhoc-target">Target snapshot ID</label>
+          <input
+            id="changes-adhoc-target"
+            key={`target:${targetSnapshotId ?? ''}`}
+            name="target"
+            defaultValue={targetSnapshotId ?? ''}
+            placeholder="snapshot id"
+            autoComplete="off"
+            spellCheck={false}
+          />
+        </div>
+        <Button type="submit" variant="secondary" size="sm">
+          Compare these snapshots
+        </Button>
+      </form>
+
+      {missing.length > 0 ? (
+        <StatePanel title="Two snapshots are required" tone="warning">
+          <p>
+            {missing.length === 2
+              ? 'No baseline and no target snapshot is pinned.'
+              : `The ${missing[0]} snapshot is not pinned.`}{' '}
+            Both selectors must be explicit before this comparison can run: no request is
+            sent and the newest snapshot is never substituted.
+          </p>
+        </StatePanel>
+      ) : null}
+
+      {complete && comparisonQuery.isLoading ? (
+        <div className="changes-state" role="status" aria-busy="true">
+          <p>Comparing the two pinned observations…</p>
+        </div>
+      ) : null}
+
+      {complete && comparisonQuery.isError ? (
+        <div className="changes-state changes-state--error" role="alert">
+          <h4>Could not compare these snapshots</h4>
+          <p>{(comparisonQuery.error as Error).message}</p>
+          <p className="changes-state-hint">
+            Both snapshots must belong to this case and the baseline must be the earlier
+            observation. An unknown, identical or reversed pair fails explicitly instead of
+            returning current rows.
+          </p>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => void comparisonQuery.refetch()}
+          >
+            Retry
+          </Button>
+        </div>
+      ) : null}
+
+      {changes ? (
+        <>
+          {coverageIncomplete ? (
+            <div className="changes-coverage-warning" role="status">
+              <AlertTriangle size={16} aria-hidden="true" />
+              <div>
+                <strong>Coverage is not complete for this pair</strong>
+                <p>
+                  Each observation records its own coverage. The rows below describe
+                  observed data only and say nothing about sources outside that scope.
+                </p>
+              </div>
+            </div>
+          ) : null}
+
+          <div className="changes-adhoc-observations">
+            <AdHocObservation
+              caseId={caseId}
+              side="baseline"
+              snapshotId={changes.baselineSnapshotId}
+              runId={changes.baselineRunId}
+              coverage={changes.baselineCoverage}
+              metadata={changes.baselineMetadata}
+            />
+            <AdHocObservation
+              caseId={caseId}
+              side="target"
+              snapshotId={changes.targetSnapshotId}
+              runId={changes.targetRunId}
+              coverage={changes.targetCoverage}
+              metadata={changes.targetMetadata}
+            />
+          </div>
+
+          {changes.availability === 'unavailable' ? (
+            <StatePanel title="Comparison unavailable" tone="warning">
+              <p>
+                <code>{changes.unavailableReason}</code> —{' '}
+                {adHocReasonText(changes.unavailableReason)}
+              </p>
+              <p>
+                No delta is reported for this pair. An unavailable comparison is not a
+                zero-change result and says nothing about the observations being equal.
+              </p>
+            </StatePanel>
+          ) : null}
+
+          {changes.availability === 'ready' && changes.total === 0 ? (
+            <StatePanel title="No changes between these observations">
+              <p>
+                No entity-level differences were reported between these two ad-hoc
+                observations.
+              </p>
+              {coverageIncomplete ? (
+                <p>
+                  This says nothing about sources outside the observed scope; see the
+                  coverage warning above.
+                </p>
+              ) : null}
+            </StatePanel>
+          ) : null}
+
+          {changes.availability === 'ready' && (changes.total ?? 0) > 0 ? (
+            <>
+              <ul className="changes-list" aria-label="Ad-hoc comparison items">
+                {changes.items.map((item) => (
+                  <AdHocItemRow
+                    key={`${item.entityType}:${item.entityId}:${item.changeKind}`}
+                    item={item}
+                    caseId={caseId}
+                  />
+                ))}
+              </ul>
+              <div className="changes-pager">
+                <span data-testid="changes-adhoc-range">
+                  Showing {first}–{last} of {changes.total}
+                </span>
+                <div className="changes-pager-actions">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={changes.offset <= 0}
+                    onClick={() => commit({ offset: Math.max(0, changes.offset - PAGE_SIZE) })}
+                    icon={<ChevronLeft size={14} />}
+                  >
+                    Previous
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={!changes.hasMore}
+                    onClick={() => commit({ offset: changes.offset + PAGE_SIZE })}
+                    icon={<ChevronRight size={14} />}
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
+            </>
+          ) : null}
+
+          <p className="changes-adhoc-policy">
+            Comparison policy <code>{changes.comparisonPolicyVersion}</code> · mode{' '}
+            <code>{changes.mode}</code>
+          </p>
+          <p className="changes-caveat">
+            These rows compare two stored observations on request; no run recorded this
+            delta. “Absent from a later observation” describes that observation only: it is
+            not a verdict about the entity, and no actor or cause is identified.
+          </p>
+        </>
+      ) : null}
+
+      <p className="changes-permalink">
+        <a
+          href={buildChangesUrl(caseId, {
+            mode: CHANGES_MODE_AD_HOC,
+            baselineSnapshotId,
+            targetSnapshotId,
+            offset: offset > 0 ? offset : null,
+          })}
+        >
+          Permalink for this comparison
+        </a>
+      </p>
+    </section>
+  );
+};
+
 export const ChangesTab: React.FC<ChangesTabProps> = ({ caseId }) => {
   const [searchParams, setSearchParams] = useSearchParams();
   const selection = useMemo(() => parseChangesSelection(searchParams), [searchParams]);
+  // Ad-hoc mode is additive: it is active only when `mode=ad_hoc` is present and
+  // it never changes what the recorded view does when the mode is absent.
+  const adHoc = useMemo(() => parseAdHocChangesSelection(searchParams), [searchParams]);
   const offset = selection.offset ?? 0;
 
   const updateSelection = useCallback(
@@ -769,7 +1373,9 @@ export const ChangesTab: React.FC<ChangesTabProps> = ({ caseId }) => {
   const runsQuery = useQuery({
     queryKey: ['investigation-runs', caseId],
     queryFn: () => getInvestigationRuns(caseId, { limit: RUN_LIST_LIMIT }),
-    enabled: Boolean(caseId),
+    // The ad-hoc comparison does not read grouped runs; the recorded view is the
+    // only consumer, so switching mode never pins a run into an ad-hoc URL.
+    enabled: Boolean(caseId) && !adHoc.active,
     retry: false,
   });
 
@@ -813,6 +1419,7 @@ export const ChangesTab: React.FC<ChangesTabProps> = ({ caseId }) => {
   // single-run reader answers 404; a lookup failure keeps the selection and
   // surfaces the error state instead of silently switching runs.
   useEffect(() => {
+    if (adHoc.active) return;
     if (!runsQuery.isSuccess || runs.length === 0) return;
     if (!selection.runId) {
       updateSelection({ runId: runs[0].id, offset: null }, { replace: true });
@@ -826,6 +1433,7 @@ export const ChangesTab: React.FC<ChangesTabProps> = ({ caseId }) => {
     if (runLookupQuery.isError && !isNotFound(runLookupQuery.error)) return;
     updateSelection({ runId: runs[0].id, offset: null }, { replace: true });
   }, [
+    adHoc.active,
     runsQuery.isSuccess,
     runs,
     selection.runId,
@@ -876,28 +1484,48 @@ export const ChangesTab: React.FC<ChangesTabProps> = ({ caseId }) => {
             <History size={16} aria-hidden="true" /> Changes between observations
           </h3>
           <p className="changes-intro">
-            What changed between two pinned observations of this case, grouped by
-            investigation run. Every row is a stored observation; nothing is recomputed from
-            current rows.
+            {adHoc.active
+              ? 'Two explicitly pinned observations of this case, compared on request. This mode is separate from recorded run changes.'
+              : 'What changed between two pinned observations of this case, grouped by investigation run. Every row is a stored observation; nothing is recomputed from current rows.'}
           </p>
         </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={handleRetry}
-          icon={<RefreshCw size={14} />}
-        >
-          Refresh
-        </Button>
+        <div className="changes-header-actions">
+          {adHoc.active ? (
+            <Link className="changes-link" to={buildChangesUrl(caseId, {})}>
+              Recorded changes
+            </Link>
+          ) : (
+            <Link
+              className="changes-link"
+              to={buildChangesUrl(caseId, { mode: CHANGES_MODE_AD_HOC })}
+            >
+              Compare two snapshots
+            </Link>
+          )}
+          {adHoc.active ? null : (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleRetry}
+              icon={<RefreshCw size={14} />}
+            >
+              Refresh
+            </Button>
+          )}
+        </div>
       </header>
 
-      {runsQuery.isLoading ? (
+      {adHoc.active ? (
+        <AdHocComparisonPanel caseId={caseId} selection={adHoc} offset={offset} />
+      ) : null}
+
+      {!adHoc.active && runsQuery.isLoading ? (
         <div className="changes-state" role="status" aria-busy="true">
           <p>Loading grouped runs…</p>
         </div>
       ) : null}
 
-      {runsQuery.isError ? (
+      {!adHoc.active && runsQuery.isError ? (
         <div className="changes-state changes-state--error" role="alert">
           <h4>Could not load grouped runs</h4>
           <p>{(runsQuery.error as Error).message}</p>
@@ -907,7 +1535,7 @@ export const ChangesTab: React.FC<ChangesTabProps> = ({ caseId }) => {
         </div>
       ) : null}
 
-      {runsQuery.isSuccess && runs.length === 0 ? (
+      {!adHoc.active && runsQuery.isSuccess && runs.length === 0 ? (
         <div className="changes-state" role="status">
           <h4>No grouped runs recorded</h4>
           <p>
@@ -917,7 +1545,7 @@ export const ChangesTab: React.FC<ChangesTabProps> = ({ caseId }) => {
         </div>
       ) : null}
 
-      {runs.length > 0 ? (
+      {runs.length > 0 && !adHoc.active ? (
         <div className="changes-layout">
           <RunSelector
             runs={runs}
@@ -997,6 +1625,7 @@ export const ChangesTab: React.FC<ChangesTabProps> = ({ caseId }) => {
                 caseId={caseId}
                 claimId={selection.claimId}
                 snapshotId={selection.snapshotId}
+                runId={selectedRun?.id ?? selection.runId}
                 onClose={() => updateSelection({ claimId: null, snapshotId: null })}
               />
             ) : null}

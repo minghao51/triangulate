@@ -9,11 +9,25 @@ import { formatTimestamp } from '../../components/inspector/inspector-utils';
 import { ApiError, isNotFound, isUnprocessable } from '../../services/api-error';
 import { getCaseSearch } from '../../services/api';
 import {
+  MAX_FILTER_TEXT_LENGTH,
+  SEARCH_PARAMS,
   buildClaimEvidenceUrl,
   buildInspectorUrl,
   buildSearchUrl,
   parseSearchSelection,
+  searchSavedFilters,
 } from '../../services/deep-links';
+import {
+  deleteAllSavedViews,
+  deleteSavedView,
+  deleteSavedViewsForCase,
+  describeSavedView,
+  listSavedViews,
+  saveSavedView,
+  subscribeToSavedViews,
+  type SavedView,
+  type SavedViewsSnapshot,
+} from '../../services/saved-views';
 import './SearchTab.css';
 
 const PAGE_SIZE = 25;
@@ -33,6 +47,23 @@ function utcDate(value: string): string | null {
   if (!value) return null;
   const parsed = new Date(`${value}T00:00:00.000Z`);
   return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+}
+
+/** Client-side limit that matches the committed search URL allowlist. */
+const MAX_SEARCH_TEXT_LENGTH = MAX_FILTER_TEXT_LENGTH;
+
+type SearchFieldError = { field: 'q' | 'publisher' | 'dates'; message: string };
+
+function tooLong(value: string): boolean {
+  return Array.from(value.trim()).length > MAX_SEARCH_TEXT_LENGTH;
+}
+
+/** An inverted publication window is invalid before any request is made. */
+function invertedDateRange(from: string | null, to: string | null): boolean {
+  if (!from || !to) return false;
+  const fromTime = new Date(from).getTime();
+  const toTime = new Date(to).getTime();
+  return Number.isFinite(fromTime) && Number.isFinite(toTime) && fromTime > toTime;
 }
 
 const SearchTab: React.FC<SearchTabProps> = ({ caseId }) => {
@@ -66,8 +97,19 @@ const SearchTab: React.FC<SearchTabProps> = ({ caseId }) => {
     }
   }, [caseId, location.pathname, location.search, navigate, selection]);
   const [draftState, setDraftState] = useState({ source: selection.q, value: selection.q });
+  const [fieldError, setFieldError] = useState<SearchFieldError | null>(null);
+  const [savedSnapshot, setSavedSnapshot] = useState<SavedViewsSnapshot>(() => listSavedViews(caseId));
+  const [savedName, setSavedName] = useState('');
+  const [savedIncludeQuery, setSavedIncludeQuery] = useState(false);
+  const [savedNotice, setSavedNotice] = useState<{ tone: 'status' | 'alert'; text: string } | null>(null);
+  const [ephemeralViews, setEphemeralViews] = useState<SavedView[]>([]);
   const queryInputRef = useRef<HTMLInputElement>(null);
   const draft = draftState.source === selection.q ? draftState.value : selection.q;
+
+  useEffect(
+    () => subscribeToSavedViews(() => setSavedSnapshot(listSavedViews(caseId))),
+    [caseId]
+  );
 
   const activeQuery = selection.q.trim();
   const search = useQuery({
@@ -91,26 +133,124 @@ const SearchTab: React.FC<SearchTabProps> = ({ caseId }) => {
   });
 
   const update = (patch: Partial<typeof selection>, resetOffset = true) => {
-    navigate(buildSearchUrl(caseId, {
+    const next = {
       ...selection,
       ...patch,
       offset: resetOffset ? 0 : (patch.offset ?? selection.offset),
-    }));
+    };
+    if (invertedDateRange(next.publishedFrom, next.publishedTo)) {
+      setFieldError({
+        field: 'dates',
+        message: 'Published from must be on or before Published before. No request was sent.',
+      });
+      return;
+    }
+    if (next.publisher && tooLong(next.publisher)) {
+      setFieldError({
+        field: 'publisher',
+        message: `Publisher is limited to ${MAX_SEARCH_TEXT_LENGTH} characters. No request was sent.`,
+      });
+      return;
+    }
+    setFieldError(null);
+    navigate(buildSearchUrl(caseId, next));
   };
 
   const submit = (event: { preventDefault: () => void }) => {
     event.preventDefault();
     const query = draft.trim();
     if (!query) {
+      setFieldError({ field: 'q', message: 'Enter at least one search term.' });
       queryInputRef.current?.focus();
       return;
     }
+    if (tooLong(query)) {
+      setFieldError({
+        field: 'q',
+        message: `Search terms are limited to ${MAX_SEARCH_TEXT_LENGTH} characters. No request was sent.`,
+      });
+      queryInputRef.current?.focus();
+      return;
+    }
+    if (invertedDateRange(selection.publishedFrom, selection.publishedTo)) {
+      setFieldError({
+        field: 'dates',
+        message: 'Published from must be on or before Published before. No request was sent.',
+      });
+      return;
+    }
+    setFieldError(null);
     update({ q: query });
   };
 
   const clearFilters = () => update({
     type: null, publisher: null, status: null, publishedFrom: null, publishedTo: null,
   });
+
+  const caseSavedViews = savedSnapshot.views;
+  const mergedSavedViews = [...ephemeralViews, ...caseSavedViews];
+  const canConsentToQuery = activeQuery.length > 0;
+
+  const handleSaveView = () => {
+    const result = saveSavedView({
+      caseId,
+      view: 'search',
+      name: savedName,
+      filters: searchSavedFilters(selection),
+      sort: null,
+      includeQuery: savedIncludeQuery && canConsentToQuery,
+      query: savedIncludeQuery && canConsentToQuery ? activeQuery : null,
+    });
+    if (result.ok) {
+      setSavedSnapshot(result.snapshot);
+      setSavedName('');
+      setSavedIncludeQuery(false);
+      setSavedNotice({ tone: 'status', text: `Saved “${result.view.name}” on this device.` });
+      return;
+    }
+    const ephemeral = result.ephemeral;
+    if (ephemeral) {
+      setEphemeralViews((views) => [...views, ephemeral]);
+      setSavedName('');
+      setSavedIncludeQuery(false);
+    }
+    setSavedNotice({ tone: 'alert', text: result.message });
+  };
+
+  const applySavedView = (view: SavedView) => {
+    const type = view.filters[SEARCH_PARAMS.type];
+    update(
+      {
+        q: view.q ?? '',
+        type: type === 'claim' || type === 'evidence' ? type : null,
+        publisher: view.filters[SEARCH_PARAMS.publisher] ?? null,
+        status: view.filters[SEARCH_PARAMS.status] ?? null,
+        publishedFrom: view.filters[SEARCH_PARAMS.publishedFrom] ?? null,
+        publishedTo: view.filters[SEARCH_PARAMS.publishedTo] ?? null,
+        offset: 0,
+      },
+      false
+    );
+    setSavedNotice({ tone: 'status', text: `Applied “${view.name}”.` });
+  };
+
+  const handleDeleteView = (id: string) => {
+    if (ephemeralViews.some((view) => view.id === id)) {
+      setEphemeralViews((views) => views.filter((view) => view.id !== id));
+      return;
+    }
+    setSavedSnapshot(deleteSavedView(id));
+  };
+
+  const handleDeleteCaseViews = () => {
+    setSavedSnapshot(deleteSavedViewsForCase(caseId));
+    setEphemeralViews([]);
+  };
+
+  const handleDeleteAllViews = () => {
+    setSavedSnapshot(deleteAllSavedViews());
+    setEphemeralViews([]);
+  };
 
   const error = search.error;
   const statusCode = error instanceof ApiError ? error.status : null;
@@ -134,6 +274,8 @@ const SearchTab: React.FC<SearchTabProps> = ({ caseId }) => {
             value={draft}
             onChange={(event) => setDraftState({ source: selection.q, value: event.target.value })}
             placeholder="Enter search terms"
+            aria-invalid={fieldError?.field === 'q' || undefined}
+            aria-describedby={fieldError?.field === 'q' ? 'search-field-error' : undefined}
           />
           <Button type="submit" icon={<Search size={16} />}>Search</Button>
         </div>
@@ -149,7 +291,7 @@ const SearchTab: React.FC<SearchTabProps> = ({ caseId }) => {
           </select>
 
           <label htmlFor="search-publisher">Publisher</label>
-          <input id="search-publisher" aria-describedby="search-filter-hint" disabled={Boolean(selection.status)} value={selection.publisher ?? ''} onChange={(event) =>
+          <input id="search-publisher" aria-describedby={fieldError?.field === 'publisher' ? 'search-filter-hint search-field-error' : 'search-filter-hint'} aria-invalid={fieldError?.field === 'publisher' || undefined} disabled={Boolean(selection.status)} value={selection.publisher ?? ''} onChange={(event) =>
             update({ publisher: event.target.value || null, type: event.target.value && selection.type === 'claim' ? null : selection.type })
           } />
 
@@ -164,19 +306,99 @@ const SearchTab: React.FC<SearchTabProps> = ({ caseId }) => {
           </select>
 
           <label htmlFor="search-published-from">Published from</label>
-          <input id="search-published-from" type="date" value={dateInputValue(selection.publishedFrom)} onChange={(event) =>
+          <input id="search-published-from" type="date" aria-invalid={fieldError?.field === 'dates' || undefined} aria-describedby={fieldError?.field === 'dates' ? 'search-field-error' : undefined} value={dateInputValue(selection.publishedFrom)} onChange={(event) =>
             update({ publishedFrom: utcDate(event.target.value) })
           } />
           <label htmlFor="search-published-to">Published before</label>
-          <input id="search-published-to" type="date" value={dateInputValue(selection.publishedTo)} onChange={(event) =>
+          <input id="search-published-to" type="date" aria-invalid={fieldError?.field === 'dates' || undefined} aria-describedby={fieldError?.field === 'dates' ? 'search-field-error' : undefined} value={dateInputValue(selection.publishedTo)} onChange={(event) =>
             update({ publishedTo: utcDate(event.target.value) })
           } />
           <Button type="button" variant="secondary" onClick={clearFilters}>Clear filters</Button>
           <p id="search-filter-hint" className="case-search-filter-hint" role="note">
             Status applies to claims; publisher applies to evidence.
           </p>
+          {fieldError && (
+            <p id="search-field-error" className="case-search-filter-hint" role="alert">
+              {fieldError.message}
+            </p>
+          )}
         </div>
       </form>
+
+      <section className="case-search-saved-views" aria-label="Saved search views">
+        <h3>Saved search views</h3>
+        <p id="search-saved-views-hint" className="case-search-filter-hint">
+          Saved views stay in this browser. They are local, not private: anyone using this browser profile can read them.
+        </p>
+        <div className="case-search-query-row">
+          <label htmlFor="search-saved-view-name">Saved view name</label>
+          <input
+            id="search-saved-view-name"
+            value={savedName}
+            onChange={(event) => setSavedName(event.target.value)}
+            placeholder="e.g. Evidence by publisher"
+            aria-describedby="search-saved-views-hint"
+          />
+          <Button type="button" variant="secondary" onClick={handleSaveView}>Save current filters</Button>
+        </div>
+        {canConsentToQuery && (
+          <div>
+            <label htmlFor="search-saved-consent">
+              <input
+                id="search-saved-consent"
+                type="checkbox"
+                checked={savedIncludeQuery}
+                onChange={(event) => setSavedIncludeQuery(event.target.checked)}
+              />{' '}
+              Store the search text in this saved view
+            </label>
+            <p className="case-search-filter-hint">
+              Search text can be sensitive. It is excluded unless you tick this box; with consent it is stored on this device.
+            </p>
+          </div>
+        )}
+        {savedNotice && (
+          <p role={savedNotice.tone === 'alert' ? 'alert' : 'status'}>{savedNotice.text}</p>
+        )}
+        {mergedSavedViews.length > 0 && (
+          <ul className="case-search-saved-views-list" aria-label="Saved search views list">
+            {mergedSavedViews.map((view) => (
+              <li key={view.id}>
+                <span>{view.name}</span>
+                <span className="case-search-filter-hint"> — {describeSavedView(view)}</span>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => applySavedView(view)}
+                  aria-label={`Apply saved view ${view.name}`}
+                >
+                  Apply
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => handleDeleteView(view.id)}
+                  aria-label={`Delete saved view ${view.name}`}
+                >
+                  Delete
+                </Button>
+              </li>
+            ))}
+          </ul>
+        )}
+        <div className="case-search-query-row">
+          {(caseSavedViews.length > 0 || savedSnapshot.totalCount > 0) && (
+            <Button type="button" variant="secondary" onClick={handleDeleteCaseViews}>
+              Delete saved views for this case
+            </Button>
+          )}
+          {(caseSavedViews.length > 0 || savedSnapshot.totalCount > 0 || savedSnapshot.status !== 'ok') && (
+            <Button type="button" variant="secondary" onClick={handleDeleteAllViews}>
+              {savedSnapshot.status === 'ok' ? 'Delete all saved views' : 'Discard stored saved views'}
+            </Button>
+          )}
+        </div>
+      </section>
 
       {!activeQuery ? (
         <p className="case-search-idle" role="status">Enter a search query to search this case.</p>
@@ -219,6 +441,9 @@ const SearchTab: React.FC<SearchTabProps> = ({ caseId }) => {
                       </div>
                       {item.title && <p className="case-search-snippet">{item.snippet}</p>}
                       <div className="case-search-metadata">
+                        <span>
+                          Matched in {item.matchedField === 'title' ? 'title' : 'body'}
+                        </span>
                         {item.publisher && <span>Publisher: {item.publisher}</span>}
                         {item.status && <span>Status: {item.status}</span>}
                         {item.publishedAt && <span>Published: {formatTimestamp(item.publishedAt)}</span>}

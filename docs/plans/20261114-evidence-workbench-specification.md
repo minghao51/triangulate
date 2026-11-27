@@ -18,6 +18,26 @@ Deliver five capabilities incrementally:
 
 **Default architectural decisions proposed for approval:** Python/SQLite remain; FastAPI and browser remain read-only; all ingestion/analysis/index writes run through CLI/service code; first release is local/trusted and single-writer. No new mutation endpoints, autonomous public web input, vector database, separate queue service or general chatbot.
 
+> **Amendment (2026-11-22) — existing narrow review mutation surface.** The
+> source has long registered three human-in-the-loop review POST routes:
+> `POST /api/cases/{case_id}/review-actions/review` (review decision),
+> `POST /api/cases/{case_id}/review-actions/exceptions/{exception_id}`
+> (exception action) and `POST /api/cases/{case_id}/annotations` (review
+> annotation), `src/http/app.py:573-626`, called by the browser
+> (`frontend/src/services/api.ts:274-309`) and acknowledged as existing HTTP
+> mutation paths by the [fencing record](../architecture/20261118-case-writer-fencing.md)
+> (HTTP write-surface contract, lines 109-110).
+> Owner decision (2026-11-22): keep and document them as a deliberately narrow
+> human-in-the-loop review surface — not case creation, reruns, ingestion or
+> execution — rather than removing them. The "read-only" defaults above and the
+> "no web mutation routes" acceptance item in §11 are therefore qualified by
+> this one narrow surface; the GET-side invariant in §2 is unchanged and was
+> reinforced by making `GET .../evaluation` a pure reader
+> (`src/cases/service.py:4358-4404`). No authentication or authorization exists
+> on these routes; the local/trusted deployment assumption applies. See
+> [`docs/reference/http-api.md`](../reference/http-api.md) for the documented
+> contracts.
+
 **Release A:** setup/reliability prerequisites plus the evidence inspector. **Release B:** dependency grouping and comparison. **Release C:** durable run changes and case search. Each release needs its own verified handoff; approval of a design is not approval to deploy against the historical database.
 
 Not in this specification: production database repair, deletion/archival of existing files, account/RBAC infrastructure, browser review editing, immutable human audit history, notifications, OCR, multimedia verification, broad OSINT imports, semantic claim merging or automatic truth certification. These remain separate proposals.
@@ -28,7 +48,7 @@ Not in this specification: production database repair, deletion/archival of exis
 - Capture is not verification. Quotation presence is not proof of entailment. A publication's reputation is not a claim truth score. Two domains are not proof of two independent sources.
 - Every highlighted quotation resolves to immutable stored text and an exact validated range. Never manufacture a quotation or silently use the latest version of a page for an old claim.
 - Failed, fallback, incomplete and legacy analysis remain visible as such. Missing data is not zero, no result is not failure, and failed retrieval is not successful empty retrieval.
-- No GET handler triggers analysis, recapture, snapshot creation, index rebuilding or recovery. Existing startup schema initialization is documented separately; introducing these features must not add new GET-side domain mutations.
+- No GET handler triggers analysis, recapture, snapshot creation, index rebuilding or recovery. Existing startup schema initialization is documented separately; introducing these features must not add new GET-side domain mutations. *(Still in force; the three review POSTs are not GET handlers — see the 2026-11-22 amendment in §1.)*
 - No HTML from captured pages or search results is injected into the DOM. Render text/React nodes; source links accept only HTTP(S), with `noopener noreferrer` for new tabs.
 - Current API field meanings and IDs remain compatible. In particular, `ClaimEvidenceLinkDTO.id` currently identifies evidence, not the link; add `linkId`/`evidenceId`, do not reinterpret `id`. `Event.case_run_id` currently references a stage run, not a whole investigation.
 - Do not refactor the entire 2,000-line case service. New focused helpers may isolate capture/alignment, provenance, snapshots and search; existing service remains the orchestration boundary.
@@ -198,7 +218,7 @@ Additive DTO fields default safely for legacy data. Preserve current list/tab en
 
 On a deterministic synthetic case: ingest two sources and one copied source; extract claims with a valid quote and one invalid quote; open the valid inspector by deep link; compare sources and see dependency warnings; rerun identical inputs and observe no semantic change; update one source and see a new immutable capture plus a meaningful delta; search for old/new current text and navigate to the right version; open the older snapshot after a claim rewrite; simulate a failed source, failed write and interrupted run without a false-success baseline.
 
-Also verify keyboard/reload/back/forward behavior, no injected source HTML, no invented alerts or scores, no web mutation routes, no production-data writes, backend/frontend test gates, current architecture documentation and no undocumented API/schema drift.
+Also verify keyboard/reload/back/forward behavior, no injected source HTML, no invented alerts or scores, no web mutation routes *(qualified by the 2026-11-22 amendment in §1: the three narrow review/annotation POSTs are the accepted exception)*, no production-data writes, backend/frontend test gates, current architecture documentation and no undocumented API/schema drift.
 
 ## 12. Owner decisions before dispatch
 

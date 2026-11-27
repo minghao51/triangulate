@@ -643,6 +643,11 @@ def semantic_hash_for_payload(payload: dict[str, Any]) -> str:
     return _semantic_hash(semantic_view(payload))
 
 
+def semantic_hash_for_view(semantic: dict[str, Any]) -> str:
+    """Hash an already-projected semantic view (never re-projects)."""
+    return _semantic_hash(semantic)
+
+
 def build_snapshot_delta(
     *,
     snapshot_id: str,
@@ -1124,6 +1129,7 @@ __all__ = [
     "compose_case_snapshot",
     "semantic_view",
     "semantic_hash_for_payload",
+    "semantic_hash_for_view",
     "build_snapshot_delta",
     "get_case_snapshot",
     "latest_snapshot_before",

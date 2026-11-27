@@ -391,3 +391,47 @@
     gap: 0.75rem;
   }
 }
+
+/* Fetch-time label (client request time, distinct from recorded timestamps) */
+.explorer-fetched {
+  display: flex;
+  align-items: baseline;
+  gap: 0.375rem;
+  font-size: 0.6875rem;
+  color: var(--text-tertiary);
+}
+
+.explorer-fetched-label {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+}
+
+.explorer-fetched-value {
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+}
+
+.explorer-fetched-note {
+  font-style: italic;
+}
+
+/* Recorded new-material indicator; text, not colour alone */
+.case-new-material {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--accent-primary);
+}
+
+.case-new-material--none {
+  color: var(--text-tertiary);
+  font-weight: 400;
+}
+
+.case-footer {
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}

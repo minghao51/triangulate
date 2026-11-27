@@ -1,0 +1,116 @@
+<!-- viewport: 1280×800 desktop -->
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="800" viewBox="0 0 1280 800" role="img" aria-labelledby="wf-title wf-desc">
+  <title id="wf-title">Capture inspector — desktop</title>
+  <desc id="wf-desc">Capture inspector — desktop (desktop, 1280x800). Proposal wireframe with synthetic data, not implementation evidence. Numbered regions: 1 Primary navigation — GET reads only; ingest, rerun, rebuild and recovery stay CLI-only; 2 Capture inspector header — title, synthetic context and available actions; 3 Case tabs (12) — active Evidence; tabs are navigation, not state changes; 4 Claim and immutable citation — frozen claim text, relationship and model assessment provenance. · frame 1 of 1; 5 Capture metadata — publisher host, observation and recording times, hash, published-unavailable and recorded extraction scope. · frame 1 of 1; 6 Synthetic passage block — grey box stands for captured text; labelled mock example, so no validated code-point range is claimed. · frame 1 of 1; 7 Capture version selector and Open source control — an actual field plus a safe HTTP(S) link control; both are visible, not prose only. · frame 1 of 1; 8 Provenance — provisional publisher host, unknown independence and both source URLs. · frame 1 of 1; 9 Reader notes — quotation validation rules and the synthetic-passage limitation. · frame 1 of 1.</desc>
+  <g id="ui" font-family="-apple-system, system-ui, sans-serif">
+    <rect x="0" y="0" width="1280" height="800" fill="#fff"/>
+    <rect x="8" y="8" width="1264" height="784" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <rect x="32" y="32" width="240" height="744" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="48" y="56" font-size="14" fill="#000" font-weight="600">TRIANGULATE</text>
+    <text x="48" y="80" font-size="12" fill="#666">Evidence workbench · proposal</text>
+    <line x1="48" y1="88" x2="256" y2="88" stroke="#000" stroke-width="1.5"/>
+    <text x="48" y="128" font-size="12" fill="#000" font-weight="600">NAVIGATE</text>
+    <text x="48" y="160" font-size="14" fill="#000">Dashboard</text>
+    <text x="48" y="192" font-size="14" fill="#000" font-weight="600">Cases</text>
+    <text x="48" y="224" font-size="14" fill="#000">Network</text>
+    <text x="48" y="256" font-size="14" fill="#000">Sources</text>
+    <text x="48" y="288" font-size="14" fill="#000">Narratives</text>
+    <text x="48" y="320" font-size="14" fill="#000">Monitoring</text>
+    <text x="48" y="352" font-size="14" fill="#000">AI info</text>
+    <line x1="48" y1="368" x2="256" y2="368" stroke="#000" stroke-width="1.5"/>
+    <text x="48" y="408" font-size="12" fill="#000" font-weight="600">RECENT CASES</text>
+    <text x="48" y="432" font-size="12" fill="#000">case-2201-0417</text>
+    <text x="48" y="456" font-size="12" fill="#000">case-2199-1180</text>
+    <text x="48" y="480" font-size="12" fill="#000">case-2198-0922</text>
+    <line x1="48" y1="496" x2="256" y2="496" stroke="#000" stroke-width="1.5"/>
+    <text x="48" y="536" font-size="12" fill="#000" font-weight="600">READ-ONLY BY DEFAULT</text>
+    <text x="48" y="560" font-size="12" fill="#000">GET reads only</text>
+    <text x="48" y="584" font-size="12" fill="#666">local / trusted</text>
+    <text x="48" y="608" font-size="12" fill="#666">ingest + runs via CLI</text>
+    <text x="48" y="760" font-size="12" fill="#666">Wireframe · synthetic data</text>
+    <rect x="296" y="32" width="960" height="88" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="312" y="80" font-size="20" fill="#000" font-weight="600">Capture inspector</text>
+    <text x="312" y="104" font-size="12" fill="#666">Immutable capture reads only · Proposal · synthetic · not built</text>
+    <rect x="296" y="144" width="960" height="48" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="312" y="176" font-size="14" fill="#000">Overview</text>
+    <text x="392" y="176" font-size="14" fill="#000" font-weight="600">Evidence</text>
+    <text x="472" y="176" font-size="14" fill="#000">Claims</text>
+    <text x="536" y="176" font-size="14" fill="#000">Compare</text>
+    <text x="608" y="176" font-size="14" fill="#000">Parties</text>
+    <text x="680" y="176" font-size="14" fill="#000">Map</text>
+    <text x="720" y="176" font-size="14" fill="#000">Timeline</text>
+    <text x="800" y="176" font-size="14" fill="#000">Exceptions</text>
+    <text x="896" y="176" font-size="14" fill="#000">Report</text>
+    <text x="960" y="176" font-size="14" fill="#000">Changes</text>
+    <text x="1032" y="176" font-size="14" fill="#000">Search</text>
+    <text x="1096" y="176" font-size="14" fill="#000">Run history</text>
+    <g data-pane="p1">
+    <rect x="296" y="216" width="464" height="160" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="312" y="256" font-size="14" fill="#000" font-weight="600">Claim and citation</text>
+    <text x="312" y="280" font-size="12" fill="#000">claim-8898 · tender notice</text>
+    <text x="312" y="304" font-size="12" fill="#000">Relation: reported_by · alignment: exact</text>
+    <text x="312" y="328" font-size="12" fill="#000">citation-3312 · frozen claim text</text>
+    <text x="312" y="352" font-size="12" fill="#000">Assessment origin: model · version unrecorded</text>
+    </g>
+    <g data-pane="p2">
+    <rect x="784" y="216" width="472" height="160" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="800" y="256" font-size="14" fill="#000" font-weight="600">Capture metadata</text>
+    <text x="800" y="280" font-size="12" fill="#000">observed: 2026-11-20 · recorded: 2026-11-20</text>
+    <text x="800" y="304" font-size="12" fill="#000">published: unavailable</text>
+    <text x="800" y="328" font-size="12" fill="#000">text_sha256: 4f1c…a9 (short prefix)</text>
+    <text x="800" y="352" font-size="12" fill="#000">extraction scope: body prefix, recorded</text>
+    </g>
+    <g data-pane="p3">
+    <rect x="296" y="400" width="464" height="144" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="312" y="440" font-size="14" fill="#000" font-weight="600">Captured passage (synthetic)</text>
+    <rect x="312" y="448" width="432" height="88" fill="#e6e6e6"/>
+    <text x="320" y="472" font-size="12" fill="#000">Mock example only: "the tender was announced in the</text>
+    <text x="320" y="496" font-size="12" fill="#000">regional gazette" — drawn to show the passage box; no</text>
+    <text x="320" y="520" font-size="12" fill="#000">stored capture text is used and no validated offsets</text>
+    </g>
+    <g data-pane="p4">
+    <rect x="784" y="400" width="472" height="152" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="800" y="440" font-size="14" fill="#000" font-weight="600">Capture version</text>
+    <text x="800" y="464" font-size="12" fill="#000">Capture</text>
+    <rect x="800" y="472" width="440" height="32" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="808" y="496" font-size="12" fill="#000">cap-9f31 (current) · cap-9d02 (older)</text>
+    <rect x="800" y="504" width="112" height="32" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="808" y="528" font-size="12" fill="#000">Open source</text>
+    </g>
+    <g data-pane="p5">
+    <rect x="296" y="576" width="464" height="160" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="312" y="616" font-size="14" fill="#000" font-weight="600">Provenance</text>
+    <text x="312" y="640" font-size="12" fill="#000">Publisher: example.invalid (provisional host)</text>
+    <text x="312" y="664" font-size="12" fill="#000">Independence: unknown · no verified claim</text>
+    <text x="312" y="688" font-size="12" fill="#000">Dependency groups: unavailable</text>
+    <text x="312" y="712" font-size="12" fill="#000">URLs: original + canonical · example.invalid</text>
+    </g>
+    <g data-pane="p6">
+    <rect x="784" y="576" width="472" height="136" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="800" y="616" font-size="14" fill="#000" font-weight="600">Reader notes</text>
+    <text x="800" y="640" font-size="12" fill="#666">Quotation highlighted only when a validated range exists</text>
+    <text x="800" y="664" font-size="12" fill="#666">Historical snapshot keeps its own capture</text>
+    <text x="800" y="688" font-size="12" fill="#666">No verified offset is claimed in this drawing</text>
+    </g>
+  </g>
+  <g id="annotations" font-family="-apple-system, system-ui, sans-serif">
+    <rect data-region="1" x="24" y="24" width="256" height="760" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="2" x="288" y="24" width="976" height="104" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="3" x="288" y="136" width="976" height="64" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="4" x="288" y="208" width="480" height="176" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="5" x="776" y="208" width="488" height="176" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="6" x="288" y="392" width="480" height="160" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="7" x="776" y="392" width="488" height="168" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="8" x="288" y="568" width="480" height="176" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="9" x="776" y="568" width="488" height="152" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <text x="16" y="48" font-size="12" font-weight="600" fill="#000">1</text>
+    <text x="280" y="48" font-size="12" font-weight="600" fill="#000">2</text>
+    <text x="280" y="160" font-size="12" font-weight="600" fill="#000">3</text>
+    <text x="280" y="232" font-size="12" font-weight="600" fill="#000">4</text>
+    <text x="768" y="232" font-size="12" font-weight="600" fill="#000">5</text>
+    <text x="280" y="416" font-size="12" font-weight="600" fill="#000">6</text>
+    <text x="768" y="416" font-size="12" font-weight="600" fill="#000">7</text>
+    <text x="280" y="592" font-size="12" font-weight="600" fill="#000">8</text>
+    <text x="768" y="592" font-size="12" font-weight="600" fill="#000">9</text>
+  </g>
+</svg>

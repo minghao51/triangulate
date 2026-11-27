@@ -1,6 +1,6 @@
 # Frontend
 
-This directory contains the React frontend for browsing persisted cases and operator outputs against the read-only Triangulate HTTP API.
+This directory contains the React frontend for browsing persisted cases and operator outputs against the Triangulate HTTP API (GET-only inspection plus three narrow human-in-the-loop review/annotation POSTs).
 
 ## Stack
 
@@ -50,6 +50,22 @@ those start a backend and require a separately approved scratch runtime.
 B03 parent verification: `npm run check`, 72 component tests and 10 mocked browser
 tests passed. These checks do not exercise live ingestion or certify source
 independence. See [read-only UI architecture](../docs/architecture/20261115-read-only-ui-states.md).
+
+## Refinement release gate (all screens, states and viewports)
+
+```bash
+npx playwright test --config playwright.refinement.config.ts
+# WebKit is opt-in and needs libavif16 on this host:
+REFINEMENT_GATE_WEBKIT=1 npx playwright test --config playwright.refinement.config.ts --project=webkit-journeys
+```
+
+`playwright.refinement.config.ts` + `tests/gate/` drive the same Vite-only,
+fully synthetic `/api` harness at 375×812, 768×1024 and 1280×800: 24 primary
+screens, 42 selected states, keyboard/skip-link/zoom checks, and the optional
+X01/X02 history surfaces. Screenshots and the JSON report are written under
+`/tmp/refinement-gate`. All three installed engines pass on this host (WebKit needs
+`libavif16`); an engine that cannot launch is recorded as **not proven**, never as a pass. Per-task evidence:
+[web-app refinement execution log](../docs/plans/20261123-web-app-refinement-evidence.md).
 
 ## Current Routes
 

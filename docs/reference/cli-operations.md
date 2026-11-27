@@ -4,9 +4,11 @@ This document describes the canonical operator workflow for Triangulate.
 
 ## Boundary
 
-- The website is presentation-only.
-- The HTTP API is read-only.
-- Pipeline execution is triggered outside the website.
+- Inspection over HTTP is GET-only. A narrow human-in-the-loop review exception
+  exists: three POST routes for review decisions, exception actions and review
+  annotations (see [`./http-api.md`](./http-api.md)).
+- Case creation, ingestion, reruns and pipeline execution are not exposed over
+  HTTP and are triggered outside the website.
 - The default trigger surface is the `triangulate` CLI.
 - GitHub Actions or other worker runtimes may invoke the same CLI commands for scheduled or remote operation.
 
@@ -51,6 +53,15 @@ uv run triangulate case exception <case-id> <exception-id> --action resolve
 
 Use these commands for operator control after a case already exists.
 
+`case review --decision` accepts `approve`, `reject`, `defer`,
+`action_required` and `exception`. `defer` is a **case-level acknowledgement**:
+it records the review note and timestamp but never reopens a case. A
+`REVIEW_READY` case stays review-ready, and an `APPROVED`/`REJECTED` (or
+monitoring) case keeps its stored status, its stage and every persisted event
+review decision and analysis binding. It also leaves the exception queue — its
+statuses, timestamps and resolution notes — untouched. That is different from
+`case exception --action defer`, which defers one exception to `deferred`.
+
 ### 5. Repair the Case Search Index (HTTP 503 on search)
 
 ```bash
@@ -77,12 +88,49 @@ refused), touches only that case, is idempotent, and prints the rebuilt
 evidence/claim counts or the capability reason. After a successful rebuild,
 retry the search request.
 
-UI note: the frontend serves static `/data/*.json` fixtures when
-`VITE_API_BASE_URL` is unset (`frontend/src/services/api.ts`), and the search tab
-does not work in that static-data mode. To use search (and any live API data) in
-the UI, run the backend (`uv run triangulate serve`) and start Vite with
-`VITE_API_BASE_URL=http://127.0.0.1:5173` so requests go through the Vite `/api`
-proxy to the real API.
+UI note: the static-data default remains — with `VITE_API_BASE_URL` unset the
+frontend prefers bundled static `/data/*.json` fixtures (`frontend/src/services/api.ts`).
+That mode is a development convenience with two qualifications (as of
+2026-11-22): it emits a dev-only console warning when active outside tests, and
+a failed static fixture lookup falls through to the same-origin `/api` path,
+which Vite proxies to the backend (`frontend/vite.config.ts`). So search (and
+other live data) can work in that configuration if a backend is reachable via
+the proxy — but any data set without matching fixtures will look empty or
+partial until then. For predictable live data, run the backend
+(`uv run triangulate serve`) and start Vite with
+`VITE_API_BASE_URL=http://127.0.0.1:5173` so every request goes through the Vite
+`/api` proxy to the real API. The production build is unchanged.
+
+### 6. Database Selection and Initialization (HTTP 503 on historical GETs)
+
+The HTTP server and `init-db` resolve the SQLite path with the same deliberate
+precedence, so an explicit bootstrap targets exactly the file the server reads:
+
+1. a **non-default** `[database].path` in the runtime `config.toml`;
+2. otherwise a configured `DATABASE_PATH` environment variable;
+3. otherwise the compatibility default `./triangulate.db`.
+
+A config value that only spells out the default (`./triangulate.db` or
+`triangulate.db`) does not mask `DATABASE_PATH`. Relative values are resolved
+against the process working directory, so run `init-db` and `serve` from the
+same directory (or use absolute paths).
+
+```bash
+# Bootstrap the same configured database the server will read
+uv run triangulate init-db
+uv run triangulate serve
+```
+
+The three historical GETs (`snapshot-comparison`, the run artifact list and an
+artifact download) never create or migrate storage. If the selected file is
+missing, empty/uninitialized, partially migrated or unreadable, they answer a
+sanitized `503 {"detail": "Historical storage is unavailable"}`. The remedy is
+to run `init-db` with the same configuration and working directory, then retry.
+An unknown case/run/artifact or snapshot on a usable store is still a scoped
+`404`, and malformed requests keep their `422`s. `GET /health` is liveness only
+and does not prove the historical database is available. Reads do not force a
+journal mode; a WAL file whose `-shm` sidecar the server cannot create is
+reported as unavailable rather than modified.
 
 ## GitHub Actions as a Trigger Surface
 
@@ -109,4 +157,10 @@ The important rule is unchanged: GitHub Actions may trigger the CLI, but the web
 
 - Prefer case-oriented commands over older event-oriented commands when both can satisfy the task.
 - `process-url --save` is useful for attaching ad hoc captures to the durable intake pipeline.
-- For local browsing after a run, start the API with `uv run triangulate serve` and open the frontend separately.
+- For local browsing after a run, start the API with `uv run triangulate serve` and open the frontend separately. If a historical GET returns `503 "Historical storage is unavailable"`, run `uv run triangulate init-db` from that same working directory; `GET /health` remains `ok` either way.
+- If you published a case under a custom directory (`fetch-topic --output <dir>`
+  or `case rerun --output <dir>`), start the server with the same directory in
+  `TRIANGULATE_OUTPUT_ROOT` (an absolute directory is the most robust). The
+  setting is read once at startup; a relative value is resolved against the
+  server's startup working directory, defaults to `./output` when unset, and the
+  server never creates, repairs or searches for another output root.

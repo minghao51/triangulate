@@ -12,6 +12,11 @@ dist
 dist-ssr
 *.local
 
+# Playwright reports/artifacts if a run uses the default reporter locations
+playwright-report/
+test-results/
+blob-report/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

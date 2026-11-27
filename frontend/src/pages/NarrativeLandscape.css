@@ -210,3 +210,34 @@
   font-size: 1.25rem;
   color: var(--text-primary);
 }
+
+/* Recorded stance basis — never a truth/verification badge. */
+.narrative-party-basis {
+  color: var(--text-secondary);
+}
+
+.narrative-party-origin {
+  color: var(--text-tertiary);
+}
+
+.narrative-party-basis--unknown,
+.narrative-party-basis--unknown + .narrative-party-origin {
+  color: var(--text-tertiary);
+}
+
+.narrative-cluster-claim-link {
+  color: var(--text-primary);
+  text-decoration: none;
+  border-bottom: 1px dotted var(--border-strong);
+}
+
+.narrative-cluster-claim-link:hover,
+.narrative-cluster-claim-link:focus-visible {
+  color: var(--accent-primary);
+  border-bottom-color: var(--accent-primary);
+}
+
+/* Empty narratives state is distinct from loading and from a network error. */
+.narratives-empty {
+  margin: 0;
+}

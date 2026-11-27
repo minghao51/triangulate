@@ -1,0 +1,83 @@
+<!-- viewport: 768×1024 tablet -->
+<svg xmlns="http://www.w3.org/2000/svg" width="768" height="1024" viewBox="0 0 768 1024" role="img" aria-labelledby="wf-title wf-desc">
+  <title id="wf-title">Runs and changes — part 2 of 2 — tablet</title>
+  <desc id="wf-desc">Runs and changes — part 2 of 2 — tablet (tablet, 768x1024). Proposal wireframe with synthetic data, not implementation evidence. Numbered regions: 1 Primary navigation (top bar) — GET reads only; CLI owns ingest and runs; 2 Runs and changes — frame 2 of 2; full coverage continues in the named companion frame; 3 Typed before/after rows — review_state_changed carries the case review state, not a claim verification state. · frame 2 of 2; 4 Per-item run facts — origin run and observer run as separate recorded values; neither implies who caused a change. · frame 2 of 2; 5 Delta pagination — offset lives in the URL; the selected run stays pinned. · frame 2 of 2.</desc>
+  <g id="ui" font-family="-apple-system, system-ui, sans-serif">
+    <rect x="0" y="0" width="768" height="1024" fill="#fff"/>
+    <rect x="8" y="8" width="752" height="1008" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <rect x="32" y="32" width="704" height="48" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="48" y="56" font-size="14" fill="#000" font-weight="600">TRIANGULATE</text>
+    <text x="168" y="56" font-size="12" fill="#000">Dashboard</text>
+    <text x="248" y="56" font-size="12" fill="#000" font-weight="600">Cases</text>
+    <text x="304" y="56" font-size="12" fill="#000">Network</text>
+    <text x="368" y="56" font-size="12" fill="#000">Sources</text>
+    <text x="432" y="56" font-size="12" fill="#000">Narratives</text>
+    <text x="520" y="56" font-size="12" fill="#000">Monitoring</text>
+    <text x="608" y="56" font-size="12" fill="#000">AI info</text>
+    <rect x="32" y="104" width="704" height="112" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="48" y="152" font-size="20" fill="#000" font-weight="600">Runs and changes</text>
+    <text x="48" y="176" font-size="12" fill="#666">Part 2 of 2 · companion frames carry the rest</text>
+    <text x="48" y="200" font-size="12" fill="#666">previous: runs-changes-tablet.svg</text>
+    <g data-pane="p4">
+    <rect x="32" y="240" width="704" height="224" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="48" y="280" font-size="14" fill="#000" font-weight="600">Typed changes</text>
+    <text x="48" y="304" font-size="12" fill="#000" font-weight="600">Type</text>
+    <text x="248" y="304" font-size="12" fill="#000" font-weight="600">Entity</text>
+    <text x="384" y="304" font-size="12" fill="#000" font-weight="600">Before</text>
+    <text x="520" y="304" font-size="12" fill="#000" font-weight="600">After</text>
+    <line x1="48" y1="312" x2="720" y2="312" stroke="#000" stroke-width="1.5"/>
+    <text x="48" y="344" font-size="12" fill="#000">claim_added</text>
+    <text x="248" y="344" font-size="12" fill="#000">claim-8898</text>
+    <text x="384" y="344" font-size="12" fill="#000">—</text>
+    <text x="520" y="344" font-size="12" fill="#000">tender notice</text>
+    <text x="48" y="376" font-size="12" fill="#000">capture_changed</text>
+    <text x="248" y="376" font-size="12" fill="#000">ev-c71a</text>
+    <text x="384" y="376" font-size="12" fill="#000">hash 4f1c</text>
+    <text x="520" y="376" font-size="12" fill="#000">hash 8b02</text>
+    <text x="48" y="408" font-size="12" fill="#000">claim_no_longer_extracted</text>
+    <text x="248" y="408" font-size="12" fill="#000">claim-8897</text>
+    <text x="384" y="408" font-size="12" fill="#000">budget line</text>
+    <text x="520" y="408" font-size="12" fill="#000">—</text>
+    <text x="48" y="440" font-size="12" fill="#000">review_state_changed</text>
+    <text x="248" y="440" font-size="12" fill="#000">case-2201-0417</text>
+    <text x="384" y="440" font-size="12" fill="#000">review ready</text>
+    <text x="520" y="440" font-size="12" fill="#000">action required</text>
+    </g>
+    <g data-pane="p5">
+    <rect x="32" y="488" width="704" height="192" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="48" y="528" font-size="14" fill="#000" font-weight="600">Per-item run facts</text>
+    <text x="48" y="552" font-size="12" fill="#000" font-weight="600">Item</text>
+    <text x="256" y="552" font-size="12" fill="#000" font-weight="600">originRunId</text>
+    <text x="464" y="552" font-size="12" fill="#000" font-weight="600">observedByRunId</text>
+    <line x1="48" y1="560" x2="720" y2="560" stroke="#000" stroke-width="1.5"/>
+    <text x="48" y="592" font-size="12" fill="#000">claim-8898</text>
+    <text x="256" y="592" font-size="12" fill="#000">run-0007</text>
+    <text x="464" y="592" font-size="12" fill="#000">run-0007</text>
+    <text x="48" y="624" font-size="12" fill="#000">case-2201-0417</text>
+    <text x="256" y="624" font-size="12" fill="#000">origin not recorded</text>
+    <text x="464" y="624" font-size="12" fill="#000">run-0007</text>
+    <text x="48" y="656" font-size="12" fill="#000">ev-c71a</text>
+    <text x="256" y="656" font-size="12" fill="#000">run-0006</text>
+    <text x="464" y="656" font-size="12" fill="#000">run-0007</text>
+    </g>
+    <g data-pane="p6">
+    <rect x="32" y="704" width="704" height="64" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <rect x="48" y="720" width="128" height="32" fill="#e6e6e6" stroke="#000" stroke-width="1.5"/>
+    <text x="56" y="744" font-size="12" fill="#666">Previous page…</text>
+    <rect x="184" y="720" width="96" height="32" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="192" y="744" font-size="12" fill="#000">Next page</text>
+    </g>
+  </g>
+  <g id="annotations" font-family="-apple-system, system-ui, sans-serif">
+    <rect data-region="1" x="24" y="24" width="720" height="64" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="2" x="24" y="96" width="720" height="128" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="3" x="24" y="232" width="720" height="240" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="4" x="24" y="480" width="720" height="208" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="5" x="24" y="696" width="720" height="80" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <text x="16" y="48" font-size="12" font-weight="600" fill="#000">1</text>
+    <text x="16" y="120" font-size="12" font-weight="600" fill="#000">2</text>
+    <text x="16" y="256" font-size="12" font-weight="600" fill="#000">3</text>
+    <text x="16" y="504" font-size="12" font-weight="600" fill="#000">4</text>
+    <text x="16" y="720" font-size="12" font-weight="600" fill="#000">5</text>
+  </g>
+</svg>

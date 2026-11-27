@@ -35,12 +35,20 @@ def _get_geolocator() -> Nominatim:
     return _geolocator
 
 
-@lru_cache(maxsize=1000)
-def _geocode_location(location_text: str) -> GeoResult | None:
-    if not location_text or not location_text.strip():
+def _normalise_location_text(location_text: str | None) -> str:
+    """Strip padding so `"  Gaza "` and `"Gaza"` share one cache entry."""
+    return (location_text or "").strip()
+
+
+def _geocode_location_uncached(location_text: str) -> GeoResult | None:
+    """Ask Nominatim exactly once; never memoised.
+
+    Retries call this directly so a cached miss cannot shadow the second
+    attempt. ``location_text`` is expected to be already stripped.
+    """
+    if not location_text:
         return None
 
-    location_text = location_text.strip()
     # geopy's runtime API accepts string language/timeout values but its stubs do
     # not describe them; narrow at the third-party boundary instead of guessing.
     geolocator: Any = _get_geolocator()
@@ -67,9 +75,27 @@ def _geocode_location(location_text: str) -> GeoResult | None:
     return None
 
 
+@lru_cache(maxsize=1000)
+def _geocode_location_cached(normalised_location: str) -> GeoResult | None:
+    """Memoise lookups on the normalised location text."""
+    return _geocode_location_uncached(normalised_location)
+
+
+def _geocode_location(location_text: str) -> GeoResult | None:
+    """Geocode a location, reusing a memoised result for the same spelling."""
+    return _geocode_location_cached(_normalise_location_text(location_text))
+
+
 def _geocode_with_retry(location_text: str, retries: int = 2, delay: float = 1.5) -> GeoResult | None:
+    normalised = _normalise_location_text(location_text)
     for attempt in range(retries):
-        result = _geocode_location(location_text)
+        if attempt == 0:
+            result = _geocode_location(normalised)
+        else:
+            # The first attempt memoises its outcome, including ``None``. Reading
+            # the cache again would replay that miss, so re-query the service to
+            # give a transient failure a real second chance.
+            result = _geocode_location_uncached(normalised)
         if result:
             return result
         if attempt < retries - 1:

@@ -23,13 +23,13 @@ The active documentation tree is organized by purpose instead of by date.
 - [Delivered changes and grouped history UI](architecture/20261120-changes-ui.md): R04 case-scoped changes tab, truthful initial/pending/unavailable/unchanged states, coverage warnings, origin/observed provenance and snapshot-aware historical links
 - [Delivered transactional case search index](architecture/20261120-search-index.md): S01 migration 15 FTS5 index, transactional sync with deterministic rowids, capability reasons and the `triangulate case rebuild-search CASE_ID` repair command
 - [Delivered case search read API](architecture/20261120-search-api.md): S02 `GET /api/cases/{case_id}/search` — literal all-term semantics, type/publisher/status/date filters, deterministic paging, plain-text snippets, 404/422/503 contract and the recorded benchmark
-- [Release C completion map](plans/20261120-release-c-completion-map.md): single brief for S01 (transactional FTS index), S02 (search API + UI) and V01 (Release C verification) — all three complete locally as of 2026-11-21; D01 and deployment are owner gates
-- [Remaining work after Release C](plans/20261121-remaining-work-after-release-c.md): the D01 historical-data owner gate, the separate deployment gate, and optional hygiene (ephemeral evidence paths, browser matrix, static-data default, plans housekeeping) — none of it is started
+- [Release C completion map](archive/20261120-release-c-completion-map.md): single brief for S01 (transactional FTS index), S02 (search API + UI) and V01 (Release C verification) — complete and pushed as `dca1691` on 2026-11-21; archived 2026-11-22, superseded by the remaining-work brief; D01 and deployment are owner gates
+- [Remaining work after Release C](plans/20261121-remaining-work-after-release-c.md): the D01 historical-data owner gate, the separate deployment gate, and hygiene. H1/H3/H4 were closed and H2 partly covered by the 2026-11-22 audit; H2 (WebKit/Safari, load), H5 and both gates remain open
 - [E02 pass B handoff](plans/20261115-e02-pass-b-handoff.md): self-contained continuation brief for quotation integration, fallback protection, aggregates and review hashes
 - [E04 handoff](plans/20261115-e04-handoff.md): self-contained brief for the evidence inspector and deep links (Release A gate) — what exists from E03, scope, acceptance, gates, safety rules
 - [Product comparison and enhancement roadmap](plans/20261114-product-enhancement-roadmap.md): comparable web apps and proposed priorities; not approved implementation
 - [Evidence workbench specification](plans/20261114-evidence-workbench-specification.md): proposed feature behavior, storage/API contracts, safety and acceptance criteria
-- [DeepSeek v4.1 worker plan](plans/20261114-evidence-workbench-worker-plan.md): dependency-ordered implementation tickets and review gates; B00/B01/B02/B03/E01–E04/P01–P03/R01–R04 accepted; S01/S02/V01 delivered, reviewed and verified locally (§7 final entries), pending owner push
+- [DeepSeek v4.1 worker plan](plans/20261114-evidence-workbench-worker-plan.md): dependency-ordered implementation tickets and review gates; B00/B01/B02/B03/E01–E04/P01–P03/R01–R04 accepted; S01/S02/V01 delivered, reviewed, verified and pushed as `dca1691` (§7 final entries; status updated 2026-11-22)
 
 ## Active Docs
 

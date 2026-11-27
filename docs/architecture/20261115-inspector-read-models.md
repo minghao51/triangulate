@@ -1,7 +1,10 @@
 # Inspector read models (E03)
 
 Status: **delivered and independently verified on 2026-11-15; pending owner
-acceptance**. Contract: [specification](../plans/20261114-evidence-workbench-specification.md)
+acceptance**. *(Status note 2026-11-22: this pending state is historical — E03
+was subsequently accepted; see the [E02 pass B handoff](../plans/20261115-e02-pass-b-handoff.md),
+which records E02 passes A/B1/B2/B3 and E03 "implemented, independently
+verified, and ACCEPTED: merged into `main` as PR #2".)* Contract: [specification](../plans/20261114-evidence-workbench-specification.md)
 §4 and §9, ticket [E03](../plans/20261114-evidence-workbench-worker-plan.md).
 Depends on E02 (validated quotations, `ClaimCitation`, immutable captures).
 

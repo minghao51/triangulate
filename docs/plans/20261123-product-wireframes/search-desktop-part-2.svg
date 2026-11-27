@@ -1,0 +1,48 @@
+<!-- viewport: 1280×800 desktop -->
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="800" viewBox="0 0 1280 800" role="img" aria-labelledby="wf-title wf-desc">
+  <title id="wf-title">Case search — part 2 of 2 — desktop</title>
+  <desc id="wf-desc">Case search — part 2 of 2 — desktop (desktop, 1280x800). Proposal wireframe with synthetic data, not implementation evidence. Numbered regions: 1 Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest; 2 Case search — frame 2 of 2; full coverage continues in the named companion frame; 3 Results — plain-text mock snippets with the matched field; each row has Open result navigation. Snippets never imply a validated quotation. · frame 2 of 2; 4 Pagination and permalink controls — result count and offset are shown with the results; offset is URL-persisted. · frame 2 of 2.</desc>
+  <g id="ui" font-family="-apple-system, system-ui, sans-serif">
+    <rect x="0" y="0" width="1280" height="800" fill="#fff"/>
+    <rect x="8" y="8" width="1264" height="784" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <rect x="32" y="32" width="1224" height="48" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="48" y="56" font-size="14" fill="#000" font-weight="600">TRIANGULATE</text>
+    <rect x="1176" y="40" width="64" height="32" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="1208" y="56" text-anchor="middle" font-size="12" fill="#000">Menu</text>
+    <rect x="296" y="104" width="960" height="112" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="312" y="152" font-size="20" fill="#000" font-weight="600">Case search</text>
+    <text x="312" y="176" font-size="12" fill="#666">Part 2 of 2 · companion frames carry the rest</text>
+    <text x="312" y="200" font-size="12" fill="#666">previous: search-desktop.svg</text>
+    <g data-pane="p2">
+    <rect x="296" y="240" width="960" height="208" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="312" y="280" font-size="14" fill="#000" font-weight="600">3 examples / 42 results</text>
+    <text x="312" y="304" font-size="12" fill="#666">offset: 0</text>
+    <text x="312" y="336" font-size="14" fill="#000">claim-8898 · tender notice — “…tender published in the regional gazette…”</text>
+    <text x="1240" y="328" text-anchor="end" font-size="12" fill="#000">claim · body</text>
+    <text x="312" y="368" font-size="14" fill="#000">ev-c71a · Regional Herald — “…tender notice lodged…”</text>
+    <text x="1240" y="360" text-anchor="end" font-size="12" fill="#000">evidence · body</text>
+    <text x="312" y="400" font-size="14" fill="#000">claim-8896 · award date — “…award due in March…”</text>
+    <text x="1240" y="392" text-anchor="end" font-size="12" fill="#000">claim · body</text>
+    <text x="312" y="424" font-size="12" fill="#666">Open result navigates by claim/evidence/capture id; publisher and status filters are disabled for incompatible result types.</text>
+    </g>
+    <g data-pane="p3">
+    <rect x="296" y="472" width="960" height="64" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <rect x="312" y="488" width="128" height="32" fill="#e6e6e6" stroke="#000" stroke-width="1.5"/>
+    <text x="320" y="512" font-size="12" fill="#666">Previous page…</text>
+    <rect x="448" y="488" width="96" height="32" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="456" y="512" font-size="12" fill="#000">Next page</text>
+    <rect x="552" y="488" width="96" height="32" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="560" y="512" font-size="12" fill="#000">Permalink</text>
+    </g>
+  </g>
+  <g id="annotations" font-family="-apple-system, system-ui, sans-serif">
+    <rect data-region="1" x="24" y="24" width="1240" height="64" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="2" x="288" y="96" width="976" height="128" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="3" x="288" y="232" width="976" height="224" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="4" x="288" y="464" width="976" height="80" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <text x="16" y="48" font-size="12" font-weight="600" fill="#000">1</text>
+    <text x="280" y="120" font-size="12" font-weight="600" fill="#000">2</text>
+    <text x="280" y="256" font-size="12" font-weight="600" fill="#000">3</text>
+    <text x="280" y="488" font-size="12" font-weight="600" fill="#000">4</text>
+  </g>
+</svg>

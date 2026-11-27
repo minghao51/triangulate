@@ -1,7 +1,10 @@
 # Changes and grouped history UI (R04)
 
 Date: 2026-11-20. Status: **delivered and verified frontend-only; owner/parent diff
-review pending.** Depends on R03a (stored snapshots/deltas and run GETs), R03b
+review pending.** *(Status note 2026-11-22: this pending state is historical — R04
+was accepted after its review fix (`dfc809c`); see the [worker
+plan](../plans/20261114-evidence-workbench-worker-plan.md) §7 and the [Release B
+handoff](../archive/20261118-release-b-handoff.md).)* Depends on R03a (stored snapshots/deltas and run GETs), R03b
 (snapshot-aware claim/evidence readers) and R03c (origin/observer split). Contract:
 [specification](../plans/20261114-evidence-workbench-specification.md) §7, ticket
 [R04](../plans/20261114-evidence-workbench-worker-plan.md).

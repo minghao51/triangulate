@@ -1,0 +1,86 @@
+<!-- viewport: 768×1024 tablet -->
+<svg xmlns="http://www.w3.org/2000/svg" width="768" height="1024" viewBox="0 0 768 1024" role="img" aria-labelledby="wf-title wf-desc">
+  <title id="wf-title">Comparison — tablet</title>
+  <desc id="wf-desc">Comparison — tablet (tablet, 768x1024). Proposal wireframe with synthetic data, not implementation evidence. Numbered regions: 1 Primary navigation (top bar) — GET reads only; CLI owns ingest and runs; 2 Comparison header — title, synthetic context and available actions; 3 Case tabs (12) — active Compare; tabs are navigation, not state changes; 4 Selection controls — four visible fields (left/right source and capture) plus Compare, Swap and Clear; selections stay in the URL. · frame 1 of 2; 5 Left source panel — its own capture time, hash and Open passage navigation. · frame 1 of 2; 6 Right source panel — its own capture time, hash and Open passage navigation; desktop side by side, tablet and mobile stack. · frame 1 of 2.</desc>
+  <g id="ui" font-family="-apple-system, system-ui, sans-serif">
+    <rect x="0" y="0" width="768" height="1024" fill="#fff"/>
+    <rect x="8" y="8" width="752" height="1008" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <rect x="32" y="32" width="704" height="48" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="48" y="56" font-size="14" fill="#000" font-weight="600">TRIANGULATE</text>
+    <text x="168" y="56" font-size="12" fill="#000">Dashboard</text>
+    <text x="248" y="56" font-size="12" fill="#000" font-weight="600">Cases</text>
+    <text x="304" y="56" font-size="12" fill="#000">Network</text>
+    <text x="368" y="56" font-size="12" fill="#000">Sources</text>
+    <text x="432" y="56" font-size="12" fill="#000">Narratives</text>
+    <text x="520" y="56" font-size="12" fill="#000">Monitoring</text>
+    <text x="608" y="56" font-size="12" fill="#000">AI info</text>
+    <rect x="32" y="104" width="704" height="88" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="48" y="152" font-size="20" fill="#000" font-weight="600">Comparison</text>
+    <text x="48" y="176" font-size="12" fill="#666">Two different evidence records and captures · Proposal · synthetic · not built</text>
+    <rect x="32" y="216" width="704" height="72" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="48" y="248" font-size="12" fill="#000">Overview</text>
+    <text x="128" y="248" font-size="12" fill="#000">Evidence</text>
+    <text x="208" y="248" font-size="12" fill="#000">Claims</text>
+    <text x="272" y="248" font-size="12" fill="#000" font-weight="600">Compare</text>
+    <text x="344" y="248" font-size="12" fill="#000">Parties</text>
+    <text x="416" y="248" font-size="12" fill="#000">Map</text>
+    <text x="48" y="272" font-size="12" fill="#000">Timeline</text>
+    <text x="128" y="272" font-size="12" fill="#000">Exceptions</text>
+    <text x="224" y="272" font-size="12" fill="#000">Report</text>
+    <text x="288" y="272" font-size="12" fill="#000">Changes</text>
+    <text x="360" y="272" font-size="12" fill="#000">Search</text>
+    <text x="424" y="272" font-size="12" fill="#000">Run history</text>
+    <g data-pane="p1">
+    <rect x="32" y="312" width="704" height="208" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="48" y="352" font-size="14" fill="#000" font-weight="600">Source and capture selection</text>
+    <text x="48" y="376" font-size="12" fill="#000">Left source</text>
+    <rect x="48" y="384" width="312" height="32" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="56" y="408" font-size="12" fill="#000">ev-c71a · Regional Herald</text>
+    <text x="368" y="376" font-size="12" fill="#000">Left capture</text>
+    <rect x="368" y="384" width="320" height="32" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="376" y="408" font-size="12" fill="#000">cap-9f31 (current)</text>
+    <text x="48" y="432" font-size="12" fill="#000">Right source</text>
+    <rect x="48" y="440" width="312" height="32" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="56" y="464" font-size="12" fill="#000">ev-b320 · Wire Desk</text>
+    <text x="368" y="432" font-size="12" fill="#000">Right capture</text>
+    <rect x="368" y="440" width="320" height="32" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="376" y="464" font-size="12" fill="#000">cap-9d02 (older)</text>
+    <rect x="48" y="472" width="96" height="32" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="56" y="496" font-size="12" fill="#000">Compare</text>
+    <rect x="152" y="472" width="96" height="32" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="160" y="496" font-size="12" fill="#000">Swap</text>
+    <rect x="256" y="472" width="96" height="32" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="264" y="496" font-size="12" fill="#000">Clear</text>
+    </g>
+    <g data-pane="p2">
+    <rect x="32" y="544" width="704" height="160" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="48" y="584" font-size="14" fill="#000" font-weight="600">Left source panel</text>
+    <text x="48" y="608" font-size="12" fill="#000">Regional Herald (synthetic) · ev-c71a</text>
+    <text x="48" y="632" font-size="12" fill="#000">capture cap-9f31 · observed 2026-11-20</text>
+    <text x="48" y="656" font-size="12" fill="#000">hash 4f1c…a9 · scope body prefix</text>
+    <text x="48" y="680" font-size="12" fill="#000">Open passage (navigates to inspector)</text>
+    </g>
+    <g data-pane="p3">
+    <rect x="32" y="728" width="704" height="160" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="48" y="768" font-size="14" fill="#000" font-weight="600">Right source panel</text>
+    <text x="48" y="792" font-size="12" fill="#000">Wire Desk (synthetic) · ev-b320</text>
+    <text x="48" y="816" font-size="12" fill="#000">capture cap-9d02 · observed 2026-11-18</text>
+    <text x="48" y="840" font-size="12" fill="#000">hash 8b02…3e · scope body prefix</text>
+    <text x="48" y="864" font-size="12" fill="#000">Open passage (navigates to inspector)</text>
+    </g>
+  </g>
+  <g id="annotations" font-family="-apple-system, system-ui, sans-serif">
+    <rect data-region="1" x="24" y="24" width="720" height="64" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="2" x="24" y="96" width="720" height="104" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="3" x="24" y="208" width="720" height="88" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="4" x="24" y="304" width="720" height="224" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="5" x="24" y="536" width="720" height="176" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="6" x="24" y="720" width="720" height="176" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <text x="16" y="48" font-size="12" font-weight="600" fill="#000">1</text>
+    <text x="16" y="120" font-size="12" font-weight="600" fill="#000">2</text>
+    <text x="16" y="232" font-size="12" font-weight="600" fill="#000">3</text>
+    <text x="16" y="328" font-size="12" font-weight="600" fill="#000">4</text>
+    <text x="16" y="560" font-size="12" font-weight="600" fill="#000">5</text>
+    <text x="16" y="744" font-size="12" font-weight="600" fill="#000">6</text>
+  </g>
+</svg>

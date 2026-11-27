@@ -15,8 +15,9 @@ import ReactFlow, {
 import 'reactflow/dist/style.css';
 import type { Claim, Evidence, Party, VerificationStatus } from '../../types/backend-models';
 import Card, { CardHeader, CardTitle, CardBody } from '../design-system/Card';
+import { parseNodeId, type NodeType } from './node-id';
 
-export type NodeType = 'claim' | 'evidence' | 'party';
+export type { NodeType } from './node-id';
 export type EdgeType = 'supports' | 'opposes' | 'links' | 'mentions';
 
 export interface NetworkGraphProps {
@@ -323,9 +324,9 @@ export const NetworkGraph: React.FC<NetworkGraphProps> = ({
 
   const onNodeClickHandler = useCallback(
     (_: React.MouseEvent, node: Node) => {
-      const [nodeType, nodeId] = node.id.split('-');
-      if (onNodeClick) {
-        onNodeClick(nodeId, nodeType as NodeType);
+      const parsed = parseNodeId(node.id);
+      if (parsed && onNodeClick) {
+        onNodeClick(parsed.nodeId, parsed.nodeType);
       }
     },
     [onNodeClick]

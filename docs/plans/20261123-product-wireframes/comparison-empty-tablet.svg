@@ -1,0 +1,68 @@
+<!-- viewport: 768×1024 tablet -->
+<svg xmlns="http://www.w3.org/2000/svg" width="768" height="1024" viewBox="0 0 768 1024" role="img" aria-labelledby="wf-title wf-desc">
+  <title id="wf-title">Comparison — no aligned rows — tablet</title>
+  <desc id="wf-desc">Comparison — no aligned rows — tablet (tablet, 768x1024). Proposal wireframe with synthetic data, not implementation evidence. Numbered regions: 1 Primary navigation (top bar) — GET reads only; CLI owns ingest and runs; 2 Comparison — no aligned rows header — title, synthetic context and available actions; 3 Selection summary — both captures are pinned and readable. · frame 1 of 1; 4 Empty comparison — a valid empty alignment is not an unavailable historical capture. · frame 1 of 1; 5 State scope note — what the state does and does not assert. · frame 1 of 1.</desc>
+  <g id="ui" font-family="-apple-system, system-ui, sans-serif">
+    <rect x="0" y="0" width="768" height="1024" fill="#fff"/>
+    <rect x="8" y="8" width="752" height="1008" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <rect x="32" y="32" width="704" height="48" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="48" y="56" font-size="14" fill="#000" font-weight="600">TRIANGULATE</text>
+    <text x="168" y="56" font-size="12" fill="#000">Dashboard</text>
+    <text x="248" y="56" font-size="12" fill="#000" font-weight="600">Cases</text>
+    <text x="304" y="56" font-size="12" fill="#000">Network</text>
+    <text x="368" y="56" font-size="12" fill="#000">Sources</text>
+    <text x="432" y="56" font-size="12" fill="#000">Narratives</text>
+    <text x="520" y="56" font-size="12" fill="#000">Monitoring</text>
+    <text x="608" y="56" font-size="12" fill="#000">AI info</text>
+    <rect x="32" y="104" width="704" height="88" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="48" y="152" font-size="20" fill="#000" font-weight="600">Comparison — no aligned rows</text>
+    <text x="48" y="176" font-size="12" fill="#666">Proposal · synthetic · not built</text>
+    <g data-pane="p1">
+    <rect x="32" y="216" width="704" height="208" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="48" y="256" font-size="14" fill="#000" font-weight="600">Source and capture selection</text>
+    <text x="48" y="280" font-size="12" fill="#000">Left source</text>
+    <rect x="48" y="288" width="312" height="32" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="56" y="312" font-size="12" fill="#000">ev-c71a · Regional Herald</text>
+    <text x="368" y="280" font-size="12" fill="#000">Left capture</text>
+    <rect x="368" y="288" width="320" height="32" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="376" y="312" font-size="12" fill="#000">cap-9f31 (current)</text>
+    <text x="48" y="336" font-size="12" fill="#000">Right source</text>
+    <rect x="48" y="344" width="312" height="32" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="56" y="368" font-size="12" fill="#000">ev-b320 · Wire Desk</text>
+    <text x="368" y="336" font-size="12" fill="#000">Right capture</text>
+    <rect x="368" y="344" width="320" height="32" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="376" y="368" font-size="12" fill="#000">cap-9d02 (older)</text>
+    <rect x="48" y="376" width="96" height="32" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="56" y="400" font-size="12" fill="#000">Compare</text>
+    <rect x="152" y="376" width="96" height="32" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="160" y="400" font-size="12" fill="#000">Swap</text>
+    <rect x="256" y="376" width="96" height="32" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="264" y="400" font-size="12" fill="#000">Clear</text>
+    </g>
+    <g data-pane="p2">
+    <rect x="32" y="448" width="704" height="160" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="48" y="488" font-size="14" fill="#000" font-weight="600">Alignment</text>
+    <rect x="48" y="496" width="672" height="96" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="64" y="536" font-size="14" fill="#000">No shared or one-sided extraction rows</text>
+    <text x="64" y="560" font-size="12" fill="#666">HTTP 200 · valid empty row set</text>
+    </g>
+    <g data-pane="p3">
+    <rect x="32" y="632" width="704" height="112" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="48" y="672" font-size="14" fill="#000" font-weight="600">What this is not</text>
+    <text x="48" y="696" font-size="12" fill="#666">Empty rows mean no extracted passages</text>
+    <text x="48" y="720" font-size="12" fill="#666">Not omission and not disagreement</text>
+    </g>
+  </g>
+  <g id="annotations" font-family="-apple-system, system-ui, sans-serif">
+    <rect data-region="1" x="24" y="24" width="720" height="64" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="2" x="24" y="96" width="720" height="104" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="3" x="24" y="208" width="720" height="224" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="4" x="24" y="440" width="720" height="176" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="5" x="24" y="624" width="720" height="128" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <text x="16" y="48" font-size="12" font-weight="600" fill="#000">1</text>
+    <text x="16" y="120" font-size="12" font-weight="600" fill="#000">2</text>
+    <text x="16" y="232" font-size="12" font-weight="600" fill="#000">3</text>
+    <text x="16" y="464" font-size="12" font-weight="600" fill="#000">4</text>
+    <text x="16" y="648" font-size="12" font-weight="600" fill="#000">5</text>
+  </g>
+</svg>

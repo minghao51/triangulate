@@ -1,0 +1,94 @@
+<!-- viewport: 768×1024 tablet -->
+<svg xmlns="http://www.w3.org/2000/svg" width="768" height="1024" viewBox="0 0 768 1024" role="img" aria-labelledby="wf-title wf-desc">
+  <title id="wf-title">Run history (stage-oriented) — tablet</title>
+  <desc id="wf-desc">Run history (stage-oriented) — tablet (tablet, 768x1024). Proposal wireframe with synthetic data, not implementation evidence. Numbered regions: 1 Primary navigation (top bar) — GET reads only; CLI owns ingest and runs; 2 Run history (stage-oriented) header — title, synthetic context and available actions; 3 Case tabs (12) — active Run history; tabs are navigation, not state changes; 4 Stage attempts — per-stage model, duration, fallback flag, status and recorded time; not grouped investigation runs. · frame 1 of 1; 5 Interpretation — this tab remains stage-oriented; grouped runs and deltas are a separate reader. · frame 1 of 1.</desc>
+  <g id="ui" font-family="-apple-system, system-ui, sans-serif">
+    <rect x="0" y="0" width="768" height="1024" fill="#fff"/>
+    <rect x="8" y="8" width="752" height="1008" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <rect x="32" y="32" width="704" height="48" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="48" y="56" font-size="14" fill="#000" font-weight="600">TRIANGULATE</text>
+    <text x="168" y="56" font-size="12" fill="#000">Dashboard</text>
+    <text x="248" y="56" font-size="12" fill="#000" font-weight="600">Cases</text>
+    <text x="304" y="56" font-size="12" fill="#000">Network</text>
+    <text x="368" y="56" font-size="12" fill="#000">Sources</text>
+    <text x="432" y="56" font-size="12" fill="#000">Narratives</text>
+    <text x="520" y="56" font-size="12" fill="#000">Monitoring</text>
+    <text x="608" y="56" font-size="12" fill="#000">AI info</text>
+    <rect x="32" y="104" width="704" height="88" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="48" y="152" font-size="20" fill="#000" font-weight="600">Run history (stage-oriented)</text>
+    <text x="48" y="176" font-size="12" fill="#666">Stage-oriented view, not grouped runs · Proposal · synthetic · not built</text>
+    <rect x="32" y="216" width="704" height="72" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="48" y="248" font-size="12" fill="#000">Overview</text>
+    <text x="128" y="248" font-size="12" fill="#000">Evidence</text>
+    <text x="208" y="248" font-size="12" fill="#000">Claims</text>
+    <text x="272" y="248" font-size="12" fill="#000">Compare</text>
+    <text x="344" y="248" font-size="12" fill="#000">Parties</text>
+    <text x="416" y="248" font-size="12" fill="#000">Map</text>
+    <text x="48" y="272" font-size="12" fill="#000">Timeline</text>
+    <text x="128" y="272" font-size="12" fill="#000">Exceptions</text>
+    <text x="224" y="272" font-size="12" fill="#000">Report</text>
+    <text x="288" y="272" font-size="12" fill="#000">Changes</text>
+    <text x="360" y="272" font-size="12" fill="#000">Search</text>
+    <text x="424" y="272" font-size="12" fill="#000" font-weight="600">Run history</text>
+    <g data-pane="p1">
+    <rect x="32" y="312" width="704" height="256" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="48" y="352" font-size="14" fill="#000" font-weight="600">Stage attempts</text>
+    <text x="48" y="376" font-size="12" fill="#000" font-weight="600">Stage</text>
+    <text x="136" y="376" font-size="12" fill="#000" font-weight="600">Model</text>
+    <text x="224" y="376" font-size="12" fill="#000" font-weight="600">Duration</text>
+    <text x="312" y="376" font-size="12" fill="#000" font-weight="600">Fallback</text>
+    <text x="400" y="376" font-size="12" fill="#000" font-weight="600">Status</text>
+    <text x="488" y="376" font-size="12" fill="#000" font-weight="600">Recorded</text>
+    <line x1="48" y1="384" x2="720" y2="384" stroke="#000" stroke-width="1.5"/>
+    <text x="48" y="416" font-size="12" fill="#000">extraction</text>
+    <text x="136" y="416" font-size="12" fill="#000">qwen</text>
+    <text x="224" y="416" font-size="12" fill="#000">41s</text>
+    <text x="312" y="416" font-size="12" fill="#000">no</text>
+    <text x="400" y="416" font-size="12" fill="#000">succeeded</text>
+    <text x="488" y="416" font-size="12" fill="#000">2026-11-20 0…</text>
+    <text x="48" y="448" font-size="12" fill="#000">classific…</text>
+    <text x="136" y="448" font-size="12" fill="#000">qwen</text>
+    <text x="224" y="448" font-size="12" fill="#000">12s</text>
+    <text x="312" y="448" font-size="12" fill="#000">yes</text>
+    <text x="400" y="448" font-size="12" fill="#000">fallback</text>
+    <text x="488" y="448" font-size="12" fill="#000">2026-11-20 0…</text>
+    <text x="48" y="480" font-size="12" fill="#000">party_cla…</text>
+    <text x="136" y="480" font-size="12" fill="#000">qwen</text>
+    <text x="224" y="480" font-size="12" fill="#000">9s</text>
+    <text x="312" y="480" font-size="12" fill="#000">no</text>
+    <text x="400" y="480" font-size="12" fill="#000">succeeded</text>
+    <text x="488" y="480" font-size="12" fill="#000">2026-11-20 0…</text>
+    <text x="48" y="512" font-size="12" fill="#000">arbiter</text>
+    <text x="136" y="512" font-size="12" fill="#000">—</text>
+    <text x="224" y="512" font-size="12" fill="#000">unrecorded</text>
+    <text x="312" y="512" font-size="12" fill="#000">no</text>
+    <text x="400" y="512" font-size="12" fill="#000">failed</text>
+    <text x="488" y="512" font-size="12" fill="#000">2026-11-20 0…</text>
+    <text x="48" y="544" font-size="12" fill="#000">report</text>
+    <text x="136" y="544" font-size="12" fill="#000">—</text>
+    <text x="224" y="544" font-size="12" fill="#000">3s</text>
+    <text x="312" y="544" font-size="12" fill="#000">no</text>
+    <text x="400" y="544" font-size="12" fill="#000">succeeded</text>
+    <text x="488" y="544" font-size="12" fill="#000">2026-11-20 0…</text>
+    </g>
+    <g data-pane="p2">
+    <rect x="32" y="592" width="704" height="136" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="48" y="632" font-size="14" fill="#000" font-weight="600">Interpretation</text>
+    <text x="48" y="656" font-size="12" fill="#666">Duration and status are recorded values</text>
+    <text x="48" y="680" font-size="12" fill="#666">Fallback stays visible as fallback</text>
+    <text x="48" y="704" font-size="12" fill="#666">Grouped runs live on the Changes tab</text>
+    </g>
+  </g>
+  <g id="annotations" font-family="-apple-system, system-ui, sans-serif">
+    <rect data-region="1" x="24" y="24" width="720" height="64" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="2" x="24" y="96" width="720" height="104" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="3" x="24" y="208" width="720" height="88" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="4" x="24" y="304" width="720" height="272" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="5" x="24" y="584" width="720" height="152" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <text x="16" y="48" font-size="12" font-weight="600" fill="#000">1</text>
+    <text x="16" y="120" font-size="12" font-weight="600" fill="#000">2</text>
+    <text x="16" y="232" font-size="12" font-weight="600" fill="#000">3</text>
+    <text x="16" y="328" font-size="12" font-weight="600" fill="#000">4</text>
+    <text x="16" y="608" font-size="12" font-weight="600" fill="#000">5</text>
+  </g>
+</svg>

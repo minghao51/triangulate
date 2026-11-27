@@ -1,0 +1,90 @@
+<!-- viewport: 1280×800 desktop -->
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="800" viewBox="0 0 1280 800" role="img" aria-labelledby="wf-title wf-desc">
+  <title id="wf-title">Network, narratives and report flow — desktop flow</title>
+  <desc id="wf-desc">Network, narratives and report flow — desktop flow (desktop, 1280x800). Proposal wireframe with synthetic data, not implementation evidence. Numbered regions: 1 Flow title — reading rule stated before any transition; order is navigation, not execution; 2 Thumbnail 1 — Corroboration network (corroboration-network); geometry-derived miniature, source text omitted; 3 Transition 1 — 'cluster': navigation/review path only; 4 Thumbnail 2 — Narratives (narratives); geometry-derived miniature, source text omitted; 5 Transition 2 — 'report': navigation/review path only; 6 Thumbnail 3 — Report (report); geometry-derived miniature, source text omitted; 7 Legend — thumbnail abstraction and grid rules; no automatic transition is implied.</desc>
+  <g id="ui" font-family="-apple-system, system-ui, sans-serif">
+    <rect x="0" y="0" width="1280" height="800" fill="#fff"/>
+    <rect x="8" y="8" width="1264" height="784" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="32" y="80" font-size="28" fill="#000" font-weight="600">Network, narratives and report flow</text>
+    <text x="32" y="112" font-size="12" fill="#666">Left-to-right order is a navigation/review path — not automatic execution or a causal state transition.</text>
+    <text x="32" y="136" font-size="12" fill="#666">Thumbnails are geometry-derived from each screen's desktop SVG; source text is omitted as illegible at this scale.</text>
+    <rect x="224" y="200" width="240" height="168" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <rect x="240" y="216" width="40" height="128" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <line x1="240" y1="224" x2="280" y2="224" stroke="#000" stroke-width="1.5"/>
+    <line x1="240" y1="272" x2="280" y2="272" stroke="#000" stroke-width="1.5"/>
+    <line x1="240" y1="296" x2="280" y2="296" stroke="#000" stroke-width="1.5"/>
+    <rect x="280" y="216" width="168" height="16" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <rect x="280" y="232" width="112" height="56" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <line x1="296" y1="248" x2="352" y2="248" stroke="#000" stroke-width="1.5"/>
+    <line x1="296" y1="248" x2="352" y2="264" stroke="#000" stroke-width="1.5"/>
+    <line x1="296" y1="272" x2="352" y2="272" stroke="#000" stroke-width="1.5"/>
+    <rect x="288" y="248" width="16" height="8" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <rect x="336" y="240" width="24" height="8" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <rect x="336" y="256" width="24" height="8" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <rect x="288" y="264" width="16" height="8" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <rect x="336" y="272" width="24" height="8" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <rect x="400" y="232" width="48" height="40" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <rect x="424" y="240" width="24" height="8" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <rect x="424" y="248" width="24" height="8" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <rect x="424" y="256" width="24" height="8" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <rect x="424" y="264" width="24" height="8" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <rect x="280" y="288" width="88" height="32" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <rect x="368" y="288" width="80" height="24" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="224" y="400" font-size="12" fill="#000">1 · corroboration-network</text>
+    <line x1="472" y1="288" x2="520" y2="288" stroke="#000" stroke-width="1.5"/>
+    <line x1="520" y1="288" x2="512" y2="280" stroke="#000" stroke-width="1.5"/>
+    <line x1="520" y1="288" x2="512" y2="296" stroke="#000" stroke-width="1.5"/>
+    <text x="496" y="312" text-anchor="middle" font-size="12" fill="#666">cluster</text>
+    <rect x="528" y="200" width="240" height="168" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <rect x="544" y="216" width="40" height="128" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <line x1="544" y1="224" x2="584" y2="224" stroke="#000" stroke-width="1.5"/>
+    <line x1="544" y1="272" x2="584" y2="272" stroke="#000" stroke-width="1.5"/>
+    <line x1="544" y1="296" x2="584" y2="296" stroke="#000" stroke-width="1.5"/>
+    <rect x="584" y="216" width="168" height="16" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <rect x="584" y="232" width="168" height="32" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <rect x="584" y="264" width="88" height="32" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <rect x="672" y="264" width="80" height="24" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="528" y="400" font-size="12" fill="#000">2 · narratives</text>
+    <line x1="776" y1="288" x2="824" y2="288" stroke="#000" stroke-width="1.5"/>
+    <line x1="824" y1="288" x2="816" y2="280" stroke="#000" stroke-width="1.5"/>
+    <line x1="824" y1="288" x2="816" y2="296" stroke="#000" stroke-width="1.5"/>
+    <text x="800" y="312" text-anchor="middle" font-size="12" fill="#666">report</text>
+    <rect x="832" y="200" width="240" height="168" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <rect x="848" y="216" width="40" height="128" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <line x1="848" y1="224" x2="888" y2="224" stroke="#000" stroke-width="1.5"/>
+    <line x1="848" y1="272" x2="888" y2="272" stroke="#000" stroke-width="1.5"/>
+    <line x1="848" y1="296" x2="888" y2="296" stroke="#000" stroke-width="1.5"/>
+    <rect x="888" y="216" width="168" height="16" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <rect x="888" y="232" width="168" height="8" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <rect x="888" y="248" width="88" height="40" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <rect x="896" y="256" width="72" height="24" fill="#e6e6e6"/>
+    <rect x="896" y="256" width="56" height="8" fill="#fff"/>
+    <rect x="896" y="264" width="40" height="8" fill="#fff"/>
+    <rect x="896" y="272" width="48" height="8" fill="#fff"/>
+    <rect x="896" y="272" width="40" height="8" fill="#fff"/>
+    <rect x="896" y="280" width="24" height="8" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <rect x="920" y="280" width="32" height="8" fill="#e6e6e6" stroke="#000" stroke-width="1.5"/>
+    <rect x="976" y="248" width="80" height="24" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <rect x="888" y="296" width="168" height="24" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="832" y="400" font-size="12" fill="#000">3 · report</text>
+    <text x="32" y="480" font-size="14" fill="#000" font-weight="600">Legend</text>
+    <text x="32" y="512" font-size="12" fill="#000">Screens are numbered in reading order; arrows are navigation or review transitions.</text>
+    <text x="32" y="536" font-size="12" fill="#666">Geometry is snapped to the 8 px grid; text, icons, images and external references are omitted.</text>
+  </g>
+  <g id="annotations" font-family="-apple-system, system-ui, sans-serif">
+    <rect data-region="1" x="24" y="24" width="1240" height="128" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="2" x="216" y="192" width="256" height="224" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="3" x="480" y="272" width="32" height="80" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="4" x="520" y="192" width="256" height="224" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="5" x="784" y="272" width="32" height="80" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="6" x="824" y="192" width="256" height="224" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="7" x="24" y="440" width="1240" height="136" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <text x="16" y="48" font-size="12" font-weight="600" fill="#000">1</text>
+    <text x="208" y="216" font-size="12" font-weight="600" fill="#000">2</text>
+    <text x="480" y="256" font-size="12" font-weight="600" fill="#000">3</text>
+    <text x="512" y="216" font-size="12" font-weight="600" fill="#000">4</text>
+    <text x="784" y="256" font-size="12" font-weight="600" fill="#000">5</text>
+    <text x="816" y="216" font-size="12" font-weight="600" fill="#000">6</text>
+    <text x="16" y="464" font-size="12" font-weight="600" fill="#000">7</text>
+  </g>
+</svg>

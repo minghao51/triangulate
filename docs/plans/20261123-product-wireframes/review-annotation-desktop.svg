@@ -1,0 +1,109 @@
+<!-- viewport: 1280×800 desktop -->
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="800" viewBox="0 0 1280 800" role="img" aria-labelledby="wf-title wf-desc">
+  <title id="wf-title">Review and annotation — desktop</title>
+  <desc id="wf-desc">Review and annotation — desktop (desktop, 1280x800). Proposal wireframe with synthetic data, not implementation evidence. Numbered regions: 1 Primary navigation — GET reads only; ingest, rerun, rebuild and recovery stay CLI-only; 2 Review and annotation header — title, synthetic context and available actions; 3 Case tabs (12) — active Overview; tabs are navigation, not state changes; 4 Review decision form — rationale plus the three decision buttons; decision value is the pressed control, not a dropdown. · frame 1 of 1; 5 Annotation form — type comment/flag/context, target case/claim/evidence/exception/narrative, target ID and content; save disabled while empty or pending. · frame 1 of 1; 6 Recorded annotations — stored rows with type and target; no attribution beyond the stored record. · frame 1 of 1; 7 Reader-rule note — the annotation POST is an explicit, labelled exception to the GET-only reader rule. · frame 1 of 1.</desc>
+  <g id="ui" font-family="-apple-system, system-ui, sans-serif">
+    <rect x="0" y="0" width="1280" height="800" fill="#fff"/>
+    <rect x="8" y="8" width="1264" height="784" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <rect x="32" y="32" width="240" height="744" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="48" y="56" font-size="14" fill="#000" font-weight="600">TRIANGULATE</text>
+    <text x="48" y="80" font-size="12" fill="#666">Evidence workbench · proposal</text>
+    <line x1="48" y1="88" x2="256" y2="88" stroke="#000" stroke-width="1.5"/>
+    <text x="48" y="128" font-size="12" fill="#000" font-weight="600">NAVIGATE</text>
+    <text x="48" y="160" font-size="14" fill="#000">Dashboard</text>
+    <text x="48" y="192" font-size="14" fill="#000" font-weight="600">Cases</text>
+    <text x="48" y="224" font-size="14" fill="#000">Network</text>
+    <text x="48" y="256" font-size="14" fill="#000">Sources</text>
+    <text x="48" y="288" font-size="14" fill="#000">Narratives</text>
+    <text x="48" y="320" font-size="14" fill="#000">Monitoring</text>
+    <text x="48" y="352" font-size="14" fill="#000">AI info</text>
+    <line x1="48" y1="368" x2="256" y2="368" stroke="#000" stroke-width="1.5"/>
+    <text x="48" y="408" font-size="12" fill="#000" font-weight="600">RECENT CASES</text>
+    <text x="48" y="432" font-size="12" fill="#000">case-2201-0417</text>
+    <text x="48" y="456" font-size="12" fill="#000">case-2199-1180</text>
+    <text x="48" y="480" font-size="12" fill="#000">case-2198-0922</text>
+    <line x1="48" y1="496" x2="256" y2="496" stroke="#000" stroke-width="1.5"/>
+    <text x="48" y="536" font-size="12" fill="#000" font-weight="600">READ-ONLY BY DEFAULT</text>
+    <text x="48" y="560" font-size="12" fill="#000">GET reads only</text>
+    <text x="48" y="584" font-size="12" fill="#666">local / trusted</text>
+    <text x="48" y="608" font-size="12" fill="#666">ingest + runs via CLI</text>
+    <text x="48" y="760" font-size="12" fill="#666">Wireframe · synthetic data</text>
+    <rect x="296" y="32" width="960" height="88" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="312" y="80" font-size="20" fill="#000" font-weight="600">Review and annotation</text>
+    <text x="312" y="104" font-size="12" fill="#666">Two narrow human review POSTs · Proposal · synthetic · not built</text>
+    <rect x="296" y="144" width="960" height="48" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="312" y="176" font-size="14" fill="#000" font-weight="600">Overview</text>
+    <text x="392" y="176" font-size="14" fill="#000">Evidence</text>
+    <text x="472" y="176" font-size="14" fill="#000">Claims</text>
+    <text x="536" y="176" font-size="14" fill="#000">Compare</text>
+    <text x="608" y="176" font-size="14" fill="#000">Parties</text>
+    <text x="680" y="176" font-size="14" fill="#000">Map</text>
+    <text x="720" y="176" font-size="14" fill="#000">Timeline</text>
+    <text x="800" y="176" font-size="14" fill="#000">Exceptions</text>
+    <text x="896" y="176" font-size="14" fill="#000">Report</text>
+    <text x="960" y="176" font-size="14" fill="#000">Changes</text>
+    <text x="1032" y="176" font-size="14" fill="#000">Search</text>
+    <text x="1096" y="176" font-size="14" fill="#000">Run history</text>
+    <g data-pane="p1">
+    <rect x="296" y="216" width="464" height="152" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="312" y="256" font-size="14" fill="#000" font-weight="600">Review decision</text>
+    <text x="312" y="280" font-size="12" fill="#000">Rationale</text>
+    <rect x="312" y="288" width="432" height="32" fill="#e6e6e6" stroke="#000" stroke-width="1.5"/>
+    <rect x="312" y="320" width="96" height="32" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="320" y="344" font-size="12" fill="#000">Approve</text>
+    <rect x="416" y="320" width="144" height="32" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="424" y="344" font-size="12" fill="#000">Action Required</text>
+    <rect x="568" y="320" width="96" height="32" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="576" y="344" font-size="12" fill="#000">Reject</text>
+    </g>
+    <g data-pane="p2">
+    <rect x="784" y="216" width="472" height="320" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="800" y="256" font-size="14" fill="#000" font-weight="600">New annotation</text>
+    <text x="800" y="280" font-size="12" fill="#000">Type</text>
+    <rect x="800" y="288" width="440" height="32" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="808" y="312" font-size="12" fill="#000">comment</text>
+    <text x="800" y="336" font-size="12" fill="#000">Target</text>
+    <rect x="800" y="344" width="440" height="32" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="808" y="368" font-size="12" fill="#000">claim</text>
+    <text x="800" y="392" font-size="12" fill="#000">Target ID</text>
+    <rect x="800" y="400" width="440" height="32" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="808" y="424" font-size="12" fill="#000">claim-8898</text>
+    <text x="800" y="448" font-size="12" fill="#000">Content</text>
+    <rect x="800" y="456" width="440" height="32" fill="#e6e6e6" stroke="#000" stroke-width="1.5"/>
+    <rect x="800" y="488" width="144" height="32" fill="#e6e6e6" stroke="#000" stroke-width="1.5"/>
+    <text x="808" y="512" font-size="12" fill="#666">Save annotation…</text>
+    </g>
+    <g data-pane="p3">
+    <rect x="296" y="560" width="464" height="160" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="312" y="600" font-size="14" fill="#000" font-weight="600">Existing annotations</text>
+    <text x="312" y="632" font-size="14" fill="#000">annotation-1041 · comment</text>
+    <text x="744" y="624" text-anchor="end" font-size="12" fill="#000">claim-8898</text>
+    <text x="312" y="664" font-size="14" fill="#000">annotation-1038 · flag</text>
+    <text x="744" y="656" text-anchor="end" font-size="12" fill="#000">ev-c71a</text>
+    <text x="312" y="696" font-size="14" fill="#000">annotation-1031 · context</text>
+    <text x="744" y="688" text-anchor="end" font-size="12" fill="#000">exc-2310</text>
+    </g>
+    <g data-pane="p4">
+    <rect x="784" y="560" width="472" height="112" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="800" y="600" font-size="14" fill="#000" font-weight="600">Reader rule</text>
+    <text x="800" y="624" font-size="12" fill="#666">An annotation is a human note, not a claim verdict</text>
+    <text x="800" y="648" font-size="12" fill="#666">Saving writes to the reader DB; ingest stays CLI-only</text>
+    </g>
+  </g>
+  <g id="annotations" font-family="-apple-system, system-ui, sans-serif">
+    <rect data-region="1" x="24" y="24" width="256" height="760" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="2" x="288" y="24" width="976" height="104" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="3" x="288" y="136" width="976" height="64" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="4" x="288" y="208" width="480" height="168" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="5" x="776" y="208" width="488" height="336" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="6" x="288" y="552" width="480" height="176" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="7" x="776" y="552" width="488" height="128" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <text x="16" y="48" font-size="12" font-weight="600" fill="#000">1</text>
+    <text x="280" y="48" font-size="12" font-weight="600" fill="#000">2</text>
+    <text x="280" y="160" font-size="12" font-weight="600" fill="#000">3</text>
+    <text x="280" y="232" font-size="12" font-weight="600" fill="#000">4</text>
+    <text x="768" y="232" font-size="12" font-weight="600" fill="#000">5</text>
+    <text x="280" y="576" font-size="12" font-weight="600" fill="#000">6</text>
+    <text x="768" y="576" font-size="12" font-weight="600" fill="#000">7</text>
+  </g>
+</svg>

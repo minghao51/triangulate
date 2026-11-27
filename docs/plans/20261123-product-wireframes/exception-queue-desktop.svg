@@ -1,0 +1,96 @@
+<!-- viewport: 1280×800 desktop -->
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="800" viewBox="0 0 1280 800" role="img" aria-labelledby="wf-title wf-desc">
+  <title id="wf-title">Exception queue — desktop</title>
+  <desc id="wf-desc">Exception queue — desktop (desktop, 1280x800). Proposal wireframe with synthetic data, not implementation evidence. Numbered regions: 1 Primary navigation — GET reads only; ingest, rerun, rebuild and recovery stay CLI-only; 2 Exception queue header — title, synthetic context and available actions; 3 Case tabs (12) — active Exceptions; tabs are navigation, not state changes; 4 Exception table — pending disables all row actions; an open row enables Resolve/Defer, a closed row enables Reopen. · frame 1 of 1; 5 Exception actions — the pending row disables Resolve, Defer and Reopen; open and closed rows enable their listed actions. · frame 1 of 1.</desc>
+  <g id="ui" font-family="-apple-system, system-ui, sans-serif">
+    <rect x="0" y="0" width="1280" height="800" fill="#fff"/>
+    <rect x="8" y="8" width="1264" height="784" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <rect x="32" y="32" width="240" height="744" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="48" y="56" font-size="14" fill="#000" font-weight="600">TRIANGULATE</text>
+    <text x="48" y="80" font-size="12" fill="#666">Evidence workbench · proposal</text>
+    <line x1="48" y1="88" x2="256" y2="88" stroke="#000" stroke-width="1.5"/>
+    <text x="48" y="128" font-size="12" fill="#000" font-weight="600">NAVIGATE</text>
+    <text x="48" y="160" font-size="14" fill="#000">Dashboard</text>
+    <text x="48" y="192" font-size="14" fill="#000" font-weight="600">Cases</text>
+    <text x="48" y="224" font-size="14" fill="#000">Network</text>
+    <text x="48" y="256" font-size="14" fill="#000">Sources</text>
+    <text x="48" y="288" font-size="14" fill="#000">Narratives</text>
+    <text x="48" y="320" font-size="14" fill="#000">Monitoring</text>
+    <text x="48" y="352" font-size="14" fill="#000">AI info</text>
+    <line x1="48" y1="368" x2="256" y2="368" stroke="#000" stroke-width="1.5"/>
+    <text x="48" y="408" font-size="12" fill="#000" font-weight="600">RECENT CASES</text>
+    <text x="48" y="432" font-size="12" fill="#000">case-2201-0417</text>
+    <text x="48" y="456" font-size="12" fill="#000">case-2199-1180</text>
+    <text x="48" y="480" font-size="12" fill="#000">case-2198-0922</text>
+    <line x1="48" y1="496" x2="256" y2="496" stroke="#000" stroke-width="1.5"/>
+    <text x="48" y="536" font-size="12" fill="#000" font-weight="600">READ-ONLY BY DEFAULT</text>
+    <text x="48" y="560" font-size="12" fill="#000">GET reads only</text>
+    <text x="48" y="584" font-size="12" fill="#666">local / trusted</text>
+    <text x="48" y="608" font-size="12" fill="#666">ingest + runs via CLI</text>
+    <text x="48" y="760" font-size="12" fill="#666">Wireframe · synthetic data</text>
+    <rect x="296" y="32" width="960" height="88" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="312" y="80" font-size="20" fill="#000" font-weight="600">Exception queue</text>
+    <text x="312" y="104" font-size="12" fill="#666">Resolve / Defer / Reopen with CLI fallback · Proposal · synthetic · not built</text>
+    <rect x="296" y="144" width="960" height="48" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="312" y="176" font-size="14" fill="#000">Overview</text>
+    <text x="392" y="176" font-size="14" fill="#000">Evidence</text>
+    <text x="472" y="176" font-size="14" fill="#000">Claims</text>
+    <text x="536" y="176" font-size="14" fill="#000">Compare</text>
+    <text x="608" y="176" font-size="14" fill="#000">Parties</text>
+    <text x="680" y="176" font-size="14" fill="#000">Map</text>
+    <text x="720" y="176" font-size="14" fill="#000">Timeline</text>
+    <text x="800" y="176" font-size="14" fill="#000" font-weight="600">Exceptions</text>
+    <text x="896" y="176" font-size="14" fill="#000">Report</text>
+    <text x="960" y="176" font-size="14" fill="#000">Changes</text>
+    <text x="1032" y="176" font-size="14" fill="#000">Search</text>
+    <text x="1096" y="176" font-size="14" fill="#000">Run history</text>
+    <g data-pane="p1">
+    <rect x="296" y="216" width="960" height="216" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="312" y="256" font-size="14" fill="#000" font-weight="600">Exceptions</text>
+    <text x="312" y="280" font-size="12" fill="#000" font-weight="600">Exception</text>
+    <text x="544" y="280" font-size="12" fill="#000" font-weight="600">Kind</text>
+    <text x="776" y="280" font-size="12" fill="#000" font-weight="600">State</text>
+    <text x="928" y="280" font-size="12" fill="#000" font-weight="600">Allowed</text>
+    <line x1="312" y1="288" x2="1240" y2="288" stroke="#000" stroke-width="1.5"/>
+    <text x="312" y="320" font-size="12" fill="#000">exc-2310</text>
+    <text x="544" y="320" font-size="12" fill="#000">missing quotation</text>
+    <text x="776" y="320" font-size="12" fill="#000">pending</text>
+    <text x="928" y="320" font-size="12" fill="#000">all disabled</text>
+    <text x="312" y="352" font-size="12" fill="#000">exc-2309</text>
+    <text x="544" y="352" font-size="12" fill="#000">source unavailable</text>
+    <text x="776" y="352" font-size="12" fill="#000">open</text>
+    <text x="928" y="352" font-size="12" fill="#000">resolve/defer</text>
+    <text x="312" y="384" font-size="12" fill="#000">exc-2308</text>
+    <text x="544" y="384" font-size="12" fill="#000">ambiguous alignment</text>
+    <text x="776" y="384" font-size="12" fill="#000">closed</text>
+    <text x="928" y="384" font-size="12" fill="#000">reopen</text>
+    <text x="312" y="408" font-size="12" fill="#666">Resolve/Defer/Reopen post the exception route; CLI fallback exists for recovery.</text>
+    </g>
+    <g data-pane="p2">
+    <rect x="296" y="456" width="960" height="176" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="312" y="496" font-size="14" fill="#000" font-weight="600">Exception action</text>
+    <text x="312" y="520" font-size="12" fill="#000">Exception</text>
+    <rect x="312" y="528" width="928" height="32" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="320" y="552" font-size="12" fill="#000">exc-2310 · pending · all actions disabled</text>
+    <rect x="312" y="560" width="96" height="32" fill="#e6e6e6" stroke="#000" stroke-width="1.5"/>
+    <text x="320" y="584" font-size="12" fill="#666">Resolve (…</text>
+    <rect x="416" y="560" width="96" height="32" fill="#e6e6e6" stroke="#000" stroke-width="1.5"/>
+    <text x="424" y="584" font-size="12" fill="#666">Defer (di…</text>
+    <rect x="520" y="560" width="96" height="32" fill="#e6e6e6" stroke="#000" stroke-width="1.5"/>
+    <text x="528" y="584" font-size="12" fill="#666">Reopen (d…</text>
+    <text x="312" y="608" font-size="12" fill="#666">A failed action shows the recorded error inline and never claims success.</text>
+    </g>
+  </g>
+  <g id="annotations" font-family="-apple-system, system-ui, sans-serif">
+    <rect data-region="1" x="24" y="24" width="256" height="760" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="2" x="288" y="24" width="976" height="104" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="3" x="288" y="136" width="976" height="64" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="4" x="288" y="208" width="976" height="232" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="5" x="288" y="448" width="976" height="192" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <text x="16" y="48" font-size="12" font-weight="600" fill="#000">1</text>
+    <text x="280" y="48" font-size="12" font-weight="600" fill="#000">2</text>
+    <text x="280" y="160" font-size="12" font-weight="600" fill="#000">3</text>
+    <text x="280" y="232" font-size="12" font-weight="600" fill="#000">4</text>
+    <text x="280" y="472" font-size="12" font-weight="600" fill="#000">5</text>
+  </g>
+</svg>

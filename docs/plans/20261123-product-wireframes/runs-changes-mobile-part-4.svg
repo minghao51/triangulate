@@ -1,0 +1,50 @@
+<!-- viewport: 375×812 mobile -->
+<svg xmlns="http://www.w3.org/2000/svg" width="375" height="812" viewBox="0 0 375 812" role="img" aria-labelledby="wf-title wf-desc">
+  <title id="wf-title">Runs and changes — part 4 of 4 — mobile</title>
+  <desc id="wf-desc">Runs and changes — part 4 of 4 — mobile (mobile, 375x812). Proposal wireframe with synthetic data, not implementation evidence. Numbered regions: 1 Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest; 2 Runs and changes — frame 4 of 4; full coverage continues in the named companion frame; 3 Per-item run facts — origin run and observer run as separate recorded values; neither implies who caused a change. · frame 4 of 4; 4 Delta pagination — offset lives in the URL; the selected run stays pinned. · frame 4 of 4.</desc>
+  <g id="ui" font-family="-apple-system, system-ui, sans-serif">
+    <rect x="0" y="0" width="368" height="808" fill="#fff"/>
+    <rect x="8" y="8" width="352" height="792" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <rect x="16" y="32" width="328" height="48" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="32" y="56" font-size="14" fill="#000" font-weight="600">TRIANGULATE</text>
+    <rect x="264" y="40" width="64" height="32" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="296" y="56" text-anchor="middle" font-size="12" fill="#000">Menu</text>
+    <rect x="16" y="104" width="328" height="104" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="32" y="144" font-size="14" fill="#000" font-weight="600">Runs and changes</text>
+    <text x="32" y="168" font-size="12" fill="#666">Part 4 of 4 · companion frames carry t…</text>
+    <text x="32" y="192" font-size="12" fill="#666">previous: runs-changes-mobile-part-3.s…</text>
+    <g data-pane="p5">
+    <rect x="16" y="232" width="328" height="328" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="32" y="272" font-size="14" fill="#000" font-weight="600">Per-item run facts</text>
+    <text x="32" y="304" font-size="14" fill="#000">claim-8898</text>
+    <text x="32" y="328" font-size="12" fill="#666">originRunId: run-0007</text>
+    <text x="32" y="352" font-size="12" fill="#666">observedByRunId: run-0007</text>
+    <line x1="32" y1="360" x2="328" y2="360" stroke="#000" stroke-width="1.5"/>
+    <text x="32" y="392" font-size="14" fill="#000">case-2201-0417</text>
+    <text x="32" y="416" font-size="12" fill="#666">originRunId: origin not recorded</text>
+    <text x="32" y="440" font-size="12" fill="#666">observedByRunId: run-0007</text>
+    <line x1="32" y1="448" x2="328" y2="448" stroke="#000" stroke-width="1.5"/>
+    <text x="32" y="480" font-size="14" fill="#000">ev-c71a</text>
+    <text x="32" y="504" font-size="12" fill="#666">originRunId: run-0006</text>
+    <text x="32" y="528" font-size="12" fill="#666">observedByRunId: run-0007</text>
+    <line x1="32" y1="536" x2="328" y2="536" stroke="#000" stroke-width="1.5"/>
+    </g>
+    <g data-pane="p6">
+    <rect x="16" y="584" width="328" height="64" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <rect x="32" y="600" width="128" height="32" fill="#e6e6e6" stroke="#000" stroke-width="1.5"/>
+    <text x="40" y="624" font-size="12" fill="#666">Previous page…</text>
+    <rect x="168" y="600" width="96" height="32" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="176" y="624" font-size="12" fill="#000">Next page</text>
+    </g>
+  </g>
+  <g id="annotations" font-family="-apple-system, system-ui, sans-serif">
+    <rect data-region="1" x="8" y="24" width="344" height="64" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="2" x="8" y="96" width="344" height="120" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="3" x="8" y="224" width="344" height="344" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="4" x="8" y="576" width="344" height="80" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <text x="0" y="48" font-size="12" font-weight="600" fill="#000">1</text>
+    <text x="0" y="120" font-size="12" font-weight="600" fill="#000">2</text>
+    <text x="0" y="248" font-size="12" font-weight="600" fill="#000">3</text>
+    <text x="0" y="600" font-size="12" font-weight="600" fill="#000">4</text>
+  </g>
+</svg>

@@ -1,0 +1,102 @@
+<!-- viewport: 1280×800 desktop -->
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="800" viewBox="0 0 1280 800" role="img" aria-labelledby="wf-title wf-desc">
+  <title id="wf-title">Evidence gallery — desktop</title>
+  <desc id="wf-desc">Evidence gallery — desktop (desktop, 1280x800). Proposal wireframe with synthetic data, not implementation evidence. Numbered regions: 1 Primary navigation — GET reads only; ingest, rerun, rebuild and recovery stay CLI-only; 2 Evidence gallery header — title, synthetic context and available actions; 3 Case tabs (12) — active Evidence; tabs are navigation, not state changes; 4 Evidence filters — All/High/Medium/Low/Unknown are provided extraction tiers, not truth levels. · frame 1 of 2; 5 Evidence table — source, publisher and provided tier; missing capture says unavailable. · frame 1 of 2.</desc>
+  <g id="ui" font-family="-apple-system, system-ui, sans-serif">
+    <rect x="0" y="0" width="1280" height="800" fill="#fff"/>
+    <rect x="8" y="8" width="1264" height="784" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <rect x="32" y="32" width="240" height="744" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="48" y="56" font-size="14" fill="#000" font-weight="600">TRIANGULATE</text>
+    <text x="48" y="80" font-size="12" fill="#666">Evidence workbench · proposal</text>
+    <line x1="48" y1="88" x2="256" y2="88" stroke="#000" stroke-width="1.5"/>
+    <text x="48" y="128" font-size="12" fill="#000" font-weight="600">NAVIGATE</text>
+    <text x="48" y="160" font-size="14" fill="#000">Dashboard</text>
+    <text x="48" y="192" font-size="14" fill="#000" font-weight="600">Cases</text>
+    <text x="48" y="224" font-size="14" fill="#000">Network</text>
+    <text x="48" y="256" font-size="14" fill="#000">Sources</text>
+    <text x="48" y="288" font-size="14" fill="#000">Narratives</text>
+    <text x="48" y="320" font-size="14" fill="#000">Monitoring</text>
+    <text x="48" y="352" font-size="14" fill="#000">AI info</text>
+    <line x1="48" y1="368" x2="256" y2="368" stroke="#000" stroke-width="1.5"/>
+    <text x="48" y="408" font-size="12" fill="#000" font-weight="600">RECENT CASES</text>
+    <text x="48" y="432" font-size="12" fill="#000">case-2201-0417</text>
+    <text x="48" y="456" font-size="12" fill="#000">case-2199-1180</text>
+    <text x="48" y="480" font-size="12" fill="#000">case-2198-0922</text>
+    <line x1="48" y1="496" x2="256" y2="496" stroke="#000" stroke-width="1.5"/>
+    <text x="48" y="536" font-size="12" fill="#000" font-weight="600">READ-ONLY BY DEFAULT</text>
+    <text x="48" y="560" font-size="12" fill="#000">GET reads only</text>
+    <text x="48" y="584" font-size="12" fill="#666">local / trusted</text>
+    <text x="48" y="608" font-size="12" fill="#666">ingest + runs via CLI</text>
+    <text x="48" y="760" font-size="12" fill="#666">Wireframe · synthetic data</text>
+    <rect x="296" y="32" width="960" height="88" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="312" y="80" font-size="20" fill="#000" font-weight="600">Evidence gallery</text>
+    <text x="312" y="104" font-size="12" fill="#666">Provided extraction tier, not truth · Proposal · synthetic · not built</text>
+    <rect x="296" y="144" width="960" height="48" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="312" y="176" font-size="14" fill="#000">Overview</text>
+    <text x="392" y="176" font-size="14" fill="#000" font-weight="600">Evidence</text>
+    <text x="472" y="176" font-size="14" fill="#000">Claims</text>
+    <text x="536" y="176" font-size="14" fill="#000">Compare</text>
+    <text x="608" y="176" font-size="14" fill="#000">Parties</text>
+    <text x="680" y="176" font-size="14" fill="#000">Map</text>
+    <text x="720" y="176" font-size="14" fill="#000">Timeline</text>
+    <text x="800" y="176" font-size="14" fill="#000">Exceptions</text>
+    <text x="896" y="176" font-size="14" fill="#000">Report</text>
+    <text x="960" y="176" font-size="14" fill="#000">Changes</text>
+    <text x="1032" y="176" font-size="14" fill="#000">Search</text>
+    <text x="1096" y="176" font-size="14" fill="#000">Run history</text>
+    <g data-pane="p1">
+    <rect x="296" y="216" width="960" height="120" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="312" y="248" font-size="12" fill="#000">Tier</text>
+    <rect x="312" y="256" width="288" height="32" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="320" y="280" font-size="12" fill="#000">All</text>
+    <text x="608" y="248" font-size="12" fill="#000">Captured</text>
+    <rect x="608" y="256" width="288" height="32" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="616" y="280" font-size="12" fill="#000">any</text>
+    <text x="904" y="248" font-size="12" fill="#000">Publisher</text>
+    <rect x="904" y="256" width="280" height="32" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="912" y="280" font-size="12" fill="#000">any</text>
+    <rect x="312" y="288" width="96" height="32" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="320" y="312" font-size="12" fill="#000">Apply</text>
+    <rect x="416" y="288" width="96" height="32" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="424" y="312" font-size="12" fill="#000">Clear</text>
+    </g>
+    <g data-pane="p2">
+    <rect x="296" y="360" width="960" height="248" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="312" y="400" font-size="14" fill="#000" font-weight="600">Evidence</text>
+    <text x="312" y="424" font-size="12" fill="#000" font-weight="600">Source</text>
+    <text x="624" y="424" font-size="12" fill="#000" font-weight="600">Publisher</text>
+    <text x="856" y="424" font-size="12" fill="#000" font-weight="600">Tier</text>
+    <text x="1008" y="424" font-size="12" fill="#000" font-weight="600">Captured</text>
+    <line x1="312" y1="432" x2="1240" y2="432" stroke="#000" stroke-width="1.5"/>
+    <text x="312" y="464" font-size="12" fill="#000">Regional Herald (synthetic)</text>
+    <text x="624" y="464" font-size="12" fill="#000">example.invalid</text>
+    <text x="856" y="464" font-size="12" fill="#000">High</text>
+    <text x="1008" y="464" font-size="12" fill="#000">yes</text>
+    <text x="312" y="496" font-size="12" fill="#000">Wire Desk (synthetic)</text>
+    <text x="624" y="496" font-size="12" fill="#000">example.invalid</text>
+    <text x="856" y="496" font-size="12" fill="#000">Medium</text>
+    <text x="1008" y="496" font-size="12" fill="#000">yes</text>
+    <text x="312" y="528" font-size="12" fill="#000">Civic Ledger (synthetic)</text>
+    <text x="624" y="528" font-size="12" fill="#000">example.invalid</text>
+    <text x="856" y="528" font-size="12" fill="#000">Unknown</text>
+    <text x="1008" y="528" font-size="12" fill="#000">no</text>
+    <text x="312" y="560" font-size="12" fill="#000">Trade Bulletin (synthetic)</text>
+    <text x="624" y="560" font-size="12" fill="#000">example.invalid</text>
+    <text x="856" y="560" font-size="12" fill="#000">Low</text>
+    <text x="1008" y="560" font-size="12" fill="#000">yes</text>
+    <text x="312" y="584" font-size="12" fill="#666">Tiers: All/High/Medium/Low/Unknown are provided metadata, not truth.</text>
+    </g>
+  </g>
+  <g id="annotations" font-family="-apple-system, system-ui, sans-serif">
+    <rect data-region="1" x="24" y="24" width="256" height="760" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="2" x="288" y="24" width="976" height="104" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="3" x="288" y="136" width="976" height="64" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="4" x="288" y="208" width="976" height="136" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="5" x="288" y="352" width="976" height="264" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <text x="16" y="48" font-size="12" font-weight="600" fill="#000">1</text>
+    <text x="280" y="48" font-size="12" font-weight="600" fill="#000">2</text>
+    <text x="280" y="160" font-size="12" font-weight="600" fill="#000">3</text>
+    <text x="280" y="232" font-size="12" font-weight="600" fill="#000">4</text>
+    <text x="280" y="376" font-size="12" font-weight="600" fill="#000">5</text>
+  </g>
+</svg>

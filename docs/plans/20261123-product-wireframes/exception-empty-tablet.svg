@@ -1,0 +1,45 @@
+<!-- viewport: 768×1024 tablet -->
+<svg xmlns="http://www.w3.org/2000/svg" width="768" height="1024" viewBox="0 0 768 1024" role="img" aria-labelledby="wf-title wf-desc">
+  <title id="wf-title">Exception — none recorded — tablet</title>
+  <desc id="wf-desc">Exception — none recorded — tablet (tablet, 768x1024). Proposal wireframe with synthetic data, not implementation evidence. Numbered regions: 1 Primary navigation (top bar) — GET reads only; CLI owns ingest and runs; 2 Exception — none recorded header — title, synthetic context and available actions; 3 Empty queue — not a failed read and not an unavailable capability. · frame 1 of 1; 4 Interpretation note — an empty queue is a valid read, not a failure. · frame 1 of 1.</desc>
+  <g id="ui" font-family="-apple-system, system-ui, sans-serif">
+    <rect x="0" y="0" width="768" height="1024" fill="#fff"/>
+    <rect x="8" y="8" width="752" height="1008" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <rect x="32" y="32" width="704" height="48" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="48" y="56" font-size="14" fill="#000" font-weight="600">TRIANGULATE</text>
+    <text x="168" y="56" font-size="12" fill="#000">Dashboard</text>
+    <text x="248" y="56" font-size="12" fill="#000" font-weight="600">Cases</text>
+    <text x="304" y="56" font-size="12" fill="#000">Network</text>
+    <text x="368" y="56" font-size="12" fill="#000">Sources</text>
+    <text x="432" y="56" font-size="12" fill="#000">Narratives</text>
+    <text x="520" y="56" font-size="12" fill="#000">Monitoring</text>
+    <text x="608" y="56" font-size="12" fill="#000">AI info</text>
+    <rect x="32" y="104" width="704" height="88" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="48" y="152" font-size="20" fill="#000" font-weight="600">Exception — none recorded</text>
+    <text x="48" y="176" font-size="12" fill="#666">Proposal · synthetic · not built</text>
+    <g data-pane="p1">
+    <rect x="32" y="216" width="704" height="160" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="48" y="256" font-size="14" fill="#000" font-weight="600">Exceptions</text>
+    <rect x="48" y="264" width="672" height="96" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="64" y="304" font-size="14" fill="#000">No exceptions recorded for this case</text>
+    <text x="64" y="328" font-size="12" fill="#666">HTTP 200 · zero rows · valid empty queue</text>
+    </g>
+    <g data-pane="p2">
+    <rect x="32" y="400" width="704" height="136" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="48" y="440" font-size="14" fill="#000" font-weight="600">Interpretation</text>
+    <text x="48" y="464" font-size="12" fill="#666">Empty means no exception rows</text>
+    <text x="48" y="488" font-size="12" fill="#666">A pending run may add rows later</text>
+    <text x="48" y="512" font-size="12" fill="#666">No synthetic exception</text>
+    </g>
+  </g>
+  <g id="annotations" font-family="-apple-system, system-ui, sans-serif">
+    <rect data-region="1" x="24" y="24" width="720" height="64" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="2" x="24" y="96" width="720" height="104" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="3" x="24" y="208" width="720" height="176" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="4" x="24" y="392" width="720" height="152" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <text x="16" y="48" font-size="12" font-weight="600" fill="#000">1</text>
+    <text x="16" y="120" font-size="12" font-weight="600" fill="#000">2</text>
+    <text x="16" y="232" font-size="12" font-weight="600" fill="#000">3</text>
+    <text x="16" y="416" font-size="12" font-weight="600" fill="#000">4</text>
+  </g>
+</svg>

@@ -109,6 +109,22 @@ process death can leave a claim until an operator runs this explicit command.
 HTTP review/exception/annotation conflict responses map to **409** with a safe
 detail; no new mutation endpoint was added.
 
+### HTTP write surface contract
+
+The three POST routes `POST /api/cases/{case_id}/review-actions/review`,
+`POST /api/cases/{case_id}/review-actions/exceptions/{exception_id}` and
+`POST /api/cases/{case_id}/annotations` are the only HTTP write surface. Their
+request models validate the allowed vocabularies (review decision, exception
+action, annotation target/annotation types, non-blank identifiers/content) and
+the service re-checks the same rules because CLI and direct callers bypass the
+request models. A missing case or exception maps to **404**; every other domain
+validation error (unresolved exceptions on approval, unsupported action or
+blank content reaching the service) maps to **422**; a writer conflict still
+maps to **409** through the existing `CaseWriterConflict` handler. The mapping
+is scoped to these three handlers - there is no global `ValueError` handler and
+no other route's error behaviour changes. These routes make **no authentication
+or authorization claim**: the API is a single-operator surface.
+
 ## Tests and verification
 
 `tests/test_r02_case_writer_fencing.py` covers: conflicting run rejection with no

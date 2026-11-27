@@ -1,6 +1,6 @@
 # Triangulate Technical Roadmap
 
-This document is the active technical roadmap for Triangulate. It replaces earlier roadmap drafts and anchors future work in the repository as it exists today: a local-first Python application with CLI-triggered workflows, a read-only FastAPI projection layer, SQLite-backed persistence through SQLAlchemy, and a React frontend that consumes persisted case state.
+This document is the active technical roadmap for Triangulate. It replaces earlier roadmap drafts and anchors future work in the repository as it exists today: a local-first Python application with CLI-triggered workflows, a GET-only FastAPI inspection layer with three narrow human-in-the-loop review POSTs (review decision, exception action, review annotation — see `docs/reference/http-api.md`), SQLite-backed persistence through SQLAlchemy, and a React frontend that consumes persisted case state.
 
 ## Summary
 
@@ -20,7 +20,7 @@ The roadmap is intentionally incremental. It does not assume an immediate rewrit
 
 - `src/cli/` is the primary mutation surface. Operators can ingest content, process URLs, fetch topic cases, run the pipeline, monitor topics, and review or rerun cases.
 - `src/cases/` is the orchestration boundary for topic-case lifecycle behavior and read-model construction.
-- `src/http/` exposes a read-only FastAPI API for health checks, case lists, case detail, and tab-oriented case views.
+- `src/http/` exposes a FastAPI API for health checks, case lists, case detail, and tab-oriented case views. Inspection is GET-only; the only mutations are three narrow human-in-the-loop review/annotation POSTs. Case creation, ingestion, reruns and execution remain CLI/service-only.
 - `src/storage/` uses SQLAlchemy models and migration helpers against SQLite today.
 - `frontend/` is a React presentation layer that reads the HTTP API and does not own pipeline mutations.
 - `src/ai/` already contains multiple agent-style modules and workflows, including claim collection, clustering, narration, classification, and party investigation.

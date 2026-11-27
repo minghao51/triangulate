@@ -10,9 +10,9 @@ Triangulate is a Python-first investigation workflow for building topic-oriented
 
 - `src/cli/`: operator-facing commands for ingest, fetch-topic, case review, and monitor runs
 - `src/cases/`: orchestration boundary and read model construction
-- `src/http/`: read-only frontend-facing FastAPI endpoints
+- `src/http/`: frontend-facing FastAPI endpoints — GET-only inspection plus three narrow review/annotation POSTs for human-in-the-loop review
 - `src/storage/`: SQLite-backed persistence and migrations
-- `frontend/`: React app consuming the read-only `/api/cases*` endpoints
+- `frontend/`: React app consuming the `/api/cases*` endpoints (inspection reads plus the narrow review POSTs)
 
 The codebase currently runs as a local Python application backed by SQLite. Older design material for Node/NestJS, Postgres, ArchiveBox, and other aspirational architecture has been moved under [`docs/archive/`](docs/archive/README.md).
 
@@ -65,7 +65,7 @@ Start the FastAPI server for the frontend:
 uv run triangulate serve
 ```
 
-The website is presentation-only. Use the CLI, GitHub Actions, or background operators to trigger ingestion, case creation, reruns, reviews, and exception handling.
+The website is a presentation layer with a narrow human-in-the-loop review exception: inspection endpoints are GET-only, plus three review/annotation POSTs (review decision, exception action, review annotation) documented in [`docs/reference/http-api.md`](docs/reference/http-api.md). Use the CLI, GitHub Actions, or background operators to trigger ingestion, case creation, reruns, and execution.
 
 ## Repository Layout
 

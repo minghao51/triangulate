@@ -16,6 +16,7 @@ from unittest.mock import patch, AsyncMock
 from litellm import acompletion
 from src.ai.agents.collector import collect_claims
 from src.ai.agents.narrator import narrate_cluster
+from src.ai.utils import get_llm_config
 
 
 # Test Configuration
@@ -27,18 +28,31 @@ VALID_API_KEY = "sk-test-key-12345"
 class TestQwenConfiguration:
     """Test Qwen model configuration follows best practices."""
 
-    def test_environment_variables_set(self):
-        """Test that required environment variables are configured."""
-        # Check in actual environment
-        api_key = os.getenv("LLM_API_KEY")
-        model = os.getenv("LLM_MODEL")
-        base_url = os.getenv("LLM_BASE_URL")
+    def test_llm_config_reads_environment_at_call_time(self, monkeypatch):
+        """Model, key and endpoint come from the environment on each call."""
+        monkeypatch.setenv("LLM_API_KEY", VALID_API_KEY)
+        monkeypatch.setenv("LLM_MODEL", VALID_MODEL)
+        monkeypatch.setenv("LLM_BASE_URL", VALID_BASE_URL)
 
-        # These should be set in .env for production
-        # For tests, we'll mock them if not present
-        assert api_key is not None or True  # Allow mock in tests
-        assert model is not None or True
-        assert base_url is not None or True
+        config = get_llm_config()
+
+        assert config["api_key"] == VALID_API_KEY
+        assert config["model"] == VALID_MODEL
+        assert config["base_url"] == VALID_BASE_URL
+        assert config["custom_llm_provider"] == "openai"
+
+    def test_llm_config_without_credentials_is_unusable(self, monkeypatch):
+        """No key means no credential and no custom endpoint is configured."""
+        monkeypatch.delenv("LLM_API_KEY", raising=False)
+        monkeypatch.delenv("LLM_MODEL", raising=False)
+        monkeypatch.delenv("LLM_BASE_URL", raising=False)
+
+        config = get_llm_config()
+
+        assert config["api_key"] is None
+        assert config["model"] == "qwen-plus"
+        assert "base_url" not in config
+        assert "custom_llm_provider" not in config
 
     def test_model_format(self):
         """Test model follows correct format for Alibaba Model Studio."""

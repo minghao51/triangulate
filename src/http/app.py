@@ -3,13 +3,30 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Iterator
 from pathlib import Path
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Request
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
+from sqlalchemy.exc import DatabaseError, InternalError, OperationalError
+from sqlalchemy.orm import Session
 
 from src.cases import TopicCaseService
-from src.storage import CaseWriterConflict
+from src.runtime import configured_database_path
+from src.settings import resolve_database_path, resolve_output_root
+from src.storage import (
+    Base,
+    CaseWriterConflict,
+    begin_read_transaction,
+    open_read_only_session,
+)
+from src.cases.artifact_reader import (
+    ArtifactNotFound,
+    ArtifactTooLarge,
+    list_run_artifacts,
+    read_run_artifact,
+)
 from src.cases.comparison import (
     DEFAULT_COMPARISON_LIMIT,
     MAX_COMPARISON_LIMIT,
@@ -17,6 +34,11 @@ from src.cases.comparison import (
     ComparisonNotFound,
 )
 from src.cases.readers import CaptureRangeError, SnapshotNotFound
+from src.cases.snapshot_comparison import (
+    SnapshotComparisonInvalid,
+    SnapshotComparisonNotFound,
+    read_snapshot_comparison,
+)
 from src.cases.search import (
     DEFAULT_SEARCH_LIMIT,
     MAX_SEARCH_LIMIT,
@@ -27,6 +49,7 @@ from src.cases.search import (
 )
 from .dependencies import get_case_service
 from .mappers import (
+    map_artifact_descriptor,
     map_comparison,
     map_capture_window,
     map_case_detail,
@@ -42,11 +65,13 @@ from .mappers import (
     map_review_activity,
     map_run_changes,
     map_search,
+    map_snapshot_comparison,
     map_snapshot_summary,
     map_source_summary,
 )
 from .schemas import (
     AnnotationCreateRequest,
+    ArtifactDescriptorDTO,
     CaptureWindowDTO,
     CaseDetailResponse,
     CaseListItem,
@@ -66,6 +91,7 @@ from .schemas import (
     ReviewAnnotationDTO,
     RunChangesDTO,
     SearchResponseDTO,
+    SnapshotComparisonDTO,
     SnapshotSummaryDTO,
     SourceSummaryDTO,
     WorkflowDiagnosticsDTO,
@@ -148,6 +174,35 @@ def _load_raw_case_detail_or_404(service: TopicCaseService, case_id: str) -> dic
     if detail is None:
         raise HTTPException(status_code=404, detail=f"Case {case_id} not found")
     return detail
+
+
+def _post_write_error(exc: ValueError) -> HTTPException:
+    """Map the narrow HITL POST writers' ``ValueError`` to an explicit status.
+
+    Scoped to the three review/exception/annotation handlers only: a missing
+    case or exception is a 404, while every other domain validation error
+    (unresolved exceptions, unsupported action, blank content) is a 422. This is
+    deliberately not a global ``ValueError`` handler, and writer conflicts keep
+    their existing ``CaseWriterConflict`` -> 409 response.
+    """
+    detail = str(exc)
+    if detail.startswith(("Case ", "Exception ")) and " not found" in detail:
+        return HTTPException(status_code=404, detail=detail)
+    return HTTPException(status_code=422, detail=detail)
+
+
+def _reader_missing_case_error(exc: ValueError, case_id: str) -> Exception:
+    """Return the exception a case-owned GET reader should raise for ``exc``.
+
+    Only the exact missing-case ``ValueError`` from the service readers becomes
+    a 404; every other reader failure is returned unchanged so a genuine
+    evaluation/activity read fault keeps propagating instead of being disguised
+    as "case not found". The service layer keeps raising ``ValueError`` for
+    direct/CLI callers.
+    """
+    if str(exc) == f"Case {case_id} not found":
+        return HTTPException(status_code=404, detail=str(exc))
+    return exc
 
 
 @router.get("/health", response_model=HealthResponse)
@@ -410,6 +465,194 @@ def get_investigation_run_changes(
     return map_run_changes(payload)
 
 
+#: One uniform miss body for the historical artifact reader. It never reveals
+#: whether the case, run, artifact or file exists, nor which ownership check
+#: failed, and never carries a filesystem path or OS error text.
+ARTIFACT_NOT_FOUND_DETAIL = "Artifact not found for this case and run"
+ARTIFACT_TOO_LARGE_DETAIL = "too_large"
+
+
+def get_artifact_output_root(request: Request) -> Path:
+    """Case output root captured once when the app was created.
+
+    The value comes from the ``TRIANGULATE_OUTPUT_ROOT`` operator setting
+    (default ``./output``) resolved against the startup working directory. It is
+    never taken from a query, body or header, and never from an artifact row.
+    """
+    return request.app.state.output_root
+
+
+#: One sanitized body for every storage-level historical-read failure. It never
+#: carries a path, SQL text, driver message or a case/run/artifact existence hint.
+HISTORICAL_STORAGE_UNAVAILABLE_DETAIL = "Historical storage is unavailable"
+
+#: App-owned constant: the readiness probe never runs caller SQL, so a driver
+#: failure it raises can only describe the configured store itself.
+_SCHEMA_PRESENCE_SQL = "SELECT name FROM sqlite_master WHERE type = 'table'"
+
+
+def _storage_unavailable() -> HTTPException:
+    """The sanitized 503 for a readiness/connection failure of the store."""
+    return HTTPException(status_code=503, detail=HISTORICAL_STORAGE_UNAVAILABLE_DETAIL)
+
+
+def _is_store_damage(exc: DatabaseError) -> bool:
+    """True only for driver errors that can only mean the store is unusable.
+
+    pysqlite reports corruption (``SQLITE_CORRUPT``/``SQLITE_NOTADB``) as a bare
+    ``DatabaseError``; every subclass -- ``OperationalError`` (bad SQL text or a
+    bad column), ``ProgrammingError``, ``IntegrityError`` -- can be a defect in
+    caller code, so it is classified by phase instead. No message matching.
+    """
+    return type(exc) is DatabaseError
+
+
+def _missing_declared_tables(session: Session) -> frozenset[str]:
+    """Declared model tables this store does not have (readiness, not data).
+
+    Pure read-only inspection of ``sqlite_master``: an absent or partial schema is
+    an unusable store, which is readiness, while a present schema with no matching
+    row is simply data not found (the route's scoped 404).
+    """
+    present = {
+        str(row[0])
+        for row in session.connection().exec_driver_sql(_SCHEMA_PRESENCE_SQL)
+    }
+    return frozenset(Base.metadata.tables).difference(present)
+
+
+def _historical_read_session(request: Request) -> Iterator[Session]:
+    """One narrow read-only session for every historical GET.
+
+    The path is the app's startup-captured canonical database; this dependency
+    never consults the mutable global ``Database`` binding, so request order can
+    not select storage. Opening is SQLite ``mode=ro`` on the existing file: no
+    directory, database file, table, index, migration marker or domain row is
+    created, and no service/taxonomy builder runs. A missing, uninitialized or
+    unreadable store becomes a sanitized 503; unknown resources remain the
+    route's scoped 404. Programming errors are not swallowed.
+
+    The two phases are handled separately. Only the readiness phase -- open the
+    connection, begin the read transaction, confirm the declared schema exists,
+    all with app-owned constant SQL -- may turn a driver error into the sanitized
+    503, because nothing a caller wrote runs there. The route's own reads run in
+    the domain phase below, outside that mapping: a query-time defect (malformed
+    SQL, a bad column reference) surfaces as the app's ordinary 500 instead of
+    masquerading as "storage is unavailable".
+    """
+    database_path = getattr(request.app.state, "database_path", None)
+    if database_path is None:
+        raise _storage_unavailable()
+    with open_read_only_session(database_path) as session:
+        # Readiness phase: connection, read transaction, declared schema.
+        try:
+            begin_read_transaction(session)
+            missing_tables = _missing_declared_tables(session)
+        except DatabaseError as exc:
+            if isinstance(exc, (OperationalError, InternalError)) or (
+                _is_store_damage(exc)
+            ):
+                raise _storage_unavailable() from exc
+            raise
+        if missing_tables:
+            raise _storage_unavailable()
+        # Domain phase: the route's reads, deliberately outside the 503 mapping.
+        try:
+            yield session
+        except DatabaseError as exc:
+            # Store damage is never a reader defect; everything else (in
+            # particular OperationalError/ProgrammingError) stays actionable.
+            if not _is_store_damage(exc):
+                raise
+            raise _storage_unavailable() from exc
+
+
+def _artifact_download_headers(
+    filename: str, case_id: str, run_id: str, artifact_id: str
+) -> dict[str, str]:
+    """Attachment headers with a constant filename and percent-encoded ids.
+
+    ``quote`` cannot emit a raw CR/LF, so no header-injection sequence can be
+    constructed from the stored identifiers. ``nosniff`` keeps the browser from
+    reinterpreting the declared media type.
+    """
+    encoded = quote(f"{case_id}-{run_id}-{artifact_id}-{filename}", safe="")
+    return {
+        "Content-Disposition": (
+            f'attachment; filename="{filename}"; filename*=UTF-8\'\'{encoded}'
+        ),
+        "X-Content-Type-Options": "nosniff",
+    }
+
+
+@router.get(
+    "/api/cases/{case_id}/investigation-runs/{run_id}/artifacts",
+    response_model=list[ArtifactDescriptorDTO],
+    dependencies=[Depends(reject_snapshot_selector)],
+)
+def get_investigation_run_artifacts(
+    case_id: str,
+    run_id: str,
+    session: Session = Depends(_historical_read_session),
+) -> list[ArtifactDescriptorDTO]:
+    """Published report-artifact descriptors for one grouped run (read-only).
+
+    Descriptors are sorted by type then artifact ID and never expose a
+    filesystem path. An unknown or wrong-case run is a uniform 404; an existing
+    run without eligible published reports is ``200 []``. This is not a
+    file-existence claim.
+    """
+    payload = list_run_artifacts(session, case_id=case_id, run_id=run_id)
+    if payload is None:
+        raise HTTPException(status_code=404, detail=ARTIFACT_NOT_FOUND_DETAIL)
+    return [map_artifact_descriptor(item) for item in payload]
+
+
+@router.get(
+    "/api/cases/{case_id}/investigation-runs/{run_id}/artifacts/{artifact_id}",
+    dependencies=[Depends(reject_snapshot_selector)],
+)
+def download_investigation_run_artifact(
+    case_id: str,
+    run_id: str,
+    artifact_id: str,
+    request: Request,
+    output_root: Path = Depends(get_artifact_output_root),
+    session: Session = Depends(_historical_read_session),
+) -> Response:
+    """Checked bytes of one allowlisted published report artifact (read-only).
+
+    No client path input, no inline/latest/nearby-run fallback: every ownership,
+    containment, symlink or missing-bytes refusal is the same uniform 404, and a
+    file above 50 MiB is ``413 too_large``. The checked descriptor is the one
+    that is read.
+    """
+    try:
+        download = read_run_artifact(
+            session,
+            case_id=case_id,
+            run_id=run_id,
+            artifact_id=artifact_id,
+            output_root=output_root,
+            cwd=request.app.state.output_cwd,
+        )
+    except ArtifactTooLarge as exc:
+        raise HTTPException(
+            status_code=413, detail=ARTIFACT_TOO_LARGE_DETAIL
+        ) from exc
+    except ArtifactNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=ARTIFACT_NOT_FOUND_DETAIL
+        ) from exc
+    return Response(
+        content=download.content,
+        media_type=download.media_type,
+        headers=_artifact_download_headers(
+            download.filename, case_id, run_id, artifact_id
+        ),
+    )
+
+
 @router.get(
     "/api/cases/{case_id}/snapshots/{snapshot_id}",
     response_model=SnapshotSummaryDTO,
@@ -428,6 +671,86 @@ def get_case_snapshot(
             detail=f"Snapshot {snapshot_id} not found for case {case_id}",
         )
     return map_snapshot_summary(payload)
+
+
+# A snapshot-comparison miss must not reveal which side failed, whether the
+# snapshot id exists at all, or whether it belongs to another case.
+SNAPSHOT_COMPARISON_NOT_FOUND_DETAIL = (
+    "Snapshot comparison is not available for this case"
+)
+SNAPSHOT_COMPARISON_THIRD_CONTEXT_DETAIL = (
+    "snapshotId/snapshot_id must name the baseline or target snapshot; this "
+    "reader does not accept a third snapshot context"
+)
+
+
+def _reject_third_snapshot_context(
+    request: Request, *, baseline: str, target: str
+) -> None:
+    """422 when an unrelated snapshot selector is smuggled onto this route.
+
+    ``baseline``/``target`` are the only API query names for this reader. A
+    supplied ``snapshotId``/``snapshot_id`` is tolerated only when it repeats one
+    of those two pinned snapshots; anything else would be a hidden third snapshot
+    context.
+    """
+    supplied = [
+        request.query_params[name]
+        for name in _SNAPSHOT_SELECTOR_NAMES
+        if name in request.query_params
+    ]
+    if len(set(supplied)) > 1:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "Conflicting snapshotId and snapshot_id selectors were supplied"
+            ),
+        )
+    allowed = {baseline, target}
+    if any(value not in allowed for value in supplied):
+        raise HTTPException(
+            status_code=422, detail=SNAPSHOT_COMPARISON_THIRD_CONTEXT_DETAIL
+        )
+
+
+@router.get(
+    "/api/cases/{case_id}/snapshot-comparison",
+    response_model=SnapshotComparisonDTO,
+)
+def get_snapshot_comparison(
+    case_id: str,
+    request: Request,
+    baseline: str = Query(..., min_length=1),
+    target: str = Query(..., min_length=1),
+    limit: int = Query(default=25, ge=1, le=100),
+    offset: int = Query(default=0, ge=0, le=2147483647),
+    session: Session = Depends(_historical_read_session),
+) -> SnapshotComparisonDTO:
+    """Ad-hoc comparison of two snapshots of one case (read-only, zero writes).
+
+    Distinct from the recorded-run ``/changes`` surface: this delta is computed on
+    request and is never stored. Ordering is strict by the owning run sequence, so
+    an identical or reversed pair is **422**; unknown/cross-case snapshots are a
+    uniform **404**. An unsupported or incompatible pair is **200** with
+    ``availability: "unavailable"`` and a reason -- never an empty ready delta.
+    """
+    _reject_third_snapshot_context(request, baseline=baseline, target=target)
+    try:
+        payload = read_snapshot_comparison(
+            session,
+            case_id=case_id,
+            baseline_snapshot_id=baseline,
+            target_snapshot_id=target,
+            limit=limit,
+            offset=offset,
+        )
+    except SnapshotComparisonNotFound as exc:
+        raise HTTPException(
+            status_code=404, detail=SNAPSHOT_COMPARISON_NOT_FOUND_DETAIL
+        ) from exc
+    except SnapshotComparisonInvalid as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return map_snapshot_comparison(payload)
 
 
 @router.get(
@@ -567,7 +890,11 @@ def get_case_review_activity(
     case_id: str,
     service: TopicCaseService = Depends(get_case_service),
 ) -> ReviewActivityDTO:
-    return map_review_activity(service.get_case_review_activity(case_id))
+    try:
+        activity = service.get_case_review_activity(case_id)
+    except ValueError as exc:
+        raise _reader_missing_case_error(exc, case_id) from exc
+    return map_review_activity(activity)
 
 
 @router.post("/api/cases/{case_id}/review-actions/review", response_model=CaseListItem)
@@ -576,7 +903,10 @@ def post_case_review_action(
     request: ReviewActionRequest,
     service: TopicCaseService = Depends(get_case_service),
 ) -> CaseListItem:
-    updated = service.review_case(case_id, request.decision, request.notes)
+    try:
+        updated = service.review_case(case_id, request.decision, request.notes)
+    except ValueError as exc:
+        raise _post_write_error(exc) from exc
     return map_case_list_item(updated)
 
 
@@ -590,12 +920,15 @@ def post_case_exception_action(
     request: ExceptionActionRequest,
     service: TopicCaseService = Depends(get_case_service),
 ) -> CaseListItem:
-    updated = service.update_exception_status(
-        case_id,
-        exception_id,
-        action=request.action,
-        notes=request.notes,
-    )
+    try:
+        updated = service.update_exception_status(
+            case_id,
+            exception_id,
+            action=request.action,
+            notes=request.notes,
+        )
+    except ValueError as exc:
+        raise _post_write_error(exc) from exc
     return map_case_list_item(updated)
 
 
@@ -605,15 +938,18 @@ def post_case_annotation(
     request: AnnotationCreateRequest,
     service: TopicCaseService = Depends(get_case_service),
 ) -> ReviewAnnotationDTO:
-    item = service.add_review_annotation(
-        case_id,
-        target_type=request.targetType,
-        target_id=request.targetId,
-        annotation_type=request.annotationType,
-        content=request.content,
-        author=request.author,
-        metadata=request.metadata,
-    )
+    try:
+        item = service.add_review_annotation(
+            case_id,
+            target_type=request.targetType,
+            target_id=request.targetId,
+            annotation_type=request.annotationType,
+            content=request.content,
+            author=request.author,
+            metadata=request.metadata,
+        )
+    except ValueError as exc:
+        raise _post_write_error(exc) from exc
     return ReviewAnnotationDTO(
         id=item["id"],
         targetType=item["target_type"],
@@ -635,7 +971,11 @@ def get_case_evaluation(
     case_id: str,
     service: TopicCaseService = Depends(get_case_service),
 ) -> EvaluationSummaryDTO:
-    return map_evaluation_summary(service.get_case_evaluation_summary(case_id))
+    try:
+        summary = service.get_case_evaluation_summary(case_id)
+    except ValueError as exc:
+        raise _reader_missing_case_error(exc, case_id) from exc
+    return map_evaluation_summary(summary)
 
 
 @router.get("/api/monitoring/summary", response_model=MonitoringSummaryDTO)
@@ -691,6 +1031,15 @@ def download_case_report_manifest(
 
 def create_app() -> FastAPI:
     app = FastAPI(title="Triangulate API", version="0.1.0")
+    # Operator output-root and database settings are captured once per app
+    # instance, against the documented startup working directory. Requests,
+    # headers and artifact rows can never supply or override them, and the
+    # database path is resolved without consulting the mutable global binding.
+    app.state.output_cwd = Path.cwd()
+    app.state.output_root = resolve_output_root(cwd=app.state.output_cwd)
+    app.state.database_path = resolve_database_path(
+        configured_database_path(), cwd=app.state.output_cwd
+    )
 
     @app.exception_handler(CaseWriterConflict)
     async def _case_writer_conflict(

@@ -12,7 +12,7 @@ async def fetch_article_content(url: str) -> dict:
     from bs4 import BeautifulSoup
 
     try:
-        from trafilatura import extract, fetch_url
+        from trafilatura import extract, extract_metadata, fetch_url
 
         downloaded = fetch_url(url)
         if downloaded:
@@ -20,12 +20,11 @@ async def fetch_article_content(url: str) -> dict:
             if result and len(result) > 200:
                 title = ""
                 try:
-                    import trafilatura.metadata
-
-                    metadata = trafilatura.metadata.Metadata(downloaded)
-                    title = metadata.title or ""
+                    metadata = extract_metadata(downloaded, default_url=url)
+                    title = (metadata.title if metadata else "") or ""
                 except Exception:
-                    pass
+                    # Missing metadata is not fatal and is never invented.
+                    title = ""
 
                 parsed_url = urlparse(url)
                 return {
@@ -40,6 +39,11 @@ async def fetch_article_content(url: str) -> dict:
                     "source_type": "manual",
                 }
     except ImportError:
+        # trafilatura is an optional dependency; the fallback chain still runs.
+        pass
+    except Exception:
+        # A primary fetch/extraction failure (network, parser, encoding) degrades
+        # to the BeautifulSoup path instead of failing the capture outright.
         pass
 
     async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:

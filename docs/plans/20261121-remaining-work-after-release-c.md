@@ -6,8 +6,15 @@ owner gate (D01), a separate deployment gate, and a short list of optional hygie
 that is not part of any ticket. This document is the brief for those items; it is
 not authorization to start them.
 
-Read first: the [completion map](20261120-release-c-completion-map.md) (the Release C
-record, §7 for D01), the [Release C handoff](20261118-release-b-handoff.md), the
+**2026-11-22 follow-up:** an adversarial audit and remediation pass is recorded in
+[the audit record](../reference/20261122-adversarial-audit-record.md). It closed
+H1 (disclosure), H3 (dev notice/docs) and H4 (archive move); H2 is partly covered
+(Firefox and 390×844, no WebKit/Safari, no load test); H5 was observed but
+deliberately not stopped. D01 and deployment remain owner gates and were not
+started. No production data was written.
+
+Read first: the [completion map](../archive/20261120-release-c-completion-map.md) (the Release C
+record, §7 for D01), the [Release C handoff](../archive/20261118-release-b-handoff.md), the
 [setup and maintenance audit](../reference/20261114-setup-and-maintenance-audit.md),
 the [test-database incident record](../reference/20261115-test-database-incident.md),
 and the [search index](../architecture/20261120-search-index.md) /
@@ -94,44 +101,42 @@ Each item is independent and safe to defer. Follow the repo rule for the
 completion of any of them: focused checks, full gates where code changes, then an
 owner-approved commit/push.
 
-### H1 — Ephemeral evidence paths in the pushed docs
+### H1 — Ephemeral evidence paths in the pushed docs — **closed 2026-11-22**
 The V01 entries in the worker plan, map and handoff cite
 `/tmp/v01-evidence/…` screenshots. That directory was partially cleaned after the
-runs, so some images no longer exist. Action: either strip the ephemeral paths and
-describe the evidence in words, or archive the surviving artifacts (with a
-sha256 manifest) somewhere durable and point at that. Acceptance: no pushed doc
-implies a file that no longer exists.
+runs, and the browser/bundle artifacts are gone. The worker plan now states which
+artifact classes remain (raw JSON/log artifacts and one screenshot) and that they
+are ephemeral `/tmp` evidence, not durable. Acceptance: no pushed doc implies a
+file that no longer exists — satisfied by disclosure, not by recovery.
 
-### H2 — Browser coverage gaps
+### H2 — Browser coverage gaps — **partly closed 2026-11-22**
 Recorded as not proven in the V01 entry: the run was Chrome-driven through the
 Playwright CLI — no Firefox/Safari matrix, no mobile viewport, no load test.
-Action if wanted: repeat the fixture journey (`scripts/v01_e2e_fixture.py`) in the
-second engine and at a 390×844 viewport, and add an operator-documented load
-check for search (the benchmark in §0 is a latency record, not a load test).
-Acceptance: evidence per engine/viewport with the same GET-only assertion.
+2026-11-22 evidence: the 10-test B03 fixture journey passed in both Chromium and
+Firefox, and in Chromium at a 390×844 viewport (all mocked APIs, Vite-only).
+WebKit/Safari and a search load test remain **not proven**; the search benchmark
+is still a latency record, not a load test.
 
-### H3 — Static-data default in the frontend
-`frontend/src/services/api.ts:29-31` makes `USE_STATIC_DATA = true` whenever
-`VITE_API_BASE_URL` is unset, so a plain `npm run dev` silently serves
-`/data/*.json` and the search tab cannot work. This is documented in
-[CLI operations](../reference/cli-operations.md) but is a sharp edge. Action if
-wanted: emit a single visible dev-mode notice (or console warning) when
-`USE_STATIC_DATA` is active outside tests, or require the variable explicitly in
-`npm run dev` scripts. Acceptance: a developer cannot land on an empty search tab
-without being told why, and the production build is unchanged.
+### H3 — Static-data default in the frontend — **closed 2026-11-22**
+`frontend/src/services/api.ts` makes `USE_STATIC_DATA = true` whenever
+`VITE_API_BASE_URL` is unset. A plain `npm run dev` therefore prefers bundled
+`/data/*.json` fixtures, but a missing or non-JSON fixture now falls through to
+the same-origin `/api` path (Vite proxy), and a dev-only one-time console warning
+names the remedy. The production build is unchanged. A fixture parse failure that
+previously escaped the fallback is fixed and regression-tested.
 
-### H4 — Plans housekeeping
+### H4 — Plans housekeeping — **closed 2026-11-22**
 `docs/plans/README.md` says a plan moves to `docs/archive/` once implemented or
-superseded. The completion map and the Release C handoff now qualify. Action:
-move them, update inbound links (docs index, worker plan, architecture notes), and
-keep the archive entry labelled "implemented 2026-11-21". Acceptance: a link check
-over `docs/**/*.md` reports zero broken targets.
+superseded. The completion map and the Release C handoff were moved to
+`docs/archive/`, labelled implemented 2026-11-21, and inbound links were updated.
+A relative-file link check reports zero broken targets (anchors are not covered).
 
-### H5 — Stray local dev server
+### H5 — Stray local dev server — **still owner action**
 A Vite dev server for `frontend/` from an earlier session listens on
 `127.0.0.1:4310` (`PID 3386690`, started 2026-11-20). It was left running
-deliberately. Action: stop it when its owner no longer needs it; it is not part of
-the application.
+deliberately and the 2026-11-22 audit observed but did not stop it (ownership
+unknown). Stop it when its owner no longer needs it; it is not part of the
+application.
 
 ## 4. Rules that still apply
 

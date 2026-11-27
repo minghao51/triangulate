@@ -1,5 +1,13 @@
 # Release B handoff: P03 review and Release C (R01–V01)
 
+> **Status note (2026-11-22): the state recorded below is the pre-push
+> checkpoint of 2026-11-21 and is preserved as history. Release C was pushed to
+> `origin/main` as `dca1691`; `origin/main` now resolves to `d589359`. Current
+> status lives in [remaining work after Release C](../plans/20261121-remaining-work-after-release-c.md);
+> this handoff is an accepted historical record.
+> Archive label: implemented 2026-11-21 (moved to `docs/archive/` 2026-11-22).
+> D01 and deployment remain separate owner gates.**
+
 Date: 2026-11-20 (updated 2026-11-21). Status: **Release A and Release B are accepted; R01, R02, R03a,
 R03b and R03c are delivered, independently reviewed, accepted and pushed; R04
 (changes/grouped-history UI) is accepted after its review fix (`dfc809c`), and
@@ -7,11 +15,11 @@ Release C (S01, S02, V01) is implemented, reviewed and verified locally —
 committed (`3096c0f`, `5501842`, `0ae9359`, `b92c453`, `ff838cc`, `3594d1c`,
 `2fd91a2`, `19f42e3`, `0db8971`) and not pushed. Nothing remains to implement;
 the next step is owner review/push. D01 and deployment are owner gates.** Review evidence lives in the
-[worker plan](20261114-evidence-workbench-worker-plan.md) §7 and the architecture
+[worker plan](../plans/20261114-evidence-workbench-worker-plan.md) §7 and the architecture
 docs. This document is the Release C handoff and remains self-contained for a
 fresh agent. Contract authority remains the
-[specification](20261114-evidence-workbench-specification.md) and the
-[worker plan](20261114-evidence-workbench-worker-plan.md).
+[specification](../plans/20261114-evidence-workbench-specification.md) and the
+[worker plan](../plans/20261114-evidence-workbench-worker-plan.md).
 
 ## 1. Where things stand
 
@@ -425,14 +433,14 @@ uv run ruff check src tests --output-format concise
 
 ```text
 Finish Release C by implementing S01, then S02, then V01, following
-docs/plans/20261120-release-c-completion-map.md (which is the single brief and
+docs/archive/20261120-release-c-completion-map.md (which is the single brief and
 contains the per-ticket scope, acceptance, stop conditions, commands and return
 format). Contract authority: docs/plans/20261114-evidence-workbench-specification.md
 §8 and §11.
 
 Start by reading, in this order:
-1. docs/plans/20261120-release-c-completion-map.md
-2. docs/plans/20261118-release-b-handoff.md
+1. docs/archive/20261120-release-c-completion-map.md
+2. docs/archive/20261118-release-b-handoff.md
 3. docs/architecture/20261120-changes-ui.md and
    docs/architecture/20261118-case-snapshots.md
 4. src/storage/{database,models,migrations,write_guard,event_store,captures}.py,

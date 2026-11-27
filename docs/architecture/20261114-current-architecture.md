@@ -22,7 +22,7 @@ React browser
   -> same SQLite database and report files
 ```
 
-The mutation boundary is deliberately outside the website. Case creation, ingestion, reruns, review decisions, exception resolution, and recurring execution belong to CLI/service workflows. A future web control plane would require an explicit architectural decision, authentication, authorization, and job execution semantics; it is not an implied bug fix.
+The mutation boundary is deliberately outside the website. Case creation, ingestion, reruns, and recurring execution belong to CLI/service workflows. The inspection/read API is GET-only; the one narrow exception is three human-in-the-loop review/annotation POST routes (review decision, exception action, review annotation) documented in [`docs/reference/http-api.md`](../reference/http-api.md) and recorded in the 2026-11-22 amendment to the [specification](../plans/20261114-evidence-workbench-specification.md). A future web control plane would require an explicit architectural decision, authentication, authorization, and job execution semantics; it is not an implied bug fix.
 
 There is no checked-in GitHub Actions workflow. External schedulers can invoke the CLI, but the audit did not establish that external schedules are absent.
 
@@ -34,7 +34,7 @@ There is no checked-in GitHub Actions workflow. External schedulers can invoke t
 - `src/storage/database.py` falls back to `DATABASE_PATH` when no explicit path is provided. It maintains a process-global database object and creates SQLAlchemy sessions.
 - `src/ai/utils.py` loads `.env`; its LLM helpers read `LLM_MODEL`, `LLM_API_KEY`, and optional `LLM_BASE_URL`. Explicit AI configuration can override environment defaults. Do not assume all `.env.example` options are uniformly consumed by every component.
 - `config.toml` contains RSS, AI endpoint/model, database, logging, and ingestion settings. Some bootstrap/logging settings are independently hardcoded, so configuration is not fully centralized.
-- `triangulate serve` binds to `127.0.0.1:8000` by default. Read-only HTTP means no mutation endpoints; it does **not** mean a read-only database connection: the cached HTTP dependency initializes tables and runs migrations on first service construction.
+- `triangulate serve` binds to `127.0.0.1:8000` by default. Read-only HTTP means the inspection surface is GET-only, with the narrow review-mutation exception above; it does **not** mean a read-only database connection: the cached HTTP dependency initializes tables and runs migrations on first service construction.
 
 ## 3. Intake and case execution
 
@@ -128,3 +128,37 @@ After a focused B02 test accidentally wrote to the production database, `tests/c
 After the safety fix and subsequent B02 corrections, the parent verified **60 focused tests; 203 passed, 9 deselected overall**, plus Ruff and diff checks in a disposable project copy. Independent review confirmed the identified acquisition blockers resolved. [Delivered acquisition/checkpoint architecture](20261115-acquisition-outcomes.md) describes canonical coverage, source identity/count validation, durable failures and legacy compatibility. Final checks did not further alter the observed post-incident production DB hash/size/mtime. The original pre-B02 hash differs; matching counts are not proof of restoration. The owner authorized continuation; B02 application behavior is now accepted, but no production repair is authorized. [Incident, evidence and owner gate](../reference/20261115-test-database-incident.md).
 
 B00 verified a fresh `npm ci`, 13 component tests and a coverage smoke under Node 24.13.0/npm 11.6.2. B03 final parent checks passed lint/typecheck/build, **72 component tests and 10 mocked Chrome checks**, with independent re-review. [Delivered read-only UI architecture](20261115-read-only-ui-states.md) describes page boundaries, race-safe query/state ownership, styling and the Vite-only test launcher. Active LSP: 6 confirmed-clean frontend files, 5 inconclusive; not a universal clean claim. No live end-to-end ingestion was tested. The audit itself performed no production ingestion/migration/deletion/repair; the later B02 write incident remains separately disclosed above.
+
+## 9. Web-app refinement additions (2026-11-23)
+
+Read-only refinement pass; no new core table or migration. Full per-task evidence:
+[execution log](../plans/20261123-web-app-refinement-evidence.md).
+
+- **Read API additions (optional extension, explicit owner decision):** `GET /api/cases/{case_id}/snapshot-comparison`
+  (`src/cases/snapshot_comparison.py`, ad-hoc `mode: "ad_hoc"` delta between two immutable snapshots,
+  reusing `semantic_view`; never `build_snapshot_delta`) and
+  `GET /api/cases/{case_id}/investigation-runs/{run_id}/artifacts[/{artifact_id}]`
+  (`src/cases/artifact_reader.py`, descriptors plus `O_NOFOLLOW`/same-handle contained downloads). Both
+  are GET-only; the write surface remains the three POST families (review, exceptions, annotations) plus
+  the existing CLI mutations.
+- **Legacy values:** `VerificationStatus` columns read through a lenient `Enum` subclass, so a stored
+  value outside the six members no longer raises `LookupError` and aborts a whole case read; the DTO
+  carries the raw text additively in `rawVerificationStatus` and the UI labels it "Unrecognized status".
+  No migration was needed.
+- **Annotation targets:** `add_review_annotation` now proves case ownership for
+  `case|claim|evidence|exception|narrative` (claim via `Event.case_id`, narrative via the case-scoped
+  cluster association) and rejects missing/wrong-case targets with one uniform 422; review-activity and
+  evaluation GET routes map only a missing case to 404.
+- **Frontend structure:** grouped native-link case navigation with `aria-current` and per-view URL
+  allowlists (`services/deep-links.ts`); one shared `ReaderState` recipe plus `useVisibleRefetchInterval`
+  (`components/design-system/`); case-keyed React Query readers; session-only comparison tray
+  (`services/comparison-tray.ts`); validated local saved views (`services/saved-views.ts`); explicit
+  historical/frozen boundaries (current-only views gate a `snapshot` selector; citations/captures are
+  frozen by their own id and never receive it). The report reader renders stored markdown as inert
+  semantic JSX (no `dangerouslySetInnerHTML`) and distinguishes Pending only with recorded in-progress
+  stage evidence.
+- **Verification:** Playwright gate harness `frontend/playwright.refinement.config.ts` +
+  `frontend/tests/gate/` (synthetic `/api` mock, three viewports, screenshots outside the checkout). After the
+  follow-up pass: backend `860 passed, 9 deselected` + Ruff clean in a disposable worktree copy; frontend
+  `npm run check` pass and `516` component tests; browser gate `223 passed, 2 skipped, 0 failed` on
+  Chromium, Firefox and WebKit. Counts are dated observations, not frozen totals or SLOs.

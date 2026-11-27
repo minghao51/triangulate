@@ -26,6 +26,33 @@ def utc_now() -> datetime:
     return datetime.now(UTC)
 
 
+class LenientEnum(SQLEnum):
+    """``Enum`` whose result processor tolerates a value outside the members.
+
+    ``sqlalchemy.Enum`` raises ``LookupError`` while materialising a row whose
+    stored string is not a declared member, so one legacy/out-of-enum value
+    would fail the whole query instead of returning that row. Reads therefore
+    yield the raw stored text; the bind processor (``_db_value_for_elem``) is
+    inherited unchanged, so writes stay as strictly validated as ``Enum``.
+    """
+
+    def _object_value_for_elem(self, elem: str) -> Any:
+        try:
+            return super()._object_value_for_elem(elem)
+        except LookupError:
+            return elem
+
+
+def verification_status_value(value: Any) -> Any:
+    """Return the stored verification-status text for a member or raw value.
+
+    A legacy/out-of-enum ``verification_status`` is read as a raw string (see
+    ``LenientEnum``) and raw strings have no ``.value``, so serialization and
+    comparisons must not assume an enum member. ``None`` stays ``None``.
+    """
+    return getattr(value, "value", value)
+
+
 class VerificationStatus(str, enum.Enum):
     """Verification status for claims and events."""
 
@@ -183,7 +210,7 @@ class Event(Base):
     title: Mapped[str] = mapped_column(String, nullable=False)
     summary: Mapped[str | None] = mapped_column(Text)
     verification_status: Mapped[VerificationStatus] = mapped_column(
-        SQLEnum(VerificationStatus), nullable=False, index=True
+        LenientEnum(VerificationStatus), nullable=False, index=True
     )
     location_country_code: Mapped[str | None] = mapped_column(String, nullable=True)
     location_lat: Mapped[float | None] = mapped_column(Float, nullable=True)
@@ -210,7 +237,9 @@ class Claim(Base):
     source_id: Mapped[str | None] = mapped_column(String, ForeignKey("sources.id"))
     claim_text: Mapped[str] = mapped_column(Text, nullable=False)
     narrative_cluster_id: Mapped[str | None] = mapped_column(String)
-    verification_status: Mapped[VerificationStatus] = mapped_column(SQLEnum(VerificationStatus), nullable=False)
+    verification_status: Mapped[VerificationStatus] = mapped_column(
+        LenientEnum(VerificationStatus), nullable=False
+    )
     party_id: Mapped[str | None] = mapped_column(String, ForeignKey("parties.id"))
 
     # Party investigation fields

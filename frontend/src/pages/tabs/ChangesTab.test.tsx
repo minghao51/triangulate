@@ -4,12 +4,21 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 
 import ChangesTab from './ChangesTab';
+import { EvidenceInspector } from '../../components/inspector/EvidenceInspector';
 import { ApiError } from '../../services/api-error';
 import type {
+  CaptureWindow,
   ChangeItem,
+  CitationDetail,
   ClaimDetail,
+  EvidenceDetail,
   InvestigationRun,
   RunChanges,
+  SnapshotComparison,
+  SnapshotComparisonItem,
+  SnapshotComparisonRef,
+  SnapshotComparisonSide,
+  SnapshotComparisonUnavailableReason,
 } from '../../types/backend-models';
 
 const apiMocks = vi.hoisted(() => ({
@@ -17,6 +26,10 @@ const apiMocks = vi.hoisted(() => ({
   getInvestigationRun: vi.fn(),
   getRunChanges: vi.fn(),
   getClaimDetail: vi.fn(),
+  getEvidenceDetail: vi.fn(),
+  getCitationDetail: vi.fn(),
+  getCaptureWindow: vi.fn(),
+  getSnapshotComparison: vi.fn(),
 }));
 
 vi.mock('../../services/api', () => apiMocks);
@@ -98,6 +111,112 @@ function renderTab(entry = '/cases/case-1/changes') {
             }
           />
           <Route path="/cases/:id/evidence" element={<LocationProbe />} />
+        </Routes>
+      </MemoryRouter>
+    </QueryClientProvider>
+  );
+}
+
+/** Fixtures for the frozen citation/capture readers hosted by the inspector. */
+const evidenceSource = {
+  id: 'ev-1',
+  eventId: null,
+  caseArticleId: null,
+  evidenceType: 'article',
+  sourceType: 'rss',
+  title: 'Example source',
+  publisher: 'Example Publisher',
+  originUrl: 'https://example.com/original',
+  canonicalUrl: 'https://example.com/canonical',
+  publishedAt: '2026-10-01T12:00:00Z',
+  verificationStatus: 'unknown',
+  credibilityTier: null,
+  requiresHumanReview: false,
+  captureMetadata: {},
+} as const;
+
+const captureSummary = {
+  id: 'cap-1',
+  evidenceId: 'ev-1',
+  textSha256: 'sha-1',
+  normalizedTextSha256: 'nsha-1',
+  normalizationVersion: 'v1',
+  captureKind: 'live',
+  recordedAt: '2026-11-01T10:00:00Z',
+  observedAt: '2026-11-01T09:00:00Z',
+  metadata: {},
+  charLength: 19,
+  isCurrent: true,
+} as const;
+
+function makeEvidenceDetail(): EvidenceDetail {
+  return {
+    ...evidenceSource,
+    currentCaptureId: 'cap-1',
+    captures: [{ ...captureSummary }],
+    relatedClaims: [],
+  };
+}
+
+function makeCitationDetail(): CitationDetail {
+  return {
+    id: 'cit-1',
+    caseId: 'case-1',
+    captureId: 'cap-1',
+    evidenceId: 'ev-1',
+    originalClaimId: 'claim-gone',
+    claimSignature: 'sig-frozen',
+    claimText: 'Frozen claim text',
+    relationship: 'reported_by',
+    quote: 'Frozen capture',
+    startChar: 0,
+    endChar: 14,
+    alignmentStatus: 'exact',
+    alignmentVersion: 'v1',
+    assessmentOrigin: 'collector',
+    assessmentVersion: 'v1',
+    assessmentMetadata: {},
+    recordedAt: '2026-11-01T10:00:00Z',
+    liveClaimPresent: false,
+    liveClaimId: null,
+    evidence: { ...evidenceSource },
+    capture: { ...captureSummary },
+  };
+}
+
+function makeCaptureWindow(): CaptureWindow {
+  return {
+    captureId: 'cap-1',
+    evidenceId: 'ev-1',
+    start: 0,
+    length: 19,
+    totalLength: 19,
+    text: 'Frozen capture text',
+    textSha256: 'sha-1',
+    captureKind: 'live',
+    recordedAt: '2026-11-01T10:00:00Z',
+    observedAt: '2026-11-01T09:00:00Z',
+    metadata: {},
+  };
+}
+
+function renderInspector(entry: string) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <MemoryRouter initialEntries={[entry]}>
+        <Routes>
+          <Route
+            path="/cases/:id/evidence"
+            element={
+              <>
+                <LocationProbe />
+                <EvidenceInspector caseId="case-1" />
+              </>
+            }
+          />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>
@@ -682,5 +801,730 @@ describe('ChangesTab', () => {
       expect(apiMocks.getInvestigationRuns).toHaveBeenCalledTimes(2)
     );
     expect(await screen.findByText('Unchanged')).toBeTruthy();
+  });
+});
+
+describe('ChangesTab observer stamp and frozen navigation', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    apiMocks.getInvestigationRuns.mockResolvedValue(makeRunList([makeRun()]));
+    apiMocks.getRunChanges.mockResolvedValue(makeChanges());
+    apiMocks.getInvestigationRun.mockRejectedValue(
+      new ApiError('Run not found', 404)
+    );
+  });
+
+  it('renders the observer run as an observer stamp, never as an actor or cause', async () => {
+    apiMocks.getRunChanges.mockResolvedValue(
+      makeChanges({
+        items: [
+          makeChange({
+            type: 'claim_added',
+            entityId: 'claim-new',
+            originRunId: 'run-1',
+            observedByRunId: 'run-2',
+          }),
+        ],
+        total: 1,
+      })
+    );
+
+    renderTab();
+
+    const rows = await waitFor(() => {
+      const observed = observedRows();
+      expect(observed).toHaveLength(1);
+      return observed;
+    });
+    const text = rows[0].textContent ?? '';
+
+    // Both run references are labelled as recording/observation facts.
+    expect(text).toMatch(/Recorded by run/);
+    expect(text).toMatch(/Observed by run/);
+    // The observer stamp never becomes an actor, author or cause.
+    expect(text).not.toMatch(/caused by|changed by|author|actor|attributed to|created by/i);
+    expect(within(rows[0]).getByText('run-2')).toBeTruthy();
+  });
+
+  it('shows a frozen claim read-only and offers the explicit current-claim transition', async () => {
+    apiMocks.getRunChanges.mockResolvedValue(
+      makeChanges({
+        items: [
+          makeChange({
+            type: 'claim_no_longer_extracted',
+            entityId: 'claim-gone',
+            before: { text: 'Withdrawn assertion.', claimSignature: 'sig-gone' },
+            after: null,
+          }),
+        ],
+        total: 1,
+      })
+    );
+    apiMocks.getClaimDetail.mockResolvedValue({
+      id: 'claim-gone',
+      caseId: 'case-1',
+      eventId: null,
+      claimText: 'Withdrawn assertion.',
+      claimSignature: 'sig-gone',
+      verificationStatus: 'alleged',
+      verificationProvenance: 'unknown',
+      type: 'allegation',
+      controversyScore: null,
+      narrativeClusterId: null,
+      partyPositions: {},
+      counts: { supportCount: 0, opposeCount: 0, sourceDiversityCount: 0, evidenceCount: 0 },
+      passages: [],
+      snapshotId: 'snap-1',
+      liveState: {
+        present: false,
+        claimSignature: null,
+        textMatchesSnapshot: null,
+        currentCaptureId: null,
+        currentCaptureMatchesSnapshot: null,
+      },
+    } satisfies ClaimDetail);
+
+    renderTab('/cases/case-1/changes?run=run-2&claim=claim-gone&snapshot=snap-1');
+
+    const panel = await screen.findByRole('region', { name: 'Frozen claim' });
+    expect(await within(panel).findByText('Withdrawn assertion.')).toBeTruthy();
+    // Frozen context is explicit and read-only.
+    expect(panel.textContent ?? '').toMatch(/read-only/i);
+    expect(panel.textContent ?? '').toContain('snap-1');
+    // No editing control exists on a frozen observation.
+    expect(within(panel).queryByRole('textbox')).toBeNull();
+    expect(apiMocks.getClaimDetail).toHaveBeenCalledWith('case-1', 'claim-gone', 'snap-1');
+
+    const openCurrent = within(panel).getByRole('link', { name: 'Open current claim' });
+    expect(openCurrent.getAttribute('href')).toBe(
+      '/cases/case-1/changes?run=run-2&claim=claim-gone'
+    );
+
+    fireEvent.click(openCurrent);
+
+    // Only this explicit transition drops the historical selector.
+    await waitFor(() =>
+      expect(screen.getByTestId('location').textContent).toBe(
+        '/cases/case-1/changes?run=run-2&claim=claim-gone'
+      )
+    );
+    expect(screen.queryByRole('region', { name: 'Frozen claim' })).toBeNull();
+    expect(apiMocks.getClaimDetail).toHaveBeenCalledTimes(1);
+  });
+
+  it('never forwards the browser snapshot to the frozen citation reader', async () => {
+    apiMocks.getCitationDetail.mockResolvedValue(makeCitationDetail());
+    apiMocks.getCaptureWindow.mockResolvedValue(makeCaptureWindow());
+
+    renderInspector('/cases/case-1/evidence?citation=cit-1&snapshot=snap-1');
+
+    await waitFor(() => expect(apiMocks.getCitationDetail).toHaveBeenCalled());
+    // Two positional arguments only: the citation is frozen by its own ID.
+    expect(apiMocks.getCitationDetail).toHaveBeenCalledWith('case-1', 'cit-1');
+    expect(apiMocks.getCitationDetail.mock.calls[0]).toHaveLength(2);
+    expect(JSON.stringify(apiMocks.getCitationDetail.mock.calls[0])).not.toMatch(/snap-1/);
+
+    // The frozen citation renders its frozen context read-only.
+    expect(await screen.findByRole('heading', { name: 'Frozen claim text' })).toBeDefined();
+    expect(screen.getByText(/cannot be edited here/i)).toBeDefined();
+    expect(screen.queryByRole('textbox')).toBeNull();
+  });
+
+  it('never forwards the browser snapshot to the capture-window reader', async () => {
+    apiMocks.getEvidenceDetail.mockResolvedValue(makeEvidenceDetail());
+    apiMocks.getCaptureWindow.mockResolvedValue(makeCaptureWindow());
+
+    renderInspector('/cases/case-1/evidence?evidence=ev-1&capture=cap-1&snapshot=snap-1');
+
+    await waitFor(() => expect(apiMocks.getCaptureWindow).toHaveBeenCalled());
+    const captureCall = apiMocks.getCaptureWindow.mock.calls[0];
+    expect(captureCall).toHaveLength(4);
+    expect(captureCall[0]).toBe('case-1');
+    expect(captureCall[1]).toBe('ev-1');
+    expect(captureCall[2]).toBe('cap-1');
+    expect(JSON.stringify(captureCall[3] ?? {})).not.toMatch(/snapshot/i);
+
+    // The snapshot-aware evidence reader, by contrast, keeps the selector.
+    expect(apiMocks.getEvidenceDetail).toHaveBeenCalledWith('case-1', 'ev-1', 'snap-1');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// F18 / X01 ad-hoc snapshot comparison
+// ---------------------------------------------------------------------------
+
+const AD_HOC_URL =
+  '/cases/case-1/changes?mode=ad_hoc&baselineSnapshot=snap-1&targetSnapshot=snap-2';
+
+const UNAVAILABLE_REASONS: SnapshotComparisonUnavailableReason[] = [
+  'incompatible_schema',
+  'incompatible_identity',
+  'incompatible_policy',
+  'unknown_version',
+  'payload_unreadable',
+];
+
+function makeComparisonSide(
+  overrides: Partial<SnapshotComparisonSide> = {}
+): SnapshotComparisonSide {
+  return {
+    sequence: 1,
+    createdAt: '2026-03-01T09:00:00Z',
+    schemaVersion: 'case-snapshot-v1',
+    identityVersion: 'claim-signature-sha256-v1',
+    policyVersion: 'case-history-policy-v1',
+    ...overrides,
+  };
+}
+
+function makeComparisonRef(
+  overrides: Partial<SnapshotComparisonRef> = {}
+): SnapshotComparisonRef {
+  return {
+    snapshotId: 'snap-1',
+    claimId: null,
+    evidenceId: null,
+    captureId: null,
+    citationId: null,
+    ...overrides,
+  };
+}
+
+function makeComparisonItem(
+  overrides: Partial<SnapshotComparisonItem> = {}
+): SnapshotComparisonItem {
+  return {
+    entityType: 'claims',
+    entityId: 'claim-1',
+    changeKind: 'field_changed',
+    changedFields: ['verificationStatus'],
+    before: { verificationStatus: 'ALLEGED' },
+    after: { verificationStatus: 'CONFIRMED' },
+    refs: {
+      baseline: makeComparisonRef({ snapshotId: 'snap-1', claimId: 'claim-1' }),
+      target: makeComparisonRef({ snapshotId: 'snap-2', claimId: 'claim-1' }),
+    },
+    ...overrides,
+  };
+}
+
+function makeComparison(overrides: Partial<SnapshotComparison> = {}): SnapshotComparison {
+  return {
+    mode: 'ad_hoc',
+    comparisonPolicyVersion: 'snapshot-comparison-policy-v1',
+    baselineSnapshotId: 'snap-1',
+    targetSnapshotId: 'snap-2',
+    baselineRunId: 'run-1',
+    targetRunId: 'run-2',
+    baselineCoverage: 'complete_requested_scope',
+    targetCoverage: 'complete_requested_scope',
+    baselineMetadata: makeComparisonSide({ sequence: 1 }),
+    targetMetadata: makeComparisonSide({
+      sequence: 2,
+      createdAt: '2026-03-04T10:05:00Z',
+    }),
+    availability: 'ready',
+    unavailableReason: null,
+    items: [],
+    total: 0,
+    limit: 25,
+    offset: 0,
+    hasMore: false,
+    ...overrides,
+  };
+}
+
+describe('ChangesTab ad-hoc snapshot comparison', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    apiMocks.getInvestigationRuns.mockResolvedValue(makeRunList([makeRun()]));
+    apiMocks.getRunChanges.mockResolvedValue(makeChanges());
+    apiMocks.getInvestigationRun.mockRejectedValue(
+      new ApiError('Investigation run not found', 404)
+    );
+    apiMocks.getSnapshotComparison.mockResolvedValue(makeComparison());
+  });
+
+  it('renders a distinct ad-hoc panel with two labelled observations', async () => {
+    renderTab(AD_HOC_URL);
+
+    const panel = await screen.findByRole('region', {
+      name: /ad-hoc snapshot comparison/i,
+    });
+    // Distinct from recorded changes, semantically and visually.
+    expect(panel.getAttribute('data-mode')).toBe('ad_hoc');
+    expect(within(panel).getByRole('heading', { name: /Ad-hoc snapshot comparison/i })).toBeTruthy();
+
+    await waitFor(() =>
+      expect(apiMocks.getSnapshotComparison).toHaveBeenCalledWith('case-1', {
+        baseline: 'snap-1',
+        target: 'snap-2',
+        limit: 25,
+        offset: 0,
+      })
+    );
+
+    const baseline = panel.querySelector('[data-observation="baseline"]') as HTMLElement;
+    const target = panel.querySelector('[data-observation="target"]') as HTMLElement;
+    expect(within(baseline).getByRole('heading', { name: /Baseline observation/i })).toBeTruthy();
+    expect(within(target).getByRole('heading', { name: /Target observation/i })).toBeTruthy();
+
+    for (const [card, snapshotId, runId] of [
+      [baseline, 'snap-1', 'run-1'],
+      [target, 'snap-2', 'run-2'],
+    ] as const) {
+      const text = card.textContent ?? '';
+      expect(text).toContain(snapshotId);
+      expect(text).toContain(runId);
+      expect(text).toContain('case-snapshot-v1');
+      expect(text).toContain('claim-signature-sha256-v1');
+      expect(text).toContain('case-history-policy-v1');
+      expect(text).toContain('Complete requested scope');
+      expect(text).toMatch(/Snapshot saved at/i);
+    }
+
+    // No observer/cause/actor attribution, no deletion language and no
+    // recorded-run concepts.
+    expect(panel.textContent ?? '').not.toMatch(/observed by run|observedByRun|caused by|changed by/i);
+    expect(panel.textContent ?? '').not.toMatch(/deleted|deletion|removed|retracted|no longer extracted/i);
+    expect(panel.textContent ?? '').not.toMatch(/Grouped runs/i);
+
+    // The ad-hoc mode never reads or pins grouped runs.
+    expect(apiMocks.getInvestigationRuns).not.toHaveBeenCalled();
+    expect(apiMocks.getRunChanges).not.toHaveBeenCalled();
+    expect(screen.getByTestId('location').textContent).toBe(AD_HOC_URL);
+  });
+
+  it('leaves the recorded view untouched when the mode is absent', async () => {
+    renderTab('/cases/case-1/changes?run=run-2');
+
+    expect(await screen.findByText('Unchanged')).toBeTruthy();
+    expect(screen.queryByRole('region', { name: /ad-hoc snapshot comparison/i })).toBeNull();
+    expect(apiMocks.getSnapshotComparison).not.toHaveBeenCalled();
+    expect(screen.getByTestId('location').textContent).not.toContain('mode=');
+  });
+
+  it('renders every unavailable reason with no zero-change claim', async () => {
+    for (const reason of UNAVAILABLE_REASONS) {
+      apiMocks.getSnapshotComparison.mockResolvedValueOnce(
+        makeComparison({
+          availability: 'unavailable',
+          unavailableReason: reason,
+          items: [],
+          total: null,
+          hasMore: false,
+        })
+      );
+
+      const view = renderTab(AD_HOC_URL);
+      const panel = await screen.findByRole('region', {
+        name: /ad-hoc snapshot comparison/i,
+      });
+      await within(panel).findByText('Comparison unavailable');
+
+      expect(panel.textContent ?? '').toContain(reason);
+      expect(panel.textContent ?? '').toMatch(/is not a zero-change result/i);
+      // Neither the ready-zero sentence nor a pager may appear.
+      expect(within(panel).queryByText(/No changes between these observations/i)).toBeNull();
+      expect(within(panel).queryByTestId('changes-adhoc-range')).toBeNull();
+      // The two observations are still reported independently.
+      expect(panel.querySelector('[data-observation="baseline"]')).not.toBeNull();
+      expect(panel.querySelector('[data-observation="target"]')).not.toBeNull();
+
+      view.unmount();
+    }
+  });
+
+  it('says there are no changes between the observations for a ready zero total', async () => {
+    renderTab(AD_HOC_URL);
+
+    const panel = await screen.findByRole('region', {
+      name: /ad-hoc snapshot comparison/i,
+    });
+    await within(panel).findByText('No changes between these observations');
+    expect(panel.textContent ?? '').toMatch(/No entity-level differences were reported/i);
+    expect(within(panel).queryByText('Comparison unavailable')).toBeNull();
+  });
+
+  it('renders returned items in order with changed fields and per-side refs', async () => {
+    apiMocks.getSnapshotComparison.mockResolvedValue(
+      makeComparison({
+        items: [
+          makeComparisonItem(),
+          makeComparisonItem({
+            entityType: 'evidence',
+            entityId: 'ev-1',
+            changeKind: 'entity_added',
+            changedFields: [],
+            before: null,
+            after: { title: 'Port Alden report' },
+            refs: {
+              baseline: makeComparisonRef({ snapshotId: 'snap-1' }),
+              target: makeComparisonRef({
+                snapshotId: 'snap-2',
+                evidenceId: 'ev-1',
+                captureId: 'cap-1',
+              }),
+            },
+          }),
+          makeComparisonItem({
+            entityType: 'citations',
+            entityId: 'cit-1',
+            changeKind: 'entity_absent',
+            changedFields: [],
+            before: { quote: 'Frozen quotation' },
+            after: null,
+            refs: {
+              baseline: makeComparisonRef({ snapshotId: 'snap-1', citationId: 'cit-1' }),
+              target: makeComparisonRef({ snapshotId: 'snap-2' }),
+            },
+          }),
+          makeComparisonItem({
+            entityType: 'captures',
+            entityId: 'cap-only',
+            changeKind: 'entity_absent',
+            changedFields: [],
+            before: { textSha256: 'sha-1' },
+            after: null,
+            refs: {
+              baseline: makeComparisonRef({ snapshotId: 'snap-1', captureId: 'cap-only' }),
+              target: makeComparisonRef({ snapshotId: 'snap-2' }),
+            },
+          }),
+        ],
+        total: 4,
+      })
+    );
+
+    renderTab(AD_HOC_URL);
+
+    const panel = await screen.findByRole('region', {
+      name: /ad-hoc snapshot comparison/i,
+    });
+    const rows = await waitFor(() => {
+      const items = within(panel)
+        .getByRole('list', { name: 'Ad-hoc comparison items' })
+        .querySelectorAll('li');
+      expect(items).toHaveLength(4);
+      return [...items] as HTMLElement[];
+    });
+
+    // Order is exactly the order the reader returned.
+    expect(rows[0].textContent).toContain('claim-1');
+    expect(rows[0].textContent).toContain('Fields changed between observations');
+    expect(rows[0].textContent).toContain('Verification');
+    expect(rows[0].textContent).toContain('ALLEGED');
+    expect(rows[0].textContent).toContain('CONFIRMED');
+
+    // Only the ids that side actually carries become recorded links.
+    expect(
+      within(rows[0]).getByRole('link', { name: 'Baseline frozen claim' }).getAttribute('href')
+    ).toBe('/cases/case-1/changes?claim=claim-1&snapshot=snap-1');
+    expect(
+      within(rows[1]).getByRole('link', { name: 'Target frozen evidence' }).getAttribute('href')
+    ).toBe('/cases/case-1/evidence?evidence=ev-1&snapshot=snap-2');
+    expect(
+      within(rows[1]).getByRole('link', { name: 'Target frozen capture' }).getAttribute('href')
+    ).toBe('/cases/case-1/evidence?evidence=ev-1&capture=cap-1&snapshot=snap-2');
+    expect(within(rows[1]).queryByRole('link', { name: /Baseline/ })).toBeNull();
+
+    const citation = within(rows[2]).getByRole('link', { name: 'Baseline frozen citation' });
+    expect(citation.getAttribute('href')).toBe('/cases/case-1/evidence?citation=cit-1');
+    expect(citation.getAttribute('href')).not.toContain('snapshot');
+
+    // A capture reference without its evidence id gets no invented link.
+    expect(rows[3].textContent).toContain('Absent from a later observation');
+    expect(within(rows[3]).queryByRole('link')).toBeNull();
+  });
+
+  it('never forwards the browser snapshot to the citation or capture readers', async () => {
+    apiMocks.getSnapshotComparison.mockResolvedValue(
+      makeComparison({
+        items: [
+          makeComparisonItem({
+            entityType: 'citations',
+            entityId: 'cit-1',
+            changedFields: ['quote'],
+            before: { quote: 'before' },
+            after: { quote: 'after' },
+            refs: {
+              baseline: makeComparisonRef({
+                snapshotId: 'snap-1',
+                citationId: 'cit-1',
+                evidenceId: 'ev-1',
+                captureId: 'cap-1',
+              }),
+              target: makeComparisonRef({
+                snapshotId: 'snap-2',
+                citationId: 'cit-1',
+                evidenceId: 'ev-1',
+                captureId: 'cap-1',
+              }),
+            },
+          }),
+        ],
+        total: 1,
+      })
+    );
+
+    // The browser's `snapshot` selector is present and must not be forwarded.
+    renderTab(`${AD_HOC_URL}&snapshot=snap-2`);
+
+    const panel = await screen.findByRole('region', {
+      name: /ad-hoc snapshot comparison/i,
+    });
+    const rows = await waitFor(() => {
+      const items = within(panel)
+        .getByRole('list', { name: 'Ad-hoc comparison items' })
+        .querySelectorAll('li');
+      expect(items).toHaveLength(1);
+      return [...items] as HTMLElement[];
+    });
+
+    const citation = within(rows[0]).getByRole('link', { name: 'Baseline frozen citation' });
+    expect(citation.getAttribute('href')).not.toContain('snapshot=');
+
+    fireEvent.click(citation);
+    await waitFor(() =>
+      expect(screen.getByTestId('location').textContent).toContain('citation=cit-1')
+    );
+    expect(screen.getByTestId('location').textContent).not.toContain('snapshot=');
+
+    // Neither frozen reader ever receives a snapshot argument.
+    expect(apiMocks.getCitationDetail).not.toHaveBeenCalled();
+    expect(apiMocks.getCaptureWindow).not.toHaveBeenCalled();
+    for (const mock of [apiMocks.getCitationDetail, apiMocks.getCaptureWindow]) {
+      expect(JSON.stringify(mock.mock.calls)).not.toMatch(/snapshot/i);
+    }
+  });
+
+  it('keeps both pinned snapshots across a reload and the historical context link', async () => {
+    const view = renderTab(AD_HOC_URL);
+
+    const panel = await screen.findByRole('region', {
+      name: /ad-hoc snapshot comparison/i,
+    });
+    const permalink = within(panel).getByRole('link', {
+      name: 'Permalink for this comparison',
+    });
+    expect(permalink.getAttribute('href')).toBe(AD_HOC_URL);
+
+    await within(panel).findByRole('heading', { name: /Target observation/i });
+    const target = panel.querySelector('[data-observation="target"]') as HTMLElement;
+    const historical = within(target).getByRole('link', {
+      name: 'Open recorded changes pinned to the target observation',
+    });
+    expect(historical.getAttribute('href')).toBe(
+      '/cases/case-1/changes?run=run-2&snapshot=snap-2'
+    );
+
+    // Reload: the permalink itself re-issues the same pinned pair, never "latest".
+    view.unmount();
+    renderTab(permalink.getAttribute('href') as string);
+    await waitFor(() =>
+      expect(apiMocks.getSnapshotComparison).toHaveBeenCalledWith('case-1', {
+        baseline: 'snap-1',
+        target: 'snap-2',
+        limit: 25,
+        offset: 0,
+      })
+    );
+    expect(screen.getByTestId('location').textContent).toBe(AD_HOC_URL);
+  });
+
+  it('opens the historical changes context with that snapshot still pinned', async () => {
+    const view = renderTab(AD_HOC_URL);
+    const panel = await screen.findByRole('region', {
+      name: /ad-hoc snapshot comparison/i,
+    });
+    await within(panel).findByRole('heading', { name: /Target observation/i });
+    const target = panel.querySelector('[data-observation="target"]') as HTMLElement;
+
+    fireEvent.click(
+      within(target).getByRole('link', {
+        name: 'Open recorded changes pinned to the target observation',
+      })
+    );
+    const pinned = '/cases/case-1/changes?run=run-2&snapshot=snap-2';
+    await waitFor(() => expect(screen.getByTestId('location').textContent).toBe(pinned));
+    const comparisonCalls = apiMocks.getSnapshotComparison.mock.calls.length;
+
+    // Reload the recorded view at that pinned URL: the snapshot is never dropped.
+    view.unmount();
+    renderTab(pinned);
+    await waitFor(() =>
+      expect(apiMocks.getRunChanges).toHaveBeenCalledWith('case-1', 'run-2', {
+        limit: 25,
+        offset: 0,
+      })
+    );
+    expect(screen.getByTestId('location').textContent).toBe(pinned);
+    // The recorded view never falls back to an ad-hoc comparison request.
+    expect(apiMocks.getSnapshotComparison).toHaveBeenCalledTimes(comparisonCalls);
+  });
+
+  it('requires both selectors with an explicit message and no request', async () => {
+    renderTab('/cases/case-1/changes?mode=ad_hoc&baselineSnapshot=snap-1');
+
+    const panel = await screen.findByRole('region', {
+      name: /ad-hoc snapshot comparison/i,
+    });
+    await within(panel).findByText('Two snapshots are required');
+    expect(panel.textContent ?? '').toMatch(/The target snapshot is not pinned/i);
+    expect(panel.textContent ?? '').toMatch(/never substituted/i);
+
+    // No request, no defaulted selector, no pinned run.
+    expect(apiMocks.getSnapshotComparison).not.toHaveBeenCalled();
+    expect(apiMocks.getInvestigationRuns).not.toHaveBeenCalled();
+    expect(apiMocks.getRunChanges).not.toHaveBeenCalled();
+    expect(screen.getByTestId('location').textContent).toBe(
+      '/cases/case-1/changes?mode=ad_hoc&baselineSnapshot=snap-1'
+    );
+
+    // Supplying the missing side is an explicit operator action.
+    fireEvent.change(within(panel).getByLabelText('Target snapshot ID'), {
+      target: { value: 'snap-2' },
+    });
+    fireEvent.click(within(panel).getByRole('button', { name: 'Compare these snapshots' }));
+
+    await waitFor(() =>
+      expect(screen.getByTestId('location').textContent).toBe(AD_HOC_URL)
+    );
+    await waitFor(() =>
+      expect(apiMocks.getSnapshotComparison).toHaveBeenCalledWith('case-1', {
+        baseline: 'snap-1',
+        target: 'snap-2',
+        limit: 25,
+        offset: 0,
+      })
+    );
+  });
+
+  it('paginates the ad-hoc delta without touching the recorded pager', async () => {
+    apiMocks.getSnapshotComparison.mockResolvedValue(
+      makeComparison({
+        items: [makeComparisonItem()],
+        total: 60,
+        offset: 25,
+        hasMore: true,
+      })
+    );
+
+    renderTab(`${AD_HOC_URL}&offset=25`);
+
+    await waitFor(() =>
+      expect(apiMocks.getSnapshotComparison).toHaveBeenCalledWith('case-1', {
+        baseline: 'snap-1',
+        target: 'snap-2',
+        limit: 25,
+        offset: 25,
+      })
+    );
+    expect((await screen.findByTestId('changes-adhoc-range')).textContent).toContain(
+      '26–26 of 60'
+    );
+    expect(apiMocks.getRunChanges).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+    await waitFor(() =>
+      expect(screen.getByTestId('location').textContent).toContain('offset=50')
+    );
+    expect(screen.getByTestId('location').textContent).toBe(`${AD_HOC_URL}&offset=50`);
+    await waitFor(() =>
+      expect(apiMocks.getSnapshotComparison).toHaveBeenCalledWith('case-1', {
+        baseline: 'snap-1',
+        target: 'snap-2',
+        limit: 25,
+        offset: 50,
+      })
+    );
+  });
+
+  it('adds the mode switch additively and restores the recorded view', async () => {
+    renderTab('/cases/case-1/changes?run=run-2');
+
+    await waitFor(() =>
+      expect(apiMocks.getRunChanges).toHaveBeenCalledWith('case-1', 'run-2', {
+        limit: 25,
+        offset: 0,
+      })
+    );
+
+    fireEvent.click(screen.getByRole('link', { name: 'Compare two snapshots' }));
+    await waitFor(() =>
+      expect(screen.getByTestId('location').textContent).toBe(
+        '/cases/case-1/changes?mode=ad_hoc'
+      )
+    );
+    const panel = await screen.findByRole('region', {
+      name: /ad-hoc snapshot comparison/i,
+    });
+    expect(panel.getAttribute('data-mode')).toBe('ad_hoc');
+    expect(within(panel).getByText('Two snapshots are required')).toBeTruthy();
+    expect(apiMocks.getSnapshotComparison).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('link', { name: 'Recorded changes' }));
+    await waitFor(() =>
+      expect(screen.getByTestId('location').textContent).toContain('run=run-2')
+    );
+    expect(screen.getByTestId('location').textContent).not.toContain('mode=');
+    expect(await screen.findByText('Unchanged')).toBeTruthy();
+  });
+});
+
+describe('ChangesTab stray citation normalization (R02)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    apiMocks.getInvestigationRuns.mockResolvedValue(makeRunList([makeRun()]));
+    apiMocks.getRunChanges.mockResolvedValue(makeChanges());
+    apiMocks.getInvestigationRun.mockRejectedValue(
+      new ApiError('Investigation run not found', 404)
+    );
+    apiMocks.getClaimDetail.mockResolvedValue({
+      id: 'claim-gone',
+      caseId: 'case-1',
+      eventId: null,
+      claimText: 'Withdrawn assertion.',
+      claimSignature: 'sig-gone',
+      verificationStatus: 'alleged',
+      verificationProvenance: 'unknown',
+      type: 'allegation',
+      controversyScore: null,
+      narrativeClusterId: null,
+      partyPositions: {},
+      counts: { supportCount: 0, opposeCount: 0, sourceDiversityCount: 0, evidenceCount: 0 },
+      passages: [],
+      snapshotId: 'snap-1',
+      liveState: {
+        present: false,
+        claimSignature: null,
+        textMatchesSnapshot: null,
+        currentCaptureId: null,
+        currentCaptureMatchesSnapshot: null,
+      },
+    } satisfies ClaimDetail);
+  });
+
+  it('keeps the pinned snapshot and drops a stray citation from the committed URL', async () => {
+    renderTab(
+      '/cases/case-1/changes?run=run-2&claim=claim-gone&snapshot=snap-1&citation=cit-1'
+    );
+
+    const panel = await screen.findByRole('region', { name: 'Frozen claim' });
+    await waitFor(() =>
+      expect(apiMocks.getClaimDetail).toHaveBeenCalledWith('case-1', 'claim-gone', 'snap-1')
+    );
+    // The stray citation is not a selector this view reads.
+    expect(apiMocks.getCitationDetail).not.toHaveBeenCalled();
+
+    fireEvent.click(within(panel).getByRole('link', { name: 'Open current claim' }));
+
+    // Allowlist normalization drops the citation and keeps run/claim.
+    await waitFor(() =>
+      expect(screen.getByTestId('location').textContent).toBe(
+        '/cases/case-1/changes?run=run-2&claim=claim-gone'
+      )
+    );
+    expect(apiMocks.getClaimDetail).toHaveBeenCalledTimes(1);
   });
 });

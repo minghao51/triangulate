@@ -1,0 +1,50 @@
+<!-- viewport: 375×812 mobile -->
+<svg xmlns="http://www.w3.org/2000/svg" width="375" height="812" viewBox="0 0 375 812" role="img" aria-labelledby="wf-title wf-desc">
+  <title id="wf-title">Search — invalid filters — mobile</title>
+  <desc id="wf-desc">Search — invalid filters — mobile (mobile, 375x812). Proposal wireframe with synthetic data, not implementation evidence. Numbered regions: 1 Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest; 2 Search — invalid filters header — title, synthetic context and available actions; 3 Invalid filter combination — status applies to claims only and conflicts with evidence-only type. · frame 1 of 2; 4 422 state — invalid combination is explained inline. · frame 1 of 2.</desc>
+  <g id="ui" font-family="-apple-system, system-ui, sans-serif">
+    <rect x="0" y="0" width="368" height="808" fill="#fff"/>
+    <rect x="8" y="8" width="352" height="792" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <rect x="16" y="32" width="328" height="48" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="32" y="56" font-size="14" fill="#000" font-weight="600">TRIANGULATE</text>
+    <rect x="264" y="40" width="64" height="32" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="296" y="56" text-anchor="middle" font-size="12" fill="#000">Menu</text>
+    <rect x="16" y="104" width="328" height="80" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="32" y="144" font-size="14" fill="#000" font-weight="600">Search — invalid filters</text>
+    <text x="32" y="168" font-size="12" fill="#666">Proposal · synthetic · not built</text>
+    <g data-pane="p1">
+    <rect x="16" y="208" width="328" height="232" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="32" y="240" font-size="12" fill="#000">Query</text>
+    <rect x="32" y="248" width="296" height="32" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="40" y="272" font-size="12" fill="#000">quartz</text>
+    <text x="32" y="296" font-size="12" fill="#000">Type</text>
+    <rect x="32" y="304" width="296" height="32" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="40" y="328" font-size="12" fill="#000">evidence</text>
+    <text x="32" y="352" font-size="12" fill="#000">Status</text>
+    <rect x="32" y="360" width="296" height="32" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="40" y="384" font-size="12" fill="#000">alleged</text>
+    <rect x="32" y="392" width="96" height="32" fill="#e6e6e6" stroke="#000" stroke-width="1.5"/>
+    <text x="40" y="416" font-size="12" fill="#666">Search (d…</text>
+    <rect x="136" y="392" width="96" height="32" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="144" y="416" font-size="12" fill="#000">Clear</text>
+    </g>
+    <g data-pane="p2">
+    <rect x="16" y="464" width="328" height="184" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="32" y="504" font-size="14" fill="#000" font-weight="600">Invalid filters</text>
+    <rect x="32" y="512" width="296" height="120" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="48" y="544" font-size="14" fill="#000" font-weight="600">422 · incompatible type and s…</text>
+    <text x="48" y="568" font-size="12" fill="#666">Status narrows to claim results</text>
+    <text x="48" y="592" font-size="12" fill="#666">Rejected before any index query</text>
+    </g>
+  </g>
+  <g id="annotations" font-family="-apple-system, system-ui, sans-serif">
+    <rect data-region="1" x="8" y="24" width="344" height="64" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="2" x="8" y="96" width="344" height="96" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="3" x="8" y="200" width="344" height="248" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="4" x="8" y="456" width="344" height="200" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <text x="0" y="48" font-size="12" font-weight="600" fill="#000">1</text>
+    <text x="0" y="120" font-size="12" font-weight="600" fill="#000">2</text>
+    <text x="0" y="224" font-size="12" font-weight="600" fill="#000">3</text>
+    <text x="0" y="480" font-size="12" font-weight="600" fill="#000">4</text>
+  </g>
+</svg>

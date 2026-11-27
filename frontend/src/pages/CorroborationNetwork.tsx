@@ -1,11 +1,34 @@
 import React, { useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import type { Claim, Evidence, Party } from '../types/backend-models';
 import { getClaimsForCase, getEvidenceForCase, getPartiesForCase } from '../services/api';
+import { buildClaimEvidenceUrl, buildInspectorUrl } from '../services/deep-links';
 import { NetworkGraph, type NodeType } from '../components/data-visualization/NetworkGraph';
 import Card, { CardHeader, CardTitle, CardBody } from '../components/design-system/Card';
 import Badge from '../components/design-system/Badge';
+import Button from '../components/design-system/Button';
+
+interface StanceBasis {
+  kind: 'model-derived' | 'recorded' | 'unknown';
+  label: string;
+  origin: string;
+}
+
+/**
+ * Recorded basis of a party stance. `isModelInferred` is the only recorded
+ * provenance flag, and it is not a human-review marker: a missing flag stays
+ * "Origin not recorded" instead of being inferred, and a stance is never
+ * rendered as verified or true.
+ */
+const describeStanceBasis = (party: { isModelInferred?: boolean }): StanceBasis => {
+  if (typeof party.isModelInferred !== 'boolean') {
+    return { kind: 'unknown', label: 'Stance basis not recorded', origin: 'Origin not recorded' };
+  }
+  return party.isModelInferred
+    ? { kind: 'model-derived', label: 'Model-derived stance', origin: 'Origin: model-derived record' }
+    : { kind: 'recorded', label: 'Recorded stance', origin: 'Origin: recorded party record' };
+};
 
 export const CorroborationNetwork: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -13,29 +36,56 @@ export const CorroborationNetwork: React.FC = () => {
   const [selectedNodeType, setSelectedNodeType] = useState<NodeType | null>(null);
 
   // Fetch case data
-  const { data: claims = [], isLoading: claimsLoading } = useQuery({
+  const claimsQuery = useQuery({
     queryKey: ['claims', id],
     queryFn: () => getClaimsForCase(id || ''),
     enabled: !!id,
     refetchInterval: 15000, // 15s polling
   });
 
-  const { data: evidence = [], isLoading: evidenceLoading } = useQuery({
+  const evidenceQuery = useQuery({
     queryKey: ['evidence', id],
     queryFn: () => getEvidenceForCase(id || ''),
     enabled: !!id,
     refetchInterval: 15000,
   });
 
-  const { data: parties = [], isLoading: partiesLoading } = useQuery({
+  const partiesQuery = useQuery({
     queryKey: ['parties', id],
     queryFn: () => getPartiesForCase(id || ''),
     enabled: !!id,
     refetchInterval: 15000,
   });
 
+  const {
+    data: claims = [],
+    isLoading: claimsLoading,
+    error: claimsError,
+    refetch: refetchClaims,
+  } = claimsQuery;
+  const {
+    data: evidence = [],
+    isLoading: evidenceLoading,
+    error: evidenceError,
+    refetch: refetchEvidence,
+  } = evidenceQuery;
+  const {
+    data: parties = [],
+    isLoading: partiesLoading,
+    error: partiesError,
+    refetch: refetchParties,
+  } = partiesQuery;
+
   const isLoading = claimsLoading || evidenceLoading || partiesLoading;
-  const error = null; // Simplified error handling
+  // Any failed read makes the counts and the graph incomplete, so it is surfaced
+  // as one unavailable state instead of a plausible-looking empty network.
+  const error = claimsError ?? evidenceError ?? partiesError;
+
+  const retryAll = () => {
+    void refetchClaims();
+    void refetchEvidence();
+    void refetchParties();
+  };
 
   // Find selected node data
   const selectedNodeData = React.useMemo(() => {
@@ -52,6 +102,9 @@ export const CorroborationNetwork: React.FC = () => {
         return null;
     }
   }, [selectedNodeId, selectedNodeType, claims, evidence, parties]);
+
+  const selectedPartyBasis =
+    selectedNodeType === 'party' && selectedNodeData ? describeStanceBasis(selectedNodeData as Party) : null;
 
   const handleNodeClick = (nodeId: string, nodeType: NodeType) => {
     setSelectedNodeId(nodeId);
@@ -86,6 +139,31 @@ export const CorroborationNetwork: React.FC = () => {
         </div>
       </div>
 
+      {isLoading ? (
+        <Card>
+          <CardBody className="py-16">
+            <div className="text-center text-[#9aa1b3]">Loading network data...</div>
+          </CardBody>
+        </Card>
+      ) : error ? (
+        <Card>
+          <CardBody className="py-16">
+            <div role="alert" className="text-center space-y-3">
+              <div className="text-[#ff4757]">Network data is unavailable</div>
+              <div className="text-sm text-[#9aa1b3]">
+                {error instanceof Error && error.message
+                  ? error.message
+                  : 'Some case network data could not be loaded.'}
+              </div>
+              <div className="text-sm text-[#9aa1b3]">
+                Counts, connections and the graph stay hidden until every read succeeds.
+              </div>
+              <Button variant="secondary" onClick={retryAll}>Retry</Button>
+            </div>
+          </CardBody>
+        </Card>
+      ) : (
+        <>
       {/* Statistics Bar */}
       <div className="grid grid-cols-4 gap-4">
         <Card padding="sm">
@@ -132,16 +210,12 @@ export const CorroborationNetwork: React.FC = () => {
       <div className="grid grid-cols-3 gap-6">
         {/* Network Graph */}
         <div className="col-span-2">
-          {isLoading ? (
+          {claims.length === 0 && evidence.length === 0 && parties.length === 0 ? (
             <Card>
               <CardBody className="py-16">
-                <div className="text-center text-[#9aa1b3]">Loading network data...</div>
-              </CardBody>
-            </Card>
-          ) : error ? (
-            <Card>
-              <CardBody className="py-16">
-                <div className="text-center text-[#ff4757]">Failed to load network data</div>
+                <div className="text-center text-[#9aa1b3]">
+                  No claims, evidence or parties have been recorded for this case.
+                </div>
               </CardBody>
             </Card>
           ) : (
@@ -200,6 +274,34 @@ export const CorroborationNetwork: React.FC = () => {
                           </div>
                         </div>
                       </div>
+                      <div>
+                        <div className="text-xs text-[#9aa1b3] uppercase tracking-wider mb-1">Recorded links</div>
+                        <ul className="space-y-1">
+                          <li>
+                            <Link
+                              to={buildClaimEvidenceUrl(id!, (selectedNodeData as Claim).id)}
+                              className="text-sm text-[#00d4ff] hover:underline"
+                            >
+                              Open claim in the evidence inspector
+                            </Link>
+                          </li>
+                          {(selectedNodeData as Claim).evidence.map((link) => (
+                            <li key={link.id}>
+                              <Link
+                                to={buildInspectorUrl(id!, { evidenceId: link.id })}
+                                className="text-sm text-[#00d4ff] hover:underline"
+                              >
+                                Link {link.id}
+                              </Link>
+                            </li>
+                          ))}
+                        </ul>
+                        {(selectedNodeData as Claim).evidence.length === 0 && (
+                          <div className="text-xs text-[#9aa1b3] mt-1">
+                            No evidence links are recorded for this claim.
+                          </div>
+                        )}
+                      </div>
                     </>
                   )}
 
@@ -244,6 +346,34 @@ export const CorroborationNetwork: React.FC = () => {
                           </div>
                         </div>
                       </div>
+                      <div>
+                        <div className="text-xs text-[#9aa1b3] uppercase tracking-wider mb-1">Recorded links</div>
+                        <ul className="space-y-1">
+                          <li>
+                            <Link
+                              to={buildInspectorUrl(id!, { evidenceId: (selectedNodeData as Evidence).id })}
+                              className="text-sm text-[#00d4ff] hover:underline"
+                            >
+                              Open evidence in the inspector
+                            </Link>
+                          </li>
+                          {(selectedNodeData as Evidence).linkedClaims.map((claimId) => (
+                            <li key={claimId}>
+                              <Link
+                                to={buildClaimEvidenceUrl(id!, claimId)}
+                                className="text-sm text-[#00d4ff] hover:underline"
+                              >
+                                Claim {claimId}
+                              </Link>
+                            </li>
+                          ))}
+                        </ul>
+                        {(selectedNodeData as Evidence).linkedClaims.length === 0 && (
+                          <div className="text-xs text-[#9aa1b3] mt-1">
+                            No claim links are recorded for this evidence.
+                          </div>
+                        )}
+                      </div>
                     </>
                   )}
 
@@ -263,8 +393,20 @@ export const CorroborationNetwork: React.FC = () => {
                         <div>
                           <div className="text-xs text-[#9aa1b3] uppercase tracking-wider mb-1">Stance</div>
                           <div className="text-sm text-[#f0f2f5] capitalize">
-                            {(selectedNodeData as Party).overallStance}
+                            {(selectedNodeData as Party).overallStance ?? 'not recorded'}
                           </div>
+                          {selectedPartyBasis && (
+                            <>
+                              <div
+                                className={`text-xs text-[#9aa1b3] stance-basis stance-basis--${selectedPartyBasis.kind}`}
+                              >
+                                {selectedPartyBasis.label}
+                              </div>
+                              <div className="text-xs text-[#9aa1b3] stance-origin">
+                                {selectedPartyBasis.origin}
+                              </div>
+                            </>
+                          )}
                         </div>
                         <div>
                           <div className="text-xs text-[#9aa1b3] uppercase tracking-wider mb-1">Claims</div>
@@ -348,6 +490,8 @@ export const CorroborationNetwork: React.FC = () => {
           </Card>
         </div>
       </div>
+        </>
+      )}
     </div>
   );
 };

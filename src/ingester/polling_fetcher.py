@@ -98,6 +98,7 @@ class PollingFetcher:
             source_type: Source type
             url: Source URL
         """
+        session = None
         try:
             session = self.db.get_session_sync()
 
@@ -121,7 +122,12 @@ class PollingFetcher:
             session.commit()
 
         except Exception as e:
+            if session is not None:
+                session.rollback()
             logger.error(f"Error updating source {name}: {e}")
+        finally:
+            if session is not None:
+                session.close()
 
     def store_articles(self, articles: list[dict]) -> int:
         """Store raw articles in database.

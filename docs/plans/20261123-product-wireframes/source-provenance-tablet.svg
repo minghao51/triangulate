@@ -1,0 +1,85 @@
+<!-- viewport: 768×1024 tablet -->
+<svg xmlns="http://www.w3.org/2000/svg" width="768" height="1024" viewBox="0 0 768 1024" role="img" aria-labelledby="wf-title wf-desc">
+  <title id="wf-title">Source provenance — tablet</title>
+  <desc id="wf-desc">Source provenance — tablet (tablet, 768x1024). Proposal wireframe with synthetic data, not implementation evidence. Numbered regions: 1 Primary navigation (top bar) — GET reads only; CLI owns ingest and runs; 2 Source provenance header — title, synthetic context and available actions; 3 Case tabs (12) — active Evidence; tabs are navigation, not state changes; 4 Dependency groups — connected components with method and status; a singleton group has no detected edge. · frame 1 of 1; 5 Group detail — the copy edge is labelled dependency_detected and explicitly not independent; groups without an edge stay unknown. · frame 1 of 1; 6 Coverage limits — v1 detection scope, disclosed rather than implied. · frame 1 of 1.</desc>
+  <g id="ui" font-family="-apple-system, system-ui, sans-serif">
+    <rect x="0" y="0" width="768" height="1024" fill="#fff"/>
+    <rect x="8" y="8" width="752" height="1008" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <rect x="32" y="32" width="704" height="48" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="48" y="56" font-size="14" fill="#000" font-weight="600">TRIANGULATE</text>
+    <text x="168" y="56" font-size="12" fill="#000">Dashboard</text>
+    <text x="248" y="56" font-size="12" fill="#000">Cases</text>
+    <text x="304" y="56" font-size="12" fill="#000">Network</text>
+    <text x="368" y="56" font-size="12" fill="#000" font-weight="600">Sources</text>
+    <text x="432" y="56" font-size="12" fill="#000">Narratives</text>
+    <text x="520" y="56" font-size="12" fill="#000">Monitoring</text>
+    <text x="608" y="56" font-size="12" fill="#000">AI info</text>
+    <rect x="32" y="104" width="704" height="88" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="48" y="152" font-size="20" fill="#000" font-weight="600">Source provenance</text>
+    <text x="48" y="176" font-size="12" fill="#666">Observed groups only · Proposal · synthetic · not built</text>
+    <rect x="32" y="216" width="704" height="72" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="48" y="248" font-size="12" fill="#000">Overview</text>
+    <text x="128" y="248" font-size="12" fill="#000" font-weight="600">Evidence</text>
+    <text x="208" y="248" font-size="12" fill="#000">Claims</text>
+    <text x="272" y="248" font-size="12" fill="#000">Compare</text>
+    <text x="344" y="248" font-size="12" fill="#000">Parties</text>
+    <text x="416" y="248" font-size="12" fill="#000">Map</text>
+    <text x="48" y="272" font-size="12" fill="#000">Timeline</text>
+    <text x="128" y="272" font-size="12" fill="#000">Exceptions</text>
+    <text x="224" y="272" font-size="12" fill="#000">Report</text>
+    <text x="288" y="272" font-size="12" fill="#000">Changes</text>
+    <text x="360" y="272" font-size="12" fill="#000">Search</text>
+    <text x="424" y="272" font-size="12" fill="#000">Run history</text>
+    <g data-pane="p1">
+    <rect x="32" y="312" width="704" height="216" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="48" y="352" font-size="14" fill="#000" font-weight="600">Dependency groups</text>
+    <text x="48" y="376" font-size="12" fill="#000" font-weight="600">Group</text>
+    <text x="168" y="376" font-size="12" fill="#000" font-weight="600">Sources</text>
+    <text x="288" y="376" font-size="12" fill="#000" font-weight="600">Method</text>
+    <text x="464" y="376" font-size="12" fill="#000" font-weight="600">Status</text>
+    <line x1="48" y1="384" x2="720" y2="384" stroke="#000" stroke-width="1.5"/>
+    <text x="48" y="416" font-size="12" fill="#000">group-1</text>
+    <text x="168" y="416" font-size="12" fill="#000">2</text>
+    <text x="288" y="416" font-size="12" fill="#000">identical normalized…</text>
+    <text x="464" y="416" font-size="12" fill="#000">dependency_detected</text>
+    <text x="48" y="448" font-size="12" fill="#000">group-2</text>
+    <text x="168" y="448" font-size="12" fill="#000">1</text>
+    <text x="288" y="448" font-size="12" fill="#000">no detected edge</text>
+    <text x="464" y="448" font-size="12" fill="#000">unknown</text>
+    <text x="48" y="480" font-size="12" fill="#000">group-3</text>
+    <text x="168" y="480" font-size="12" fill="#000">1</text>
+    <text x="288" y="480" font-size="12" fill="#000">no detected edge</text>
+    <text x="464" y="480" font-size="12" fill="#000">unknown</text>
+    <text x="48" y="504" font-size="12" fill="#666">No detected edge is not proven independence; repeated wire copies count once for breadth.</text>
+    </g>
+    <g data-pane="p2">
+    <rect x="32" y="552" width="704" height="160" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="48" y="592" font-size="14" fill="#000" font-weight="600">Group detail</text>
+    <text x="48" y="616" font-size="12" fill="#000">group-1 · dependency_detected</text>
+    <text x="48" y="640" font-size="12" fill="#000">Copy edge: identical normalized text (2 sources)</text>
+    <text x="48" y="664" font-size="12" fill="#000">Not independent evidence · copy warning</text>
+    <text x="48" y="688" font-size="12" fill="#000">group-2/3: no detected edge · independence unknown</text>
+    </g>
+    <g data-pane="p3">
+    <rect x="32" y="736" width="704" height="136" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="48" y="776" font-size="14" fill="#000" font-weight="600">Coverage limits</text>
+    <text x="48" y="800" font-size="12" fill="#666">Exact text and documented origin only</text>
+    <text x="48" y="824" font-size="12" fill="#666">Near-duplicate syndication is not detected</text>
+    <text x="48" y="848" font-size="12" fill="#666">Publisher key stays provisional unless configured</text>
+    </g>
+  </g>
+  <g id="annotations" font-family="-apple-system, system-ui, sans-serif">
+    <rect data-region="1" x="24" y="24" width="720" height="64" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="2" x="24" y="96" width="720" height="104" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="3" x="24" y="208" width="720" height="88" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="4" x="24" y="304" width="720" height="232" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="5" x="24" y="544" width="720" height="176" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="6" x="24" y="728" width="720" height="152" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <text x="16" y="48" font-size="12" font-weight="600" fill="#000">1</text>
+    <text x="16" y="120" font-size="12" font-weight="600" fill="#000">2</text>
+    <text x="16" y="232" font-size="12" font-weight="600" fill="#000">3</text>
+    <text x="16" y="328" font-size="12" font-weight="600" fill="#000">4</text>
+    <text x="16" y="568" font-size="12" font-weight="600" fill="#000">5</text>
+    <text x="16" y="752" font-size="12" font-weight="600" fill="#000">6</text>
+  </g>
+</svg>

@@ -5,6 +5,7 @@ import { MemoryRouter, Route, Routes, useLocation, useNavigate } from 'react-rou
 
 import SearchTab from './SearchTab';
 import { ApiError } from '../../services/api-error';
+import { SAVED_VIEWS_STORAGE_KEY } from '../../services/saved-views';
 import type { CaseSearchResponse } from '../../types/backend-models';
 
 const apiMocks = vi.hoisted(() => ({ getCaseSearch: vi.fn() }));
@@ -46,6 +47,8 @@ describe('SearchTab', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     apiMocks.getCaseSearch.mockResolvedValue(response());
+    window.localStorage.removeItem(SAVED_VIEWS_STORAGE_KEY);
+    window.localStorage.removeItem('other.feature');
   });
 
   it('derives all request parameters from URL state', async () => {
@@ -265,5 +268,171 @@ describe('SearchTab', () => {
     await waitFor(() => expect(screen.getByTestId('location').textContent).toContain('q=keyboard'));
     expect(apiMocks.getCaseSearch).toHaveBeenCalledWith('case-1', expect.objectContaining({ q: 'keyboard' }));
     expect(Object.keys(apiMocks)).toEqual(['getCaseSearch']);
+  });
+});
+
+describe('SearchTab inline validation, snippets and local saved views', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    apiMocks.getCaseSearch.mockResolvedValue(response());
+    window.localStorage.removeItem(SAVED_VIEWS_STORAGE_KEY);
+    window.localStorage.removeItem('other.feature');
+  });
+
+  const storedViews = (): Array<Record<string, unknown>> => {
+    const raw = window.localStorage.getItem(SAVED_VIEWS_STORAGE_KEY);
+    return raw ? (JSON.parse(raw).views as Array<Record<string, unknown>>) : [];
+  };
+
+  it('shows an inline date-range message and issues no further request', async () => {
+    renderSearch('/cases/case-1/search?q=term&publishedFrom=2026-02-01T00%3A00%3A00.000Z');
+    await screen.findByText('Found term');
+    expect(apiMocks.getCaseSearch).toHaveBeenCalledTimes(1);
+
+    fireEvent.change(screen.getByLabelText('Published before'), { target: { value: '2026-01-01' } });
+
+    expect(await screen.findByText(/Published from must be on or before/)).toBeTruthy();
+    expect(apiMocks.getCaseSearch).toHaveBeenCalledTimes(1);
+    expect(screen.getByLabelText('Published before').getAttribute('aria-invalid')).toBe('true');
+  });
+
+  it('validates an over-long query inline before any network call', () => {
+    renderSearch();
+    const input = screen.getByRole('searchbox', { name: 'Search terms' });
+    fireEvent.change(input, { target: { value: 'x'.repeat(257) } });
+    fireEvent.submit(screen.getByRole('search'));
+
+    expect(screen.getByText(/Search terms are limited to 256 characters/)).toBeTruthy();
+    expect(apiMocks.getCaseSearch).not.toHaveBeenCalled();
+    expect(screen.getByTestId('location').textContent).toBe('/cases/case-1/search');
+    expect(input.getAttribute('aria-invalid')).toBe('true');
+  });
+
+  it('states the matched field as text instead of relying on colour', async () => {
+    renderSearch('/cases/case-1/search?q=term');
+    await screen.findByText('Found term');
+    expect(screen.getByText('Matched in body')).toBeTruthy();
+    expect(screen.getByText('evidence')).toBeTruthy();
+  });
+
+  it('saves filters without query text and applies only allowlisted metadata', async () => {
+    renderSearch('/cases/case-1/search?q=term&type=evidence&publisher=AP&offset=50');
+    await screen.findByText('Found term');
+
+    fireEvent.change(screen.getByLabelText('Saved view name'), { target: { value: 'Evidence by AP' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save current filters' }));
+    expect(await screen.findByText(/Saved “Evidence by AP”/)).toBeTruthy();
+
+    const [entry] = storedViews();
+    expect(entry.filters).toEqual({ type: 'evidence', publisher: 'AP' });
+    expect(entry).not.toHaveProperty('q');
+    expect(entry).not.toHaveProperty('offset');
+    expect(entry.includeQuery).toBe(false);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
+    await waitFor(() => expect(screen.getByTestId('location').textContent).toBe('/cases/case-1/search?q=term'));
+    const callsBeforeApply = apiMocks.getCaseSearch.mock.calls.length;
+
+    fireEvent.click(screen.getByRole('button', { name: 'Apply saved view Evidence by AP' }));
+    await waitFor(() => {
+      const location = screen.getByTestId('location').textContent ?? '';
+      expect(location).toBe('/cases/case-1/search?type=evidence&publisher=AP');
+      expect(location).not.toContain('offset=');
+      expect(location).not.toContain('q=');
+    });
+    // The saved view carried no query text, so applying it clears the query and
+    // issues no new search request; only allowlisted filter metadata is restored.
+    expect(apiMocks.getCaseSearch.mock.calls.length).toBe(callsBeforeApply);
+    expect((screen.getByLabelText('Publisher') as HTMLInputElement).value).toBe('AP');
+    expect((screen.getByLabelText('Result type') as HTMLSelectElement).value).toBe('evidence');
+  });
+
+  it('stores search text only after the explicit consent step', async () => {
+    renderSearch('/cases/case-1/search?q=term');
+    await screen.findByText('Found term');
+
+    fireEvent.change(screen.getByLabelText('Saved view name'), { target: { value: 'Without text' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save current filters' }));
+    expect(await screen.findByText(/Saved “Without text”/)).toBeTruthy();
+    expect(storedViews()[0]).not.toHaveProperty('q');
+
+    fireEvent.change(screen.getByLabelText('Saved view name'), { target: { value: 'With text' } });
+    fireEvent.click(screen.getByLabelText(/Store the search text in this saved view/));
+    fireEvent.click(screen.getByRole('button', { name: 'Save current filters' }));
+    expect(await screen.findByText(/Saved “With text”/)).toBeTruthy();
+
+    const withText = storedViews().find((entry) => entry.name === 'With text');
+    expect(withText).toMatchObject({ q: 'term', includeQuery: true });
+
+    // Applying the consented view restores the query text and refetches.
+    fireEvent.click(screen.getByRole('button', { name: 'Apply saved view With text' }));
+    await waitFor(() =>
+      expect(apiMocks.getCaseSearch).toHaveBeenLastCalledWith(
+        'case-1',
+        expect.objectContaining({ q: 'term', offset: 0 })
+      )
+    );
+  });
+
+  it('refreshes on a storage event without applying a view or resetting the form', async () => {
+    renderSearch('/cases/case-1/search?q=term');
+    await screen.findByText('Found term');
+
+    window.localStorage.setItem(
+      SAVED_VIEWS_STORAGE_KEY,
+      JSON.stringify({
+        schemaVersion: 1,
+        views: [
+          {
+            id: 'view-remote',
+            caseId: 'case-1',
+            name: 'Other tab view',
+            view: 'search',
+            filters: { type: 'claim' },
+            includeQuery: false,
+          },
+        ],
+      })
+    );
+    window.dispatchEvent(new StorageEvent('storage', { key: SAVED_VIEWS_STORAGE_KEY }));
+
+    expect(await screen.findByText('Other tab view')).toBeTruthy();
+    expect(screen.getByTestId('location').textContent).toBe('/cases/case-1/search?q=term');
+    expect((screen.getByRole('searchbox', { name: 'Search terms' }) as HTMLInputElement).value).toBe('term');
+    expect(apiMocks.getCaseSearch).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows a visible ephemeral fallback when storage rejects the write', async () => {
+    const setItemSpy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('QuotaExceededError');
+    });
+    renderSearch('/cases/case-1/search?q=term');
+    await screen.findByText('Found term');
+
+    fireEvent.change(screen.getByLabelText('Saved view name'), { target: { value: 'Quota view' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save current filters' }));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toMatch(/session only/i);
+    expect(screen.getByText('Quota view')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Apply saved view Quota view' })).toBeTruthy();
+    expect(window.localStorage.getItem(SAVED_VIEWS_STORAGE_KEY)).toBeNull();
+    setItemSpy.mockRestore();
+  });
+
+  it('discards only its own namespace on reset and never calls localStorage.clear', async () => {
+    window.localStorage.setItem('other.feature', 'keep-me');
+    window.localStorage.setItem(SAVED_VIEWS_STORAGE_KEY, '{broken');
+    const clearSpy = vi.spyOn(Storage.prototype, 'clear');
+    renderSearch('/cases/case-1/search?q=term');
+    await screen.findByText('Found term');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Discard stored saved views' }));
+
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Discard stored saved views' })).toBeNull());
+    expect(window.localStorage.getItem(SAVED_VIEWS_STORAGE_KEY)).toBeNull();
+    expect(window.localStorage.getItem('other.feature')).toBe('keep-me');
+    expect(clearSpy).not.toHaveBeenCalled();
+    clearSpy.mockRestore();
   });
 });

@@ -4,7 +4,7 @@ Date: 2026-11-20. Status: **implemented (backend `0ae9359`/`b92c453`, workspace
 UI `ff838cc`/`3594d1c`), reviewed and verified locally in the V01 pass; not
 pushed**. Consumes the [S01 transactional case search index](20261120-search-index.md);
 adds no migration and no writer. Contract authority: [specification](../plans/20261114-evidence-workbench-specification.md)
-§8/§9 and the [Release C completion map](../plans/20261120-release-c-completion-map.md) §5.
+§8/§9 and the [Release C completion map](../archive/20261120-release-c-completion-map.md) §5.
 
 ## Route
 

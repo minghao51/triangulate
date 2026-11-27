@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { getClaimsOverviewForCase, getPartiesForCase, getTimelineForCase } from '../services/api';
+import { buildClaimEvidenceUrl } from '../services/deep-links';
 import { TimelineChart } from '../components/data-visualization/TimelineChart';
 import Card, { CardHeader, CardTitle, CardBody } from '../components/design-system/Card';
-import type { BadgeProps } from '../components/design-system/Badge';
 import Badge from '../components/design-system/Badge';
 import Button from '../components/design-system/Button';
+import ReaderState from '../components/design-system/ReaderState';
 import './NarrativeLandscape.css';
 
 /**
@@ -17,13 +18,24 @@ import './NarrativeLandscape.css';
  * inference, and no fallback clusters are invented when none are persisted.
  */
 
-const stanceVariant = (stance: string | null): BadgeProps['variant'] => {
-  switch (stance) {
-    case 'for': return 'success';
-    case 'against': return 'danger';
-    case 'mixed': return 'warning';
-    default: return 'neutral';
+/**
+ * A stanced record is never a truth verdict: the badge stays neutral and the
+ * recorded basis (`isModelInferred`) is spelled out in text. Absent provenance
+ * stays "Origin not recorded" — it is never inferred as human review.
+ */
+interface StanceBasis {
+  kind: 'model-derived' | 'recorded' | 'unknown';
+  label: string;
+  origin: string;
+}
+
+const describeStanceBasis = (party: { isModelInferred?: boolean }): StanceBasis => {
+  if (typeof party.isModelInferred !== 'boolean') {
+    return { kind: 'unknown', label: 'Stance basis not recorded', origin: 'Origin not recorded' };
   }
+  return party.isModelInferred
+    ? { kind: 'model-derived', label: 'Model-derived stance', origin: 'Origin: model-derived record' }
+    : { kind: 'recorded', label: 'Recorded stance', origin: 'Origin: recorded party record' };
 };
 
 interface ViewProps {
@@ -140,10 +152,12 @@ const NarrativeLandscapeView: React.FC<ViewProps> = ({ caseId }) => {
               </CardHeader>
               <CardBody>
                 {narratives.length === 0 ? (
-                  <div className="narrative-landscape-state" role="status">
-                    No narrative clusters have been persisted for this case. Nothing is grouped or
-                    inferred here.
-                  </div>
+                  <ReaderState
+                    state="empty"
+                    className="narratives-empty"
+                    title="No narrative clusters recorded"
+                    description="No narrative clusters have been persisted for this case. Nothing is grouped or inferred here."
+                  />
                 ) : (
                   <ul className="narrative-cluster-list">
                     {narratives.map((cluster) => {
@@ -174,7 +188,14 @@ const NarrativeLandscapeView: React.FC<ViewProps> = ({ caseId }) => {
                                 </p>
                               ) : (
                                 selectedClusterClaims.slice(0, 3).map((claim) => (
-                                  <p key={claim.id} className="narrative-cluster-claim">{claim.text}</p>
+                                  <p key={claim.id} className="narrative-cluster-claim">
+                                    <Link
+                                      className="narrative-cluster-claim-link"
+                                      to={buildClaimEvidenceUrl(caseId, claim.id)}
+                                    >
+                                      {claim.text}
+                                    </Link>
+                                  </p>
                                 ))
                               )}
                               {selectedClusterClaims.length > 3 && (
@@ -203,7 +224,9 @@ const NarrativeLandscapeView: React.FC<ViewProps> = ({ caseId }) => {
                   </div>
                 ) : (
                   <ul className="narrative-party-list">
-                    {parties.map((party) => (
+                    {parties.map((party) => {
+                      const basis = describeStanceBasis(party);
+                      return (
                       <li key={party.id} className="narrative-party">
                         <div className="narrative-party-head">
                           <div>
@@ -212,16 +235,20 @@ const NarrativeLandscapeView: React.FC<ViewProps> = ({ caseId }) => {
                               <div className="narrative-party-description">{party.description}</div>
                             )}
                           </div>
-                          <Badge variant={stanceVariant(party.overallStance)} size="sm">
-                            {party.overallStance}
+                          <Badge variant="neutral" size="sm">
+                            {party.overallStance ?? 'not recorded'}
                           </Badge>
                         </div>
                         <div className="narrative-party-meta">
                           <span>{party.associatedClaimsCount} associated claims</span>
-                          <span>{party.isModelInferred ? 'Model-inferred record' : 'Recorded entity'}</span>
+                          <span className={`narrative-party-basis narrative-party-basis--${basis.kind}`}>
+                            {basis.label}
+                          </span>
+                          <span className="narrative-party-origin">{basis.origin}</span>
                         </div>
                       </li>
-                    ))}
+                      );
+                    })}
                   </ul>
                 )}
               </CardBody>

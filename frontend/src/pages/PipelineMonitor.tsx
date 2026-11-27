@@ -7,6 +7,7 @@ import { PipelineFlow } from '../components/data-visualization/PipelineFlow';
 import Card, { CardHeader, CardTitle, CardBody } from '../components/design-system/Card';
 import Button from '../components/design-system/Button';
 import Badge from '../components/design-system/Badge';
+import { useVisibleRefetchInterval } from '../components/design-system/reader-polling';
 import './PipelineMonitor.css';
 
 /**
@@ -51,7 +52,9 @@ const statusColor = (status: RunHistoryItem['status']): string => {
 const PipelineMonitor: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const [autoRefresh, setAutoRefresh] = useState(true);
-  const pollInterval = autoRefresh ? 5000 : false;
+  // One 5 s budget shared by both reads, cancelled while the tab is hidden and
+  // switched off entirely when the operator unchecks polling.
+  const pollInterval = useVisibleRefetchInterval(5000, autoRefresh);
 
   const {
     data: caseData,
@@ -59,6 +62,7 @@ const PipelineMonitor: React.FC = () => {
     error: caseError,
     refetch: refetchCase,
     isFetching: caseFetching,
+    dataUpdatedAt: caseUpdatedAt,
   } = useQuery({
     queryKey: ['case-detail', id],
     queryFn: () => getCaseDetail(id!),
@@ -84,6 +88,26 @@ const PipelineMonitor: React.FC = () => {
   const unknownValue = '—';
 
   const currentStage = caseData?.case?.stage ?? null;
+
+  // "Last fetched" is the client's own request time. "Last observed" is the
+  // newest timestamp recorded on a saved attempt — a server-side fact.
+  const lastFetched =
+    Number.isFinite(caseUpdatedAt) && caseUpdatedAt > 0
+      ? new Date(caseUpdatedAt).toLocaleTimeString()
+      : '—';
+  const observedTimestamps = recordedRuns
+    .map((run) => (run.timestamp ? Date.parse(run.timestamp) : Number.NaN))
+    .filter((value) => Number.isFinite(value));
+  const hasUnparseableObserved =
+    historyAvailable &&
+    recordedRuns.some((run) => run.timestamp && !Number.isFinite(Date.parse(run.timestamp)));
+  const lastObserved = !historyAvailable
+    ? unknownValue
+    : hasUnparseableObserved
+      ? 'Unknown (unparseable recorded timestamp)'
+      : observedTimestamps.length === 0
+        ? 'Never recorded'
+        : new Date(Math.max(...observedTimestamps)).toLocaleString();
   const distinctStages = new Set(recordedRuns.map((run) => run.stage)).size;
   const succeeded = recordedRuns.filter((run) => run.status === 'success').length;
   const errored = recordedRuns.filter((run) => run.status === 'error').length;
@@ -119,6 +143,16 @@ const PipelineMonitor: React.FC = () => {
         </div>
       </div>
 
+      <p className="pipeline-monitor-subtitle">
+        <span data-testid="pipeline-last-fetched">
+          <strong>Last fetched</strong> {lastFetched} (client request time)
+        </span>
+        {' · '}
+        <span data-testid="pipeline-last-observed">
+          <strong>Last observed</strong> {lastObserved} (newest timestamp saved on an attempt)
+        </span>
+      </p>
+
       {!id ? (
         <Card>
           <CardBody>
@@ -149,8 +183,16 @@ const PipelineMonitor: React.FC = () => {
       ) : !currentStage ? (
         <Card>
           <CardBody>
-            <div className="pipeline-monitor-state" role="alert">
-              No pipeline stage is recorded for this case. Nothing is assumed about its progress.
+            <div
+              className="pipeline-monitor-state"
+              role="alert"
+              data-state="pipeline-unrecorded"
+            >
+              <Badge variant="warning" size="sm">Not recorded</Badge>
+              <p>
+                No pipeline stage is recorded for this case. Nothing is assumed about its
+                progress — this is an absent record, not an empty attempt list.
+              </p>
             </div>
           </CardBody>
         </Card>
@@ -181,7 +223,14 @@ const PipelineMonitor: React.FC = () => {
               </CardBody>
             </Card>
           ) : (
-            <PipelineFlow currentStage={currentStage} runHistory={recordedRuns} />
+            <>
+              <p className="pipeline-monitor-subtitle">
+                Stage order below is <strong>configured</strong> workflow order. A stage&apos;s
+                completion state is only ever shown as <strong>recorded</strong> when a saved
+                stage attempt says so.
+              </p>
+              <PipelineFlow currentStage={currentStage} runHistory={recordedRuns} />
+            </>
           )}
 
           <div className="pipeline-monitor-metrics">
@@ -245,7 +294,7 @@ const PipelineMonitor: React.FC = () => {
 
             <Card>
               <CardHeader>
-                <CardTitle>Stage Attempts</CardTitle>
+                <CardTitle>Recorded Stage Attempts</CardTitle>
               </CardHeader>
               <CardBody>
                 {historyLoading ? (
@@ -255,8 +304,13 @@ const PipelineMonitor: React.FC = () => {
                     Saved stage attempts are unavailable, so no attempt list is shown.
                   </div>
                 ) : recordedRuns.length === 0 ? (
-                  <div className="pipeline-monitor-state" role="status">
-                    No stage attempts are recorded for this case yet.
+                  <div
+                    className="pipeline-monitor-state"
+                    role="status"
+                    data-state="pipeline-attempts-empty"
+                  >
+                    No stage attempts are recorded for this case yet. The recorded case stage is
+                    shown above; this panel is an empty attempt list, not a missing record.
                   </div>
                 ) : (
                   <ul className="pipeline-monitor-runs">

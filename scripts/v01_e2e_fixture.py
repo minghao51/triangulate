@@ -14,13 +14,48 @@ import uuid
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 from sqlalchemy import select, text
 
 from src.cases import TopicCaseService
+from src.cases.service import _payload_checksum
 from src.ingester.topic_fetcher import describe_source_outcomes
-from src.storage import CaseSnapshot, Claim, EvidenceCapture, EvidenceItem, Event, InvestigationRun, get_database, init_database
+from src.storage import (
+    CaptureKind,
+    CaseArtifact,
+    CaseSnapshot,
+    CaseStageName,
+    CaseStatus,
+    Claim,
+    EvidenceCapture,
+    EvidenceItem,
+    Event,
+    InvestigationRun,
+    TopicCase,
+    VerificationStatus,
+    get_database,
+    init_database,
+)
 from src.storage.migrations import run_migrations
+from src.storage.captures import upsert_evidence_capture
+
+# Additive refinement states (F00 step 2). Opt-in only: ``materialize`` and the
+# baseline ``manifest.json`` keep their exact bytes.
+REFINEMENT_VARIANTS_FILENAME = "refinement_variants.json"
+# Deterministic IDs outside every sequence used while materializing the baseline.
+MISSING_CASE_ID = "00000000-0000-0000-0000-0000000000ff"
+ABSENT_REPORT_CASE_ID = "00000000-0000-0000-0000-0000000000fe"
+ZERO_COORDINATE_EVENT_ID = "00000000-0000-0000-0000-0000000000fd"
+UNRECOGNIZED_TIMELINE_STATUS = "UNRECOGNIZED_ALERT"
+LEGACY_CAPTURE_KIND = CaptureKind.LEGACY_SNAPSHOT.value
+# A distinct body: identical text for the same evidence reuses the existing
+# immutable capture row by design, so a legacy version must be a real version.
+LEGACY_CAPTURE_TEXT = (
+    "The authority ordered an evacuation near the harbour. "
+    "Quartz inspections continue along the northern pier. "
+    "Legacy snapshot body retained without an observation time."
+)
 
 TITLE_TERM = "Harbour"
 BODY_TERM = "quartz"
@@ -352,14 +387,278 @@ def materialize(out: Path) -> dict:
     return manifest
 
 
+def _sorted_by_id(rows: list[Any]) -> list[Any]:
+    """Return fixture rows in a deterministic order independent of insertion."""
+    return sorted(rows, key=lambda row: str(row.id))
+
+
+def _rewrite_report_timeline_status(
+    report_path: Path, out: Path, entry_index: int, raw_status: str
+) -> None:
+    """Apply the same raw status to the exported JSON file of a report.
+
+    ``report_path`` is a stored artifact path from this scratch fixture, so it
+    is first contained under ``out`` and only then read; a missing or malformed
+    file is an explicit fixture error rather than a silent partial state.
+    """
+    resolved = report_path.expanduser().resolve()
+    if not resolved.is_relative_to(out.expanduser().resolve()):
+        raise RuntimeError(f"Report path {report_path} is outside the fixture output")
+    try:
+        document = json.loads(resolved.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise RuntimeError(f"Refinement fixture report {resolved} is unreadable: {exc}") from exc
+    timeline = document.get("timeline") or []
+    if entry_index >= len(timeline):
+        raise RuntimeError(
+            f"Report timeline has {len(timeline)} entries; cannot rewrite {entry_index}"
+        )
+    timeline[entry_index]["status"] = raw_status
+    document["timeline"] = timeline
+    try:
+        resolved.write_text(
+            json.dumps(document, indent=2, default=str, ensure_ascii=False),
+            encoding="utf-8",
+        )
+    except OSError as exc:
+        raise RuntimeError(f"Refinement fixture report {resolved} is unwritable: {exc}") from exc
+
+
+def materialize_refinement_states(out: Path) -> dict[str, Any]:
+    """Materialize the baseline fixture, then add the refinement failure states.
+
+    Returns ``{"baseline": <baseline manifest>, "variants": <variant map>}``.
+    Additive and opt-in: :func:`materialize` still writes the byte-identical
+    baseline ``manifest.json``. This function keeps that baseline database and
+    adds the states later refinement tasks need, describing them in
+    ``refinement_variants.json`` next to the baseline manifest:
+
+    * a missing case id (never created),
+    * a claim/evidence annotation target owned by another case,
+    * out-of-range, missing and exactly-zero (0,0) event coordinates,
+    * an out-of-enum timeline status preserved as raw text,
+    * a case without report artifacts,
+    * a legacy capture version with unknown provenance.
+
+    The unrecognized timeline status is stored in a frozen report bundle
+    (``report_json`` payload and its exported file) because
+    ``events.verification_status`` is an ORM enum: an out-of-enum value there
+    makes every ORM read of the case raise ``LookupError``, so the only honest
+    place for the raw value is a JSON payload whose readers preserve it.
+    """
+    baseline = materialize(out)
+    case_id = baseline["caseId"]
+    other_case_id = baseline["otherCaseId"]
+    session = get_database().get_session_sync()
+    try:
+        case = session.get(TopicCase, case_id)
+        if case is None:
+            raise RuntimeError(f"Baseline case {case_id!r} is missing")
+
+        # 1. Coordinate states on the baseline case's live events.
+        events = _sorted_by_id(
+            list(session.execute(select(Event).where(Event.case_id == case_id)).scalars())
+        )
+        if len(events) < 2:
+            raise RuntimeError("Baseline case needs two events for coordinate states")
+        out_of_range, missing = events[0], events[1]
+        out_of_range.location_country_code = "ZZ"
+        out_of_range.location_lat = 120.5
+        out_of_range.location_lon = 245.0
+        missing.location_country_code = None
+        missing.location_lat = None
+        missing.location_lon = None
+        session.add(
+            Event(
+                id=ZERO_COORDINATE_EVENT_ID,
+                timestamp=datetime(2026, 3, 8, 13, 0, tzinfo=UTC),
+                title="Harbour datum marker",
+                summary="Synthetic event whose recorded coordinates are exactly 0,0.",
+                verification_status=VerificationStatus.ALLEGED,
+                location_country_code=None,
+                location_lat=0.0,
+                location_lon=0.0,
+                case_id=case_id,
+            )
+        )
+        case.event_count = int(case.event_count or 0) + 1
+
+        # 2. A case that never produced report artifacts.
+        session.add(
+            TopicCase(
+                id=ABSENT_REPORT_CASE_ID,
+                query="Synthetic refinement case without a report",
+                slug="refinement-absent-report",
+                conflict="ukraine_war",
+                status=CaseStatus.REVIEW_READY,
+                priority=0,
+                current_stage=CaseStageName.REPORT,
+                metadata_json={},
+            )
+        )
+
+        # 3. A legacy capture version with unknown provenance on live evidence.
+        evidence = _sorted_by_id(
+            list(
+                session.execute(
+                    select(EvidenceItem).where(EvidenceItem.case_id == case_id)
+                ).scalars()
+            )
+        )[0]
+        with deterministic_uuids(start=20000):
+            legacy_capture = upsert_evidence_capture(
+                session,
+                evidence_id=evidence.id,
+                text=LEGACY_CAPTURE_TEXT,
+                observed_at=None,
+                capture_kind=CaptureKind.LEGACY_SNAPSHOT,
+                metadata={},
+            )
+        if legacy_capture.metadata_json:
+            raise RuntimeError("Legacy capture metadata must remain unknown (empty)")
+
+        # 4. Wrong-case annotation targets: entities owned by the other case.
+        foreign_claim = _sorted_by_id(
+            list(
+                session.execute(
+                    select(Claim)
+                    .join(Event, Claim.event_id == Event.id)
+                    .where(Event.case_id == other_case_id)
+                ).scalars()
+            )
+        )[0]
+        foreign_evidence = _sorted_by_id(
+            list(
+                session.execute(
+                    select(EvidenceItem).where(EvidenceItem.case_id == other_case_id)
+                ).scalars()
+            )
+        )[0]
+
+        # 5. Unrecognized timeline status preserved raw in a frozen report bundle.
+        artifact = (
+            session.execute(
+                select(CaseArtifact)
+                .where(
+                    CaseArtifact.case_id == case_id,
+                    CaseArtifact.artifact_type == "report_json",
+                )
+                .order_by(CaseArtifact.created_at.asc(), CaseArtifact.id.asc())
+            )
+            .scalars()
+            .first()
+        )
+        if artifact is None or not artifact.path:
+            raise RuntimeError("Baseline case has no report_json artifact to extend")
+        payload = dict(artifact.payload_json or {})
+        stored_timeline = [dict(entry) for entry in payload.get("timeline") or []]
+        if not stored_timeline:
+            raise RuntimeError("report_json payload has no timeline entries")
+        entry_index = len(stored_timeline) - 1
+        stored_timeline[entry_index]["status"] = UNRECOGNIZED_TIMELINE_STATUS
+        payload["timeline"] = stored_timeline
+        artifact.payload_json = payload
+        artifact.checksum = _payload_checksum(payload)
+        artifact_id = artifact.id
+        artifact_stage_run_id = artifact.stage_run_id
+        artifact_path = Path(artifact.path)
+        session.commit()
+    finally:
+        session.close()
+
+    _rewrite_report_timeline_status(
+        artifact_path, out, entry_index, UNRECOGNIZED_TIMELINE_STATUS
+    )
+
+    variants: dict[str, Any] = {
+        "baselineManifest": "manifest.json",
+        "caseId": case_id,
+        "otherCaseId": other_case_id,
+        "additions": {"cases": 1, "events": 1, "captureVersions": 1},
+        "missingCase": {
+            "caseId": MISSING_CASE_ID,
+            "expectedLookup": None,
+        },
+        "wrongCaseAnnotationTarget": {
+            "caseId": case_id,
+            "targetType": "claim",
+            "targetId": foreign_claim.id,
+            "targetOwnerCaseId": other_case_id,
+            "evidenceTarget": {
+                "targetType": "evidence",
+                "targetId": foreign_evidence.id,
+                "targetOwnerCaseId": other_case_id,
+            },
+        },
+        "coordinates": {
+            "caseId": case_id,
+            "outOfRange": {
+                "eventId": out_of_range.id,
+                "locationLat": 120.5,
+                "locationLon": 245.0,
+            },
+            "missing": {
+                "eventId": missing.id,
+                "locationLat": None,
+                "locationLon": None,
+            },
+            "recordedAtZero": {
+                "eventId": ZERO_COORDINATE_EVENT_ID,
+                "locationLat": 0.0,
+                "locationLon": 0.0,
+            },
+        },
+        "unrecognizedTimelineStatus": {
+            "caseId": case_id,
+            "artifactId": artifact_id,
+            "stageRunId": artifact_stage_run_id,
+            "path": str(artifact_path),
+            "entryIndex": entry_index,
+            "rawStatus": UNRECOGNIZED_TIMELINE_STATUS,
+        },
+        "absentReport": {
+            "caseId": ABSENT_REPORT_CASE_ID,
+            "reportPath": None,
+            "manifestPath": None,
+        },
+        "legacyCapture": {
+            "captureId": legacy_capture.id,
+            "evidenceId": evidence.id,
+            "caseId": case_id,
+            "captureKind": LEGACY_CAPTURE_KIND,
+            "observedAt": None,
+            "metadata": {},
+        },
+    }
+    (out / REFINEMENT_VARIANTS_FILENAME).write_text(
+        json.dumps(variants, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    return {"baseline": baseline, "variants": variants}
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", type=Path, default=Path("/tmp/v01-e2e"))
+    parser.add_argument(
+        "--refinement-variants",
+        action="store_true",
+        help=(
+            "Also add the refinement fixture states (missing case, wrong-case "
+            "annotation target, coordinate states, unrecognized timeline status, "
+            "absent report, legacy capture) and write "
+            f"{REFINEMENT_VARIANTS_FILENAME}"
+        ),
+    )
     args = parser.parse_args()
-    manifest = materialize(args.out.expanduser().resolve())
+    out = args.out.expanduser().resolve()
+    if args.refinement_variants:
+        states = materialize_refinement_states(out)
+        manifest = states["baseline"]
+    else:
+        manifest = materialize(out)
     print(
         "V01 fixture ready\n"
-        f"  output: {args.out.expanduser().resolve()}\n"
+        f"  output: {out}\n"
         f"  case: {manifest['caseId']}\n"
         f"  snapshot: {manifest['snapshotId']}\n"
         f"  run: {manifest['runId']}\n"
@@ -367,8 +666,10 @@ def main() -> None:
         f"{manifest['expectedCounts']['evidence']}/"
         f"{manifest['expectedCounts']['captures']}/"
         f"{manifest['expectedCounts']['claims']} (migration {manifest['expectedCounts']['searchMigration']})\n"
-        f"  manifest: {args.out.expanduser().resolve() / 'manifest.json'}"
+        f"  manifest: {out / 'manifest.json'}"
     )
+    if args.refinement_variants:
+        print(f"  refinement variants: {out / REFINEMENT_VARIANTS_FILENAME}")
 
 
 if __name__ == "__main__":

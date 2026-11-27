@@ -12,15 +12,49 @@ import {
   ChevronDown,
   Download,
   RefreshCw,
+  Sparkles,
 } from 'lucide-react';
 import type { TopicCase } from '../types/backend-models';
 import { getCases } from '../services/api';
+import { useVisibleRefetchInterval } from '../components/design-system/reader-polling';
 import Button from '../components/design-system/Button';
 import Card from '../components/design-system/Card';
 import { CardBody } from '../components/design-system/Card';
 import Badge from '../components/design-system/Badge';
 import { formatDistanceToNow, parseISO } from 'date-fns';
 import './CaseExplorer.css';
+
+/**
+ * Queue ordering derived only from the fields the list DTO already returns:
+ * recorded open exceptions, recorded new material, recorded review items and the
+ * recorded article/event counts. The case-id tie-break keeps the order stable
+ * for identical payloads, so rows never reorder between identical reads.
+ */
+const casePriorityComparator = (a: TopicCase, b: TopicCase): number => {
+  if (a.openExceptionsCount !== b.openExceptionsCount) {
+    return b.openExceptionsCount - a.openExceptionsCount;
+  }
+  if (a.hasNewMaterial !== b.hasNewMaterial) {
+    return a.hasNewMaterial ? -1 : 1;
+  }
+  const aReviewReady = a.status === 'review ready' ? 1 : 0;
+  const bReviewReady = b.status === 'review ready' ? 1 : 0;
+  if (aReviewReady !== bReviewReady) {
+    return bReviewReady - aReviewReady;
+  }
+  if (a.counts.reviewItems !== b.counts.reviewItems) {
+    return b.counts.reviewItems - a.counts.reviewItems;
+  }
+  const aMaterial = a.counts.articles + a.counts.events;
+  const bMaterial = b.counts.articles + b.counts.events;
+  if (aMaterial !== bMaterial) {
+    return bMaterial - aMaterial;
+  }
+  return a.id.localeCompare(b.id);
+};
+
+const formatFetched = (epochMs: number): string =>
+  Number.isFinite(epochMs) && epochMs > 0 ? new Date(epochMs).toLocaleTimeString() : '—';
 
 const CaseExplorer: React.FC = () => {
   const navigate = useNavigate();
@@ -31,10 +65,13 @@ const CaseExplorer: React.FC = () => {
   const [showFilters, setShowFilters] = useState(false);
   const [selectedCases, setSelectedCases] = useState<Set<string>>(new Set());
 
-  const { data: cases = [], isLoading, error, refetch } = useQuery({
+  // Same poll budget as the other operator surfaces; a hidden tab stops it.
+  const refetchInterval = useVisibleRefetchInterval(30000);
+
+  const { data: cases = [], isLoading, error, refetch, dataUpdatedAt } = useQuery({
     queryKey: ['cases'],
     queryFn: getCases,
-    refetchInterval: 30000,
+    refetchInterval,
   });
 
   // Get unique values for filters
@@ -42,16 +79,18 @@ const CaseExplorer: React.FC = () => {
   const stages = Array.from(new Set(cases.map((tc) => tc.stage)));
   const domains = Array.from(new Set(cases.map((tc) => tc.conflictDomain))).filter(Boolean);
 
-  // Filter cases
-  const filteredCases = cases.filter((tc) => {
-    const matchesSearch =
-      !search ||
-      `${tc.query} ${tc.conflictDomain}`.toLowerCase().includes(search.toLowerCase());
-    const matchesStatus = statusFilter === 'all' || tc.status === statusFilter;
-    const matchesStage = stageFilter === 'all' || tc.stage === stageFilter;
-    const matchesDomain = domainFilter === 'all' || tc.conflictDomain === domainFilter;
-    return matchesSearch && matchesStatus && matchesStage && matchesDomain;
-  });
+  // Filter cases, then order the queue from recorded counts only.
+  const filteredCases = cases
+    .filter((tc) => {
+      const matchesSearch =
+        !search ||
+        `${tc.query} ${tc.conflictDomain}`.toLowerCase().includes(search.toLowerCase());
+      const matchesStatus = statusFilter === 'all' || tc.status === statusFilter;
+      const matchesStage = stageFilter === 'all' || tc.stage === stageFilter;
+      const matchesDomain = domainFilter === 'all' || tc.conflictDomain === domainFilter;
+      return matchesSearch && matchesStatus && matchesStage && matchesDomain;
+    })
+    .sort(casePriorityComparator);
 
   // Calculate statistics
   const stats = {
@@ -59,6 +98,7 @@ const CaseExplorer: React.FC = () => {
     active: filteredCases.filter((c) => c.status !== 'approved' && c.status !== 'rejected').length,
     reviewReady: filteredCases.filter((c) => c.status === 'review ready').length,
     withExceptions: filteredCases.filter((c) => c.openExceptionsCount > 0).length,
+    withNewMaterial: filteredCases.filter((c) => c.hasNewMaterial).length,
   };
 
   const handleSelectCase = (caseId: string) => {
@@ -91,9 +131,17 @@ const CaseExplorer: React.FC = () => {
       <div className="explorer-header">
         <div className="explorer-header-left">
           <h1 className="explorer-title">Case Explorer</h1>
-          <p className="explorer-subtitle">Browse persisted investigations and operator outputs</p>
+          <p className="explorer-subtitle">
+            Saved investigations from the case list, ordered by recorded counts. No per-case
+            detail read is issued for these rows.
+          </p>
         </div>
         <div className="explorer-header-right">
+          <span className="explorer-fetched" data-testid="explorer-last-fetched">
+            <span className="explorer-fetched-label">Last fetched</span>
+            <span className="explorer-fetched-value">{formatFetched(dataUpdatedAt)}</span>
+            <span className="explorer-fetched-note">client request time</span>
+          </span>
           <Button
             variant="secondary"
             size="sm"
@@ -140,7 +188,11 @@ const CaseExplorer: React.FC = () => {
             </div>
             <div className="stat-item">
               <span className="stat-value">{stats.withExceptions}</span>
-              <span className="stat-label">Exceptions</span>
+              <span className="stat-label">Open Exceptions</span>
+            </div>
+            <div className="stat-item">
+              <span className="stat-value">{stats.withNewMaterial}</span>
+              <span className="stat-label">New Material</span>
             </div>
           </div>
 
@@ -177,10 +229,22 @@ const CaseExplorer: React.FC = () => {
 
                 {selectedCases.size > 0 && (
                   <>
-                    <Button variant="ghost" size="sm" icon={<RefreshCw size={14} />}>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      icon={<RefreshCw size={14} />}
+                      disabled
+                      title="Batch case execution is CLI-only; this UI never starts a run."
+                    >
                       CLI Only ({selectedCases.size})
                     </Button>
-                    <Button variant="ghost" size="sm" icon={<Download size={14} />}>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      icon={<Download size={14} />}
+                      disabled
+                      title="Bulk export is not exposed by the read API; no download is offered."
+                    >
                       Export
                     </Button>
                   </>
@@ -294,7 +358,7 @@ const CaseExplorer: React.FC = () => {
                       <Activity size={14} />
                       <span>{caseItem.counts.events}</span>
                     </div>
-                    <div className="case-metric" title="Review Items">
+                    <div className="case-metric" title="Recorded review items">
                       <AlertCircle size={14} />
                       <span>{caseItem.counts.reviewItems}</span>
                     </div>
@@ -309,14 +373,32 @@ const CaseExplorer: React.FC = () => {
                     {caseItem.openExceptionsCount > 0 ? (
                       <div className="case-exceptions">
                         <AlertCircle size={14} />
-                        <span>{caseItem.openExceptionsCount} action{caseItem.openExceptionsCount > 1 ? 's' : ''} required</span>
+                        <span>
+                          {caseItem.openExceptionsCount} open exception
+                          {caseItem.openExceptionsCount === 1 ? '' : 's'} recorded
+                        </span>
                       </div>
                     ) : (
                       <div className="case-status-clean">
                         <ShieldCheck size={14} />
-                        <span>Clear</span>
+                        <span>0 open exceptions recorded</span>
                       </div>
                     )}
+
+                    <div
+                      className={
+                        caseItem.hasNewMaterial
+                          ? 'case-new-material'
+                          : 'case-new-material case-new-material--none'
+                      }
+                    >
+                      <Sparkles size={14} />
+                      <span>
+                        {caseItem.hasNewMaterial
+                          ? 'New material recorded'
+                          : 'No new material recorded'}
+                      </span>
+                    </div>
 
                     <div className="case-time">
                       {caseItem.lastUpdated

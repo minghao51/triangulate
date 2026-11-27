@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import MonitoringCenter from './MonitoringCenter';
 import type { TopicCase } from '../types/backend-models';
@@ -33,9 +33,24 @@ function renderMonitoring() {
   );
 }
 
+const setVisibility = (value: 'visible' | 'hidden') => {
+  Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => value });
+  act(() => {
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+};
+
 describe('MonitoringCenter truthful states', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      get: () => 'visible',
+    });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('renders no invented alerts, health, performance or schedules for an empty backend', async () => {
@@ -154,6 +169,100 @@ describe('MonitoringCenter truthful states', () => {
       'Unknown (unparseable recorded timestamp)'
     );
     expect(screen.queryByText(/Invalid Date/)).toBeNull();
+  });
+
+  it('claims no scheduling, alerting or governance capability it does not have', async () => {
+    apiMocks.getCases.mockResolvedValue([monitoringCase]);
+    renderMonitoring();
+    await screen.findByRole('button', { name: /Port strike monitoring/i });
+
+    expect(screen.queryByText(/Real-time/i)).toBeNull();
+    expect(screen.queryByText(/Notifications/i)).toBeNull();
+    expect(screen.queryByText(/RBAC|role-based/i)).toBeNull();
+    expect(screen.queryByText(/WebSocket/i)).toBeNull();
+    expect(screen.queryByText(/Deploy/i)).toBeNull();
+
+    // Every scheduling mention is a disclosure, never a value or a feature.
+    const schedulingMentions = screen.getAllByText(/Schedul/i);
+    expect(schedulingMentions.length).toBeGreaterThan(0);
+    for (const mention of schedulingMentions) {
+      const container = mention.closest('.monitoring-stats, .monitoring-subtitle');
+      expect(container?.textContent ?? '').toMatch(/Not provided by the API|not exposed/i);
+    }
+  });
+
+  it('labels client fetch time and recorded observation time distinctly', async () => {
+    apiMocks.getCases.mockResolvedValue([monitoringCase]);
+    renderMonitoring();
+    await screen.findByRole('button', { name: /Port strike monitoring/i });
+
+    const fetched = screen.getByTestId('monitoring-last-fetched');
+    const observed = screen.getByTestId('monitoring-last-observed');
+
+    expect(fetched.textContent).toContain('Last fetched');
+    expect(fetched.textContent).toContain('client request time');
+    expect(observed.textContent).toContain('Last observed');
+    expect(observed.textContent).toContain('newest timestamp recorded on a case');
+    expect(observed.textContent).toContain(new Date('2026-03-19T10:00:00Z').toLocaleString());
+    expect(fetched).not.toBe(observed);
+  });
+
+  it('renders monitoring-unavailable distinctly from an empty result', async () => {
+    apiMocks.getCases.mockResolvedValue([]);
+    renderMonitoring();
+
+    expect(await screen.findByText('No monitoring cases recorded')).toBeDefined();
+
+    const empty = document.querySelector('[data-state="monitoring-empty"]');
+    expect(empty).not.toBeNull();
+    expect(empty?.textContent).toContain('not a healthy system check');
+
+    const unavailable = Array.from(
+      document.querySelectorAll('[data-state="monitoring-unavailable"]')
+    );
+    expect(unavailable).toHaveLength(2);
+    for (const node of unavailable) {
+      expect(node.textContent).toContain('Not provided by the API');
+      expect(node.getAttribute('data-state')).not.toBe('monitoring-empty');
+    }
+    expect(screen.queryByText('No alerts')).toBeNull();
+  });
+
+  it('stops polling while the tab is hidden and resumes when it is visible again', async () => {
+    vi.useFakeTimers();
+    apiMocks.getCases.mockResolvedValue([monitoringCase]);
+
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false } },
+    });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MonitoringCenter />
+      </QueryClientProvider>
+    );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(apiMocks.getCases).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(95000);
+    });
+    const pollsWhileVisible = apiMocks.getCases.mock.calls.length;
+    expect(pollsWhileVisible).toBeGreaterThan(1);
+
+    setVisibility('hidden');
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(180000);
+    });
+    expect(apiMocks.getCases).toHaveBeenCalledTimes(pollsWhileVisible);
+
+    setVisibility('visible');
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30000);
+    });
+    expect(apiMocks.getCases.mock.calls.length).toBeGreaterThan(pollsWhileVisible);
   });
 
   it('keeps tabs keyboard operable with aria-selected', async () => {

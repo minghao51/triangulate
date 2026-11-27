@@ -90,6 +90,7 @@ from src.storage import (
     validate_case_ownership,
 )
 from src.storage.event_store import store_event_in_db
+from src.storage.models import verification_status_value
 from src.storage.captures import build_capture_metadata, record_evidence_capture
 from src.storage.search import sync_evidence_index
 from src.storage.write_guard import OWNER_KIND_EVALUATION, OWNER_KIND_EVIDENCE
@@ -1113,7 +1114,18 @@ class TopicCaseService:
                 .all()
             )
 
-            normalized = decision.lower()
+            normalized = decision.strip().lower()
+            # The HTTP request model narrows this set; CLI/direct callers bypass
+            # that, so an unsupported decision is rejected before admission
+            # rather than silently rewriting the case as "review ready".
+            if normalized not in {
+                "approve",
+                "reject",
+                "defer",
+                "action_required",
+                "exception",
+            }:
+                raise ValueError(f"Unsupported review decision: {decision}")
             # Review is a case-bound write: admit/validate/release inside the
             # same transaction so an active run rejects it at admission.
             with case_write_admission(session, case_id, kind=OWNER_KIND_REVIEW):
@@ -1129,12 +1141,17 @@ class TopicCaseService:
                 elif normalized == "reject":
                     case.status = CaseStatus.REJECTED
                     target_status = ReviewStatus.REJECTED
+                elif normalized == "defer":
+                    # Case-level acknowledgement, not a reopen: keep the case
+                    # status, the stage and every per-event review decision as
+                    # stored. Only the case-level note/timestamp below record
+                    # the acknowledgement.
+                    target_status = None
                 elif normalized in {"action_required", "exception"}:
                     case.status = CaseStatus.REVIEW_READY
                     target_status = ReviewStatus.ACTION_REQUIRED
-                else:
-                    case.status = CaseStatus.REVIEW_READY
-                    target_status = None
+                else:  # pragma: no cover - guarded by the decision check above
+                    raise ValueError(f"Unsupported review decision: {decision}")
 
                 if target_status is not None:
                     for review in reviews:
@@ -1150,12 +1167,19 @@ class TopicCaseService:
 
                 case.last_reviewed_at = _utcnow()
                 case.review_notes = notes
-                case.metadata_json = self._resolve_case_exceptions(
-                    case.metadata_json or {}, decision=normalized, notes=notes
-                )
-                case.open_review_items = self._compute_open_review_items(
-                    case.metadata_json, reviews
-                )
+                if normalized != "defer":
+                    # Exception resolution bookkeeping belongs to the decisions
+                    # that change the queue (reject resolves, action_required
+                    # reopens); a deferral leaves the queue, its timestamps and
+                    # its resolution notes untouched. Likewise the open-item
+                    # count is derived from unchanged inputs, so a deferral is
+                    # not an opportunity to reconcile stored counts.
+                    case.metadata_json = self._resolve_case_exceptions(
+                        case.metadata_json or {}, decision=normalized, notes=notes
+                    )
+                    case.open_review_items = self._compute_open_review_items(
+                        case.metadata_json, reviews
+                    )
             session.commit()
             return case
         finally:
@@ -2389,7 +2413,11 @@ class TopicCaseService:
             finally:
                 session.close()
 
-            contested = [event.id for event in events if event.verification_status.value == "CONTESTED"]
+            contested = [
+                event.id
+                for event in events
+                if verification_status_value(event.verification_status) == "CONTESTED"
+            ]
             exception_queue = list((context.case.metadata_json or {}).get("exception_queue", []))
             if contested:
                 exception_queue.append(
@@ -2546,9 +2574,21 @@ class TopicCaseService:
     def _build_executive_summary(self, events: list[Event]) -> str:
         if not events:
             return "No events have been promoted into the case timeline yet."
-        contested = sum(1 for event in events if event.verification_status.value == "CONTESTED")
-        probable = sum(1 for event in events if event.verification_status.value == "PROBABLE")
-        confirmed = sum(1 for event in events if event.verification_status.value == "CONFIRMED")
+        contested = sum(
+            1
+            for event in events
+            if verification_status_value(event.verification_status) == "CONTESTED"
+        )
+        probable = sum(
+            1
+            for event in events
+            if verification_status_value(event.verification_status) == "PROBABLE"
+        )
+        confirmed = sum(
+            1
+            for event in events
+            if verification_status_value(event.verification_status) == "CONFIRMED"
+        )
         return (
             f"This case currently tracks {len(events)} event(s): "
             f"{confirmed} confirmed, {probable} probable, and {contested} contested."
@@ -3859,7 +3899,7 @@ class TopicCaseService:
                 "event_id": claim.event_id,
                 "claim_text": claim.claim_text,
                 "narrative_cluster_id": claim.narrative_cluster_id,
-                "verification_status": claim.verification_status.value,
+                "verification_status": verification_status_value(claim.verification_status),
                 "fact_allegation_type": claim.fact_allegation_type.value
                 if claim.fact_allegation_type
                 else None,
@@ -3879,7 +3919,7 @@ class TopicCaseService:
                 {
                     "claim_signature": signature,
                     "claim_text": claim.claim_text,
-                    "verification_status": claim.verification_status.value,
+                    "verification_status": verification_status_value(claim.verification_status),
                     "support_count": 0,
                     "oppose_count": 0,
                     "source_diversity_count": 0,
@@ -3960,7 +4000,15 @@ class TopicCaseService:
                     "timestamp": event.timestamp.isoformat() if event.timestamp else None,
                     "title": event.title,
                     "summary": event.summary,
-                    "verification_status": event.verification_status.value,
+                    "verification_status": verification_status_value(event.verification_status),
+                    # Recorded provenance/geography is passed through unchanged so
+                    # the existing TimelineEventDTO mapper (and the map screen) can
+                    # read it; absent values stay null and are never inferred.
+                    "location_country_code": event.location_country_code,
+                    "location_lat": event.location_lat,
+                    "location_lon": event.location_lon,
+                    "workflow_route": event.workflow_route,
+                    "source_url": event.source_url,
                 }
                 for event in events
             ],
@@ -4136,6 +4184,67 @@ class TopicCaseService:
         finally:
             session.close()
 
+    def _annotation_target_in_case(
+        self,
+        session,
+        case: TopicCase,
+        target_type: str,
+        target_id: str,
+    ) -> bool:
+        """Return whether ``target_id`` provably belongs to ``case``.
+
+        Membership is read from stored ownership only, never inferred from the
+        request or from the author string: the case matches by id, a claim via
+        its event's ``Event.case_id``, evidence via its own ``case_id``, an
+        exception via the case's stored exception queue, and a narrative via the
+        reachable case association used by the claims overview
+        (``Claim.narrative_cluster_id`` matching ``Narrative.cluster_id``).
+        ``Narrative`` has no ``case_id`` column, so no narrative case ownership
+        is ever invented; an unreachable cluster is simply unprovable.
+        """
+        if target_type == "case":
+            return target_id == case.id
+        if target_type == "claim":
+            owned_claim = (
+                session.query(Claim.id)
+                .join(Event, Event.id == Claim.event_id)
+                .filter(Claim.id == target_id, Event.case_id == case.id)
+                .first()
+            )
+            return owned_claim is not None
+        if target_type == "evidence":
+            owned_evidence = (
+                session.query(EvidenceItem.id)
+                .filter(EvidenceItem.id == target_id, EvidenceItem.case_id == case.id)
+                .first()
+            )
+            return owned_evidence is not None
+        if target_type == "exception":
+            queue = (case.metadata_json or {}).get("exception_queue", []) or []
+            return any(
+                isinstance(item, dict) and str(item.get("id")) == target_id
+                for item in queue
+            )
+        if target_type == "narrative":
+            narrative_cluster = (
+                session.query(Narrative.cluster_id)
+                .filter(Narrative.id == target_id)
+                .first()
+            )
+            if narrative_cluster is None:
+                return False
+            reachable_claim = (
+                session.query(Claim.id)
+                .join(Event, Event.id == Claim.event_id)
+                .filter(
+                    Event.case_id == case.id,
+                    Claim.narrative_cluster_id == narrative_cluster[0],
+                )
+                .first()
+            )
+            return reachable_claim is not None
+        return False
+
     def add_review_annotation(
         self,
         case_id: str,
@@ -4147,36 +4256,74 @@ class TopicCaseService:
         author: str = "operator",
         metadata: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """Persist a review annotation and mirror it into the audit trail."""
+        """Persist a review annotation and mirror it into the audit trail.
+
+        The HTTP request model narrows the accepted target/annotation types,
+        but CLI and direct callers bypass it, so the same contract is enforced
+        here. Validation runs after admission on purpose: a case already owned
+        by another writer is a state conflict, not an argument error. The target
+        must belong to ``case_id``; a missing target and a target owned by
+        another case raise the same message so the response cannot reveal
+        whether the id exists elsewhere.
+        """
         session = get_database().get_session_sync()
         try:
             case = session.query(TopicCase).filter(TopicCase.id == case_id).first()
             if case is None:
                 raise ValueError(f"Case {case_id} not found")
 
-            annotation = ReviewAnnotation(
-                id=str(uuid.uuid4()),
-                case_id=case_id,
-                target_type=target_type,
-                target_id=target_id,
-                annotation_type=annotation_type,
-                author=author,
-                content=content.strip(),
-                metadata_json=metadata or {},
-            )
             annotation_owner = new_writer_token()
             claim_case_ownership(
                 session, case_id, token=annotation_owner, kind=OWNER_KIND_ANNOTATION
+            )
+
+            cleaned_target_type = target_type.strip().lower()
+            cleaned_annotation_type = annotation_type.strip().lower()
+            cleaned_target_id = target_id.strip()
+            cleaned_author = author.strip()
+            cleaned_content = content.strip()
+            if cleaned_target_type not in {
+                "case",
+                "claim",
+                "evidence",
+                "exception",
+                "narrative",
+            }:
+                raise ValueError(f"Unsupported annotation target type: {target_type}")
+            if cleaned_annotation_type not in {"comment", "flag", "context"}:
+                raise ValueError(f"Unsupported annotation type: {annotation_type}")
+            if not cleaned_target_id:
+                raise ValueError("Annotation target id must not be empty")
+            if not cleaned_author:
+                raise ValueError("Annotation author must not be empty")
+            if not cleaned_content:
+                raise ValueError("Annotation content must not be empty")
+            if not self._annotation_target_in_case(
+                session, case, cleaned_target_type, cleaned_target_id
+            ):
+                raise ValueError(
+                    f"Annotation target is not part of case {case_id}"
+                )
+
+            annotation = ReviewAnnotation(
+                id=str(uuid.uuid4()),
+                case_id=case_id,
+                target_type=cleaned_target_type,
+                target_id=cleaned_target_id,
+                annotation_type=cleaned_annotation_type,
+                author=cleaned_author,
+                content=cleaned_content,
+                metadata_json=metadata or {},
             )
             session.add(annotation)
             self._record_audit_entry(
                 session,
                 case_id=case_id,
-                action_type=f"annotation:{annotation_type}",
-                target_type=target_type,
-                target_id=target_id,
-                actor=author,
-                rationale=content.strip(),
+                action_type=f"annotation:{cleaned_annotation_type}",
+                target_type=cleaned_target_type,
+                target_id=cleaned_target_id,
+                actor=cleaned_author,
+                rationale=cleaned_content,
                 metadata=metadata or {},
             )
             validate_case_ownership(
@@ -4356,7 +4503,11 @@ class TopicCaseService:
             session.close()
 
     def get_case_evaluation_summary(self, case_id: str) -> dict[str, Any]:
-        """Return the latest evaluation run and a compact historical view for a case."""
+        """Return the latest stored evaluation run and its history for a case.
+
+        This is a pure reader: a case without evaluations yields an empty
+        summary (``{"latest": None, "history": []}``) and never generates a run.
+        """
         session = get_database().get_session_sync()
         try:
             case = session.query(TopicCase).filter(TopicCase.id == case_id).first()
@@ -4396,10 +4547,9 @@ class TopicCaseService:
                         for item in runs[:10]
                     ],
                 }
+            return {"latest": None, "history": []}
         finally:
             session.close()
-        latest_payload = self.evaluate_case(case_id)
-        return {"latest": latest_payload, "history": [latest_payload]}
 
     def get_monitoring_summary(self) -> dict[str, Any]:
         """Return aggregate operator-facing observability and review backlog metrics."""

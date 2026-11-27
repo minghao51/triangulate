@@ -1,5 +1,13 @@
 # Release C completion map: S01, S02, V01 (D01 gated)
 
+> **Status note (2026-11-22): the state recorded below is the pre-push
+> checkpoint of 2026-11-21 and is preserved as history. Release C was pushed to
+> `origin/main` as `dca1691`; `origin/main` now resolves to `d589359`. This map
+> is superseded as the current brief by
+> [remaining work after Release C](../plans/20261121-remaining-work-after-release-c.md).
+> Archive label: implemented 2026-11-21 (moved to `docs/archive/` 2026-11-22).
+> D01 and production deployment remain separate owner gates.**
+
 Date: 2026-11-20 (updated 2026-11-21). Status: **Release C is implemented,
 reviewed and verified locally (S01 `3096c0f`/`5501842`, S02
 `0ae9359`/`b92c453`/`ff838cc`/`3594d1c`, V01 `2fd91a2`/`19f42e3`/`0db8971`) — not
@@ -10,8 +18,8 @@ review/push of the local commits. **D01 and production
 deployment are separate owner gates and must not be started.**
 
 Contract authority remains the
-[specification](20261114-evidence-workbench-specification.md) (especially §8 and
-§11) and the [worker plan](20261114-evidence-workbench-worker-plan.md). Current
+[specification](../plans/20261114-evidence-workbench-specification.md) (especially §8 and
+§11) and the [worker plan](../plans/20261114-evidence-workbench-worker-plan.md). Current
 state lives in the [Release C handoff](20261118-release-b-handoff.md).
 
 ## 0. State at the start of the next session

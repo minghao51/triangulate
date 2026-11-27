@@ -239,3 +239,16 @@
     grid-column: span 1;
   }
 }
+
+.ai-info-note {
+  margin: 0.75rem 0 0;
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
+  line-height: 1.6;
+}
+
+.ai-boundaries-card code {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  word-break: break-all;
+}

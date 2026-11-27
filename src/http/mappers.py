@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from src.storage import TopicCase
+from src.storage.models import verification_status_value
 
 from .schemas import (
     ArbiterReasoningDTO,
@@ -72,7 +73,13 @@ from .schemas import (
     InvestigationRunDTO,
     InvestigationRunDetailDTO,
     InvestigationRunListDTO,
+    ArtifactDescriptorDTO,
     RunChangesDTO,
+    SnapshotComparisonDTO,
+    SnapshotComparisonItemDTO,
+    SnapshotComparisonItemRefsDTO,
+    SnapshotComparisonRefDTO,
+    SnapshotComparisonSideDTO,
     SnapshotSummaryDTO,
     SnapshotLiveStateDTO,
 )
@@ -142,7 +149,20 @@ def _runtime(value: Any) -> Any:
 
 
 def _map_verification_status(value: str | None) -> str:
-    return VERIFICATION_MAP.get((value or "").upper(), "unknown")
+    return VERIFICATION_MAP.get((verification_status_value(value) or "").upper(), "unknown")
+
+
+def _raw_verification_status(value: str | None) -> str | None:
+    """Return the stored status text only when it is outside the recorded set.
+
+    ``verificationStatus`` keeps its existing mapping (``unknown`` for anything
+    unrecognised). The raw text rides beside it so a legacy/out-of-enum stored
+    value is visible to the reader instead of being collapsed into ``unknown``.
+    """
+    text = verification_status_value(value)
+    if not isinstance(text, str) or text.upper() in VERIFICATION_MAP:
+        return None
+    return text
 
 
 def _map_automation(value: str | None) -> AutomationMode:
@@ -209,8 +229,9 @@ def map_evaluation_summary(payload: dict[str, Any]) -> EvaluationSummaryDTO:
             createdAt=item.get("created_at"),
         )
 
+    latest = payload.get("latest")
     return EvaluationSummaryDTO(
-        latest=map_result(payload["latest"]),
+        latest=map_result(latest) if latest else None,
         history=[map_result(item) for item in payload.get("history", [])],
     )
 
@@ -401,6 +422,10 @@ def _map_evidence(evidence: dict[str, Any], claim_ids_by_evidence: dict[str, lis
         verificationStatus=_runtime(
             _map_verification_status(evidence.get("verification_status"))
         ),
+        rawVerificationStatus=_raw_verification_status(
+            evidence.get("verification_status")
+        ),
+        publishedAt=evidence.get("published_at"),
         credibilityTier=evidence.get("credibility_tier") or "unknown",
         requiresHumanReview=bool(evidence.get("requires_human_review")),
         currentCaptureId=evidence.get("current_capture_id"),
@@ -500,10 +525,15 @@ def _map_timeline_event(event: dict[str, Any], claims: list[dict[str, Any]]) -> 
         verificationStatus=_runtime(
             _map_verification_status(event.get("verification_status"))
         ),
+        rawVerificationStatus=_raw_verification_status(
+            event.get("verification_status")
+        ),
         linkedEvidenceCount=len(linked_evidence_ids),
         locationCountryCode=event.get("location_country_code"),
         locationLat=event.get("location_lat"),
         locationLon=event.get("location_lon"),
+        workflowRoute=event.get("workflow_route"),
+        sourceUrl=event.get("source_url"),
     )
 
 
@@ -1127,6 +1157,18 @@ def map_investigation_run_list(
     )
 
 
+def map_artifact_descriptor(payload: dict[str, Any]) -> ArtifactDescriptorDTO:
+    """Map one published-artifact descriptor; no path field exists to leak."""
+    return ArtifactDescriptorDTO(
+        artifactId=payload["artifactId"],
+        type=payload["type"],
+        displayName=payload["displayName"],
+        downloadUrl=payload["downloadUrl"],
+        recordedChecksum=payload.get("recordedChecksum"),
+        checksumKind=payload["checksumKind"],
+    )
+
+
 def map_run_changes(payload: dict[str, Any]) -> RunChangesDTO:
     return RunChangesDTO(
         availability=payload["availability"],
@@ -1155,6 +1197,75 @@ def map_snapshot_summary(payload: dict[str, Any]) -> SnapshotSummaryDTO:
         createdAt=payload.get("createdAt"),
         counts=payload.get("counts") or {},
         observedAt=payload.get("observedAt"),
+    )
+
+
+def _map_snapshot_comparison_side(payload: dict[str, Any]) -> SnapshotComparisonSideDTO:
+    return SnapshotComparisonSideDTO(
+        sequence=payload["sequence"],
+        createdAt=payload.get("createdAt"),
+        schemaVersion=payload["schemaVersion"],
+        identityVersion=payload["identityVersion"],
+        policyVersion=payload["policyVersion"],
+    )
+
+
+def _map_snapshot_comparison_ref(payload: dict[str, Any]) -> SnapshotComparisonRefDTO:
+    return SnapshotComparisonRefDTO(
+        snapshotId=payload["snapshotId"],
+        claimId=payload.get("claimId"),
+        evidenceId=payload.get("evidenceId"),
+        captureId=payload.get("captureId"),
+        citationId=payload.get("citationId"),
+    )
+
+
+def _map_snapshot_comparison_item(
+    payload: dict[str, Any],
+) -> SnapshotComparisonItemDTO:
+    refs = payload.get("refs") or {}
+    return SnapshotComparisonItemDTO(
+        entityType=payload["entityType"],
+        entityId=payload["entityId"],
+        changeKind=payload["changeKind"],
+        changedFields=list(payload.get("changedFields") or []),
+        before=payload.get("before"),
+        after=payload.get("after"),
+        refs=SnapshotComparisonItemRefsDTO(
+            baseline=_map_snapshot_comparison_ref(refs["baseline"]),
+            target=_map_snapshot_comparison_ref(refs["target"]),
+        ),
+    )
+
+
+def map_snapshot_comparison(payload: dict[str, Any]) -> SnapshotComparisonDTO:
+    """Map the ad-hoc snapshot comparison reader onto the pinned DTO.
+
+    A ready response always carries an integer ``total`` and
+    ``unavailableReason: null``; an unavailable one carries no items,
+    ``total: null`` and ``hasMore: false``.
+    """
+    return SnapshotComparisonDTO(
+        mode=payload["mode"],
+        comparisonPolicyVersion=payload["comparisonPolicyVersion"],
+        baselineSnapshotId=payload["baselineSnapshotId"],
+        targetSnapshotId=payload["targetSnapshotId"],
+        baselineRunId=payload["baselineRunId"],
+        targetRunId=payload["targetRunId"],
+        baselineCoverage=payload["baselineCoverage"],
+        targetCoverage=payload["targetCoverage"],
+        baselineMetadata=_map_snapshot_comparison_side(payload["baselineMetadata"]),
+        targetMetadata=_map_snapshot_comparison_side(payload["targetMetadata"]),
+        availability=payload["availability"],
+        unavailableReason=payload.get("unavailableReason"),
+        items=[
+            _map_snapshot_comparison_item(item)
+            for item in payload.get("items") or []
+        ],
+        total=payload.get("total"),
+        limit=payload["limit"],
+        offset=payload["offset"],
+        hasMore=bool(payload.get("hasMore")),
     )
 
 

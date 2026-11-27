@@ -39,6 +39,7 @@ from src.storage import (
     ReviewStatus,
     StageStatus,
     TopicCase,
+    VerificationStatus,
     init_database,
 )
 from src.storage.event_store import store_event_in_db
@@ -1092,6 +1093,177 @@ def test_party_positions_keyed_by_generated_party_id_normalize(tmp_path):
 
     with pytest.raises(AnalysisCanonicalizationError):
         read_hash(tmp_path, "event-1")
+
+
+# ---------------------------------------------------------------------------
+# R06 — case-level ``defer`` is an acknowledgement, never a reopen
+# ---------------------------------------------------------------------------
+
+DEFER_CASE_ID = "case-defer"
+DEFER_EVENT_ID = "event-defer"
+EXCEPTION_TS = "2026-03-20T10:00:00+00:00"
+EXISTING_CASE_NOTES = "Earlier deferral note."
+EXISTING_RESOLUTION_NOTES = "Analyst asked for a second source."
+
+
+def seed_defer_case(tmp_path, *, status: CaseStatus) -> None:
+    """One case-scoped event with an approved, analysis-bound review.
+
+    The case also carries an open exception with existing resolution notes and
+    an existing timestamp, and a case-level note from an earlier review.
+    """
+    init_database(str(tmp_path / "triangulate.db"))
+    session = db_session(tmp_path)
+    try:
+        session.add(
+            TopicCase(
+                id=DEFER_CASE_ID,
+                query="Defer case",
+                slug="defer-case",
+                status=status,
+                current_stage=CaseStageName.REVIEW,
+                last_reviewed_at=datetime(2026, 3, 21, 8, 0, tzinfo=UTC),
+                review_notes=EXISTING_CASE_NOTES,
+                open_review_items=1,
+                metadata_json={
+                    "exception_queue": [
+                        {
+                            "id": "exc-defer",
+                            "type": "needs_more_sources",
+                            "severity": "high",
+                            "stage": "RETRIEVE",
+                            "status": "open",
+                            "message": "Need more sources",
+                            "resolution_notes": EXISTING_RESOLUTION_NOTES,
+                            "updated_at": EXCEPTION_TS,
+                        }
+                    ]
+                },
+            )
+        )
+        session.add(
+            Event(
+                id=DEFER_EVENT_ID,
+                case_id=DEFER_CASE_ID,
+                timestamp=EVENT_TS,
+                title="Event",
+                summary="Summary",
+                verification_status=VerificationStatus.PROBABLE,
+            )
+        )
+        session.flush()
+        review = Review(
+            id="review-defer",
+            event_id=DEFER_EVENT_ID,
+            status=ReviewStatus.APPROVED,
+            reviewed_at=REVIEW_TS,
+            notes="Event analyst note.",
+        )
+        session.add(review)
+        session.flush()
+        bind_review_decision(
+            review, compute_event_analysis_hash(session, DEFER_EVENT_ID)
+        )
+        session.commit()
+    finally:
+        session.close()
+
+
+def read_defer_case_state(tmp_path) -> dict:
+    """Fresh read of every case- and event-level field ``defer`` may touch."""
+    session = db_session(tmp_path)
+    try:
+        case = session.get(TopicCase, DEFER_CASE_ID)
+        review = session.query(Review).filter(Review.event_id == DEFER_EVENT_ID).one()
+        assert case is not None
+        return {
+            "status": case.status,
+            "stage": case.current_stage,
+            "case_review_notes": case.review_notes,
+            "last_reviewed_at": case.last_reviewed_at,
+            "open_review_items": case.open_review_items,
+            "metadata": copy.deepcopy(case.metadata_json),
+            "review_status": review.status,
+            "review_reviewed_at": review.reviewed_at,
+            "event_review_notes": review.notes,
+            "analysis_hash": review.analysis_hash,
+            "previous_decision_json": copy.deepcopy(review.previous_decision_json),
+        }
+    finally:
+        session.close()
+
+
+# Everything a case-level acknowledgement must leave exactly as stored. The
+# case-level note and ``last_reviewed_at`` are the only permitted changes; the
+# generic row ``updated_at`` touch is pre-existing write behavior.
+DEFER_PROTECTED_FIELDS = (
+    "status",
+    "stage",
+    "open_review_items",
+    "metadata",
+    "review_status",
+    "review_reviewed_at",
+    "event_review_notes",
+    "analysis_hash",
+    "previous_decision_json",
+)
+
+
+@pytest.mark.parametrize(
+    "status",
+    [
+        CaseStatus.REVIEW_READY,
+        CaseStatus.APPROVED,
+        CaseStatus.REJECTED,
+        CaseStatus.MONITORING,
+    ],
+)
+def test_defer_acknowledges_case_without_reopening_or_touching_decisions(
+    tmp_path, status
+):
+    """R06: ``defer`` keeps the case status, stage, review decision and queue."""
+    seed_defer_case(tmp_path, status=status)
+    before = read_defer_case_state(tmp_path)
+    service = TopicCaseService({"ai": {"model": "test-model"}}, output_root=tmp_path)
+
+    service.review_case(
+        DEFER_CASE_ID, "defer", "Operator deferred; gather one more source."
+    )
+
+    after = read_defer_case_state(tmp_path)
+    for field in DEFER_PROTECTED_FIELDS:
+        assert after[field] == before[field], field
+    assert after["status"] == status
+    assert after["case_review_notes"] == "Operator deferred; gather one more source."
+    assert after["last_reviewed_at"] is not None
+    assert after["last_reviewed_at"] != before["last_reviewed_at"]
+
+
+def test_defer_without_notes_keeps_existing_note_semantics(tmp_path):
+    """A deferral with no notes keeps the existing ``review_notes`` update rule."""
+    seed_defer_case(tmp_path, status=CaseStatus.APPROVED)
+    before = read_defer_case_state(tmp_path)
+    service = TopicCaseService({"ai": {"model": "test-model"}}, output_root=tmp_path)
+
+    service.review_case(DEFER_CASE_ID, "defer")
+
+    after = read_defer_case_state(tmp_path)
+    for field in DEFER_PROTECTED_FIELDS:
+        assert after[field] == before[field], field
+    assert after["case_review_notes"] is None
+    assert after["last_reviewed_at"] is not None
+
+
+def test_defer_invalid_decision_writes_nothing(tmp_path):
+    """An unsupported decision is still rejected before any write."""
+    seed_defer_case(tmp_path, status=CaseStatus.REJECTED)
+    before = read_defer_case_state(tmp_path)
+    service = TopicCaseService({"ai": {"model": "test-model"}}, output_root=tmp_path)
+
+    with pytest.raises(ValueError):
+        service.review_case(DEFER_CASE_ID, "deferred", "Not a decision")
+
+    assert read_defer_case_state(tmp_path) == before
 
 
 def test_ordered_reasoning_reorder_invalidates_but_claim_set_reorder_does_not(tmp_path):

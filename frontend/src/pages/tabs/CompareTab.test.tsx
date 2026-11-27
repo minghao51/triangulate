@@ -5,6 +5,11 @@ import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 
 import CompareTab from './CompareTab';
 import { ApiError } from '../../services/api-error';
+import {
+  addToComparisonTray,
+  getComparisonTray,
+  resetComparisonTray,
+} from '../../services/comparison-tray';
 import type {
   CaptureSummary,
   Comparison,
@@ -22,6 +27,10 @@ const apiMocks = vi.hoisted(() => ({
   getEvidenceForCase: vi.fn(),
   getEvidenceDetail: vi.fn(),
   getComparison: vi.fn(),
+  // Frozen readers (owned by F08) are present in the real module; this surface
+  // must never call them, and never with a snapshot selector.
+  getCitationDetail: vi.fn(),
+  getCaptureWindow: vi.fn(),
 }));
 
 vi.mock('../../services/api', () => apiMocks);
@@ -234,7 +243,7 @@ const LocationProbe = () => {
   return <div data-testid="location">{location.pathname + location.search}</div>;
 };
 
-function renderCompare(entry = '/cases/case-1/compare') {
+function renderCompare(entry = '/cases/case-1/compare', caseId = 'case-1') {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={queryClient}>
@@ -245,10 +254,11 @@ function renderCompare(entry = '/cases/case-1/compare') {
             element={
               <>
                 <LocationProbe />
-                <CompareTab caseId="case-1" />
+                <CompareTab caseId={caseId} />
               </>
             }
           />
+          <Route path="/cases/:id/evidence" element={<LocationProbe />} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>
@@ -257,6 +267,7 @@ function renderCompare(entry = '/cases/case-1/compare') {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  resetComparisonTray();
   apiMocks.getEvidenceForCase.mockResolvedValue([
     evidenceItem(),
     evidenceItem({
@@ -488,5 +499,266 @@ describe('CompareTab errors, safety and keyboard focus', () => {
     expect(screen.getByRole('button', { name: /Compare selected/ }).tagName).toBe(
       'BUTTON'
     );
+  });
+});
+
+describe('CompareTab same-evidence refusal and frozen readers', () => {
+  it('refuses the same evidence even when both sides pin different captures', async () => {
+    renderCompare(
+      '/cases/case-1/compare?left=ev-left&right=ev-left&leftCapture=cap-left&rightCapture=cap-old'
+    );
+
+    const state = await screen.findByText('Choose two different sources.');
+    expect(state).toBeDefined();
+    expect(apiMocks.getComparison).not.toHaveBeenCalled();
+    expect(screen.queryByRole('heading', { name: 'Comparison results' })).toBeNull();
+    const alert = document.querySelector('[data-state="comparison-same-source"]');
+    expect(alert?.getAttribute('role')).toBe('alert');
+    expect(alert?.textContent).toContain('Differing capture versions of one source belong in capture history');
+    expect(screen.getByRole('button', { name: /Compare selected/ })).toHaveProperty(
+      'disabled',
+      true
+    );
+  });
+
+  it('refuses a repeated evidence item in the tray even with another capture id', async () => {
+    addToComparisonTray('case-1', 'current', { evidenceId: 'ev-left', captureId: 'cap-left' });
+    const duplicate = addToComparisonTray('case-1', 'current', {
+      evidenceId: 'ev-left',
+      captureId: 'cap-old',
+    });
+    expect(duplicate.ok).toBe(false);
+    expect(duplicate.reason).toBe('duplicate-evidence');
+
+    renderCompare();
+    const refusal = await screen.findByRole('alert');
+    expect(refusal.textContent).toContain('cannot be compared with itself');
+    expect(refusal.getAttribute('data-state')).toBe('comparison-tray-refused');
+    expect(getComparisonTray('case-1', 'current').entries).toHaveLength(1);
+    expect(apiMocks.getComparison).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: /Compare draft/ })).toHaveProperty(
+      'disabled',
+      true
+    );
+  });
+
+  it('keeps historical unavailability and the dependency warning as distinct states', async () => {
+    apiMocks.getComparison.mockResolvedValue(
+      comparison({
+        right: side({
+          evidenceId: 'ev-old',
+          captureId: 'cap-old',
+          coverage: {
+            linkedClaimCount: 2,
+            attributedClaimCount: 0,
+            attributedLinkCount: 0,
+            otherCaptureLinkCount: 1,
+            unattributedLinkCount: 0,
+            claimLinkageStatus: 'historical_unavailable',
+            historicalAnalysisAvailable: false,
+            caveat: 'Historical claim alignment is unavailable for this capture.',
+          },
+        }),
+        rightCaptureId: 'cap-old',
+      })
+    );
+    renderCompare(
+      '/cases/case-1/compare?left=ev-left&right=ev-old&rightCapture=cap-old'
+    );
+
+    expect(await screen.findByText('Shared claim text')).toBeDefined();
+    const historical = document.querySelector(
+      '[data-state="comparison-historical-unavailable"]'
+    );
+    const dependency = document.querySelector(
+      '[data-state="comparison-dependency-warning"]'
+    );
+    expect(historical).not.toBeNull();
+    expect(dependency).not.toBeNull();
+    expect(historical).not.toBe(dependency);
+    expect(historical?.textContent).toMatch(/historical claim alignment is not available/i);
+    expect(dependency?.textContent).toMatch(/Dependency detected/);
+    expect(dependency?.textContent).not.toMatch(
+      /Absence of a detected dependency does not prove independence/i
+    );
+  });
+
+  it('never forwards the browser snapshot selector to citation or capture readers', async () => {
+    renderCompare(
+      '/cases/case-1/compare?snapshot=snap-1&left=ev-left&right=ev-right&leftCapture=cap-left&rightCapture=cap-right'
+    );
+    await screen.findByText('Shared claim text');
+
+    // Frozen readers are never called from Compare, so no 422 can be provoked.
+    expect(apiMocks.getCitationDetail).not.toHaveBeenCalled();
+    expect(apiMocks.getCaptureWindow).not.toHaveBeenCalled();
+
+    // And no call made by this surface carries a snapshot selector at all.
+    const allCalls = [
+      ...apiMocks.getComparison.mock.calls,
+      ...apiMocks.getEvidenceDetail.mock.calls,
+      ...apiMocks.getEvidenceForCase.mock.calls,
+    ];
+    expect(allCalls.length).toBeGreaterThan(0);
+    allCalls.forEach((call) => {
+      expect(JSON.stringify(call)).not.toMatch(/snapshot/i);
+    });
+  });
+});
+
+describe('CompareTab comparison tray draft', () => {
+  it('commits the draft through buildComparisonUrl and pins the resolved captures', async () => {
+    addToComparisonTray('case-1', 'current', { evidenceId: 'ev-left', captureId: null });
+    addToComparisonTray('case-1', 'current', { evidenceId: 'ev-right', captureId: null });
+    renderCompare();
+
+    expect(await screen.findByText(/Comparison draft \(2 of 2\)/)).toBeDefined();
+    // No capture was pinned in the draft, so the commit URL carries only the ids.
+    fireEvent.click(screen.getByRole('button', { name: /Compare draft/ }));
+    await waitFor(() =>
+      expect(screen.getByTestId('location').textContent).toContain(
+        'left=ev-left&right=ev-right'
+      )
+    );
+    expect(screen.getByTestId('location').textContent).not.toContain('leftCapture');
+
+    // After the server's default-capture resolution the URL is replaced with pins.
+    await waitFor(() =>
+      expect(screen.getByTestId('location').textContent).toContain(
+        'leftCapture=cap-left&rightCapture=cap-right'
+      )
+    );
+    expect(await screen.findByText('Shared claim text')).toBeDefined();
+    expect(apiMocks.getComparison).toHaveBeenLastCalledWith(
+      'case-1',
+      expect.objectContaining({ left: 'ev-left', right: 'ev-right' })
+    );
+  });
+
+  it('keeps an already pinned capture id in the committed URL', async () => {
+    addToComparisonTray('case-1', 'current', {
+      evidenceId: 'ev-left',
+      captureId: 'cap-left-old',
+    });
+    addToComparisonTray('case-1', 'current', {
+      evidenceId: 'ev-right',
+      captureId: 'cap-right-old',
+    });
+    renderCompare();
+
+    fireEvent.click(await screen.findByRole('button', { name: /Compare draft/ }));
+    await waitFor(() =>
+      expect(screen.getByTestId('location').textContent).toContain(
+        'leftCapture=cap-left-old&rightCapture=cap-right-old'
+      )
+    );
+    expect(apiMocks.getComparison).toHaveBeenLastCalledWith(
+      'case-1',
+      expect.objectContaining({
+        leftCapture: 'cap-left-old',
+        rightCapture: 'cap-right-old',
+      })
+    );
+  });
+
+  it('directs a single source with older capture versions to capture history, not Compare', async () => {
+    apiMocks.getEvidenceDetail.mockResolvedValue(
+      evidenceDetail({
+        id: 'ev-old',
+        currentCaptureId: 'cap-new',
+        captures: [
+          capture({ id: 'cap-new', evidenceId: 'ev-old', isCurrent: true }),
+          capture({ id: 'cap-old', evidenceId: 'ev-old', isCurrent: false }),
+        ],
+      })
+    );
+    addToComparisonTray('case-1', 'current', { evidenceId: 'ev-old', captureId: null });
+    renderCompare();
+
+    expect(await screen.findByText(/2 recorded capture versions/)).toBeDefined();
+    expect(screen.getByText(/belong in capture history, not in Compare/)).toBeDefined();
+    // One source never becomes a self-comparison.
+    expect(screen.getByRole('button', { name: /Compare draft/ })).toHaveProperty(
+      'disabled',
+      true
+    );
+    expect(apiMocks.getComparison).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: /Open capture history/ }));
+    await waitFor(() =>
+      expect(screen.getByTestId('location').textContent).toContain(
+        '/cases/case-1/evidence?'
+      )
+    );
+    const location = screen.getByTestId('location').textContent ?? '';
+    expect(location).toContain('evidence=ev-old');
+    expect(location).not.toContain('/compare');
+  });
+
+  it('renders comparison-same-source as a validation error and never as a comparison', async () => {
+    renderCompare('/cases/case-1/compare?left=ev-left&right=ev-left');
+
+    const state = document.querySelector('[data-state="comparison-same-source"]');
+    expect(state).not.toBeNull();
+    await waitFor(() => expect(screen.getByText('Choose two different sources.')).toBeDefined());
+    expect(state?.getAttribute('role')).toBe('alert');
+    expect(state?.textContent).toContain('validation error, not a comparison');
+    // Two captures of one source are refused before any comparison is requested.
+    expect(apiMocks.getComparison).not.toHaveBeenCalled();
+    expect(screen.queryByRole('heading', { name: 'Comparison results' })).toBeNull();
+    expect(screen.queryByText('Shared claim text')).toBeNull();
+  });
+
+  it('clears the draft on a case switch after the notice and is empty from another case', async () => {
+    addToComparisonTray('case-1', 'current', { evidenceId: 'ev-left' });
+    addToComparisonTray('case-1', 'current', { evidenceId: 'ev-right' });
+
+    renderCompare('/cases/case-2/compare', 'case-2');
+
+    expect(await screen.findByText(/cleared because the case changed/)).toBeDefined();
+    expect(screen.getByText(/Comparison draft \(0 of 2\)/)).toBeDefined();
+    expect(getComparisonTray('case-2', 'current').entries).toHaveLength(0);
+    // No cross-case mixing: the original case's draft is gone too.
+    expect(getComparisonTray('case-1', 'current').entries).toHaveLength(0);
+  });
+
+  it('keeps the draft across re-renders within the session', async () => {
+    addToComparisonTray('case-1', 'current', { evidenceId: 'ev-left' });
+    addToComparisonTray('case-1', 'current', { evidenceId: 'ev-right' });
+    const { container } = renderCompare();
+
+    // Present on the first paint, before the evidence list resolves.
+    expect(screen.getByText(/Comparison draft \(2 of 2\)/)).toBeDefined();
+    expect(container.querySelectorAll('.compare-tray-entries [data-evidence-id]')).toHaveLength(2);
+
+    // Still there after the async evidence load re-renders the tab.
+    expect(await screen.findByText(/2 sources in this case/)).toBeDefined();
+    expect(
+      screen.getByRole('button', { name: 'Remove ev-left from comparison draft' })
+    ).toBeDefined();
+    expect(screen.getByText(/Comparison draft \(2 of 2\)/)).toBeDefined();
+  });
+
+  it('removes one draft entry and refuses a third without replacing the rest', async () => {
+    addToComparisonTray('case-1', 'current', { evidenceId: 'ev-left' });
+    addToComparisonTray('case-1', 'current', { evidenceId: 'ev-right' });
+    const third = addToComparisonTray('case-1', 'current', { evidenceId: 'ev-extra' });
+    expect(third.ok).toBe(false);
+
+    renderCompare();
+
+    expect(await screen.findByText(/already holds two distinct sources/)).toBeDefined();
+    expect(getComparisonTray('case-1', 'current').entries.map((e) => e.evidenceId)).toEqual([
+      'ev-left',
+      'ev-right',
+    ]);
+
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Remove ev-left from comparison draft' })
+    );
+    await waitFor(() => expect(screen.getByText(/Comparison draft \(1 of 2\)/)).toBeDefined());
+    expect(getComparisonTray('case-1', 'current').entries.map((e) => e.evidenceId)).toEqual([
+      'ev-right',
+    ]);
   });
 });

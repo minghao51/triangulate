@@ -1,0 +1,93 @@
+<!-- viewport: 768×1024 tablet -->
+<svg xmlns="http://www.w3.org/2000/svg" width="768" height="1024" viewBox="0 0 768 1024" role="img" aria-labelledby="wf-title wf-desc">
+  <title id="wf-title">Claims — tablet</title>
+  <desc id="wf-desc">Claims — tablet (tablet, 768x1024). Proposal wireframe with synthetic data, not implementation evidence. Numbered regions: 1 Primary navigation (top bar) — GET reads only; CLI owns ingest and runs; 2 Claims header — title, synthetic context and available actions; 3 Case tabs (12) — active Claims; tabs are navigation, not state changes; 4 Claims list — cluster text, linked source count and alignment state; generated relations are reported_by or uncertain. · frame 1 of 2; 5 Selected claim detail — frozen citation reference, effective relation and assessment provenance. · frame 1 of 2; 6 Claim actions — Inspect evidence opens the inspector; Open frozen citation opens the immutable citation reader. · frame 1 of 2; 7 Expanded claim detail — model-labelled Arbiter classification, rationale and recorded for/against/neutral party positions; consensus is not truth. · frame 1 of 2.</desc>
+  <g id="ui" font-family="-apple-system, system-ui, sans-serif">
+    <rect x="0" y="0" width="768" height="1024" fill="#fff"/>
+    <rect x="8" y="8" width="752" height="1008" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <rect x="32" y="32" width="704" height="48" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="48" y="56" font-size="14" fill="#000" font-weight="600">TRIANGULATE</text>
+    <text x="168" y="56" font-size="12" fill="#000">Dashboard</text>
+    <text x="248" y="56" font-size="12" fill="#000" font-weight="600">Cases</text>
+    <text x="304" y="56" font-size="12" fill="#000">Network</text>
+    <text x="368" y="56" font-size="12" fill="#000">Sources</text>
+    <text x="432" y="56" font-size="12" fill="#000">Narratives</text>
+    <text x="520" y="56" font-size="12" fill="#000">Monitoring</text>
+    <text x="608" y="56" font-size="12" fill="#000">AI info</text>
+    <rect x="32" y="104" width="704" height="88" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="48" y="152" font-size="20" fill="#000" font-weight="600">Claims</text>
+    <text x="48" y="176" font-size="12" fill="#666">reported_by / uncertain only for generated links · Proposal · synthetic · not built</text>
+    <rect x="32" y="216" width="704" height="72" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="48" y="248" font-size="12" fill="#000">Overview</text>
+    <text x="128" y="248" font-size="12" fill="#000">Evidence</text>
+    <text x="208" y="248" font-size="12" fill="#000" font-weight="600">Claims</text>
+    <text x="272" y="248" font-size="12" fill="#000">Compare</text>
+    <text x="344" y="248" font-size="12" fill="#000">Parties</text>
+    <text x="416" y="248" font-size="12" fill="#000">Map</text>
+    <text x="48" y="272" font-size="12" fill="#000">Timeline</text>
+    <text x="128" y="272" font-size="12" fill="#000">Exceptions</text>
+    <text x="224" y="272" font-size="12" fill="#000">Report</text>
+    <text x="288" y="272" font-size="12" fill="#000">Changes</text>
+    <text x="360" y="272" font-size="12" fill="#000">Search</text>
+    <text x="424" y="272" font-size="12" fill="#000">Run history</text>
+    <g data-pane="p1">
+    <rect x="32" y="312" width="704" height="224" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="48" y="352" font-size="14" fill="#000" font-weight="600">Claims</text>
+    <text x="48" y="376" font-size="12" fill="#000" font-weight="600">Claim</text>
+    <text x="392" y="376" font-size="12" fill="#000" font-weight="600">Sources</text>
+    <text x="528" y="376" font-size="12" fill="#000" font-weight="600">Alignment</text>
+    <line x1="48" y1="384" x2="720" y2="384" stroke="#000" stroke-width="1.5"/>
+    <text x="48" y="416" font-size="12" fill="#000">claim-8898 · tender notice</text>
+    <text x="392" y="416" font-size="12" fill="#000">2</text>
+    <text x="528" y="416" font-size="12" fill="#000">exact</text>
+    <text x="48" y="448" font-size="12" fill="#000">claim-8897 · budget line</text>
+    <text x="392" y="448" font-size="12" fill="#000">1</text>
+    <text x="528" y="448" font-size="12" fill="#000">uncertain</text>
+    <text x="48" y="480" font-size="12" fill="#000">claim-8896 · award date</text>
+    <text x="392" y="480" font-size="12" fill="#000">3</text>
+    <text x="528" y="480" font-size="12" fill="#000">exact</text>
+    <text x="48" y="512" font-size="12" fill="#000">claim-8895 · official denial</text>
+    <text x="392" y="512" font-size="12" fill="#000">1</text>
+    <text x="528" y="512" font-size="12" fill="#000">not_provided</text>
+    </g>
+    <g data-pane="p2">
+    <rect x="32" y="560" width="704" height="160" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="48" y="600" font-size="14" fill="#000" font-weight="600">Selected claim</text>
+    <text x="48" y="624" font-size="12" fill="#000">claim-8898 · tender notice</text>
+    <text x="48" y="648" font-size="12" fill="#000">Relation: reported_by</text>
+    <text x="48" y="672" font-size="12" fill="#000">Frozen citation: citation-3312</text>
+    <text x="48" y="696" font-size="12" fill="#000">Model assessment: unknown origin</text>
+    </g>
+    <g data-pane="p3">
+    <rect x="32" y="744" width="704" height="64" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <rect x="48" y="760" width="152" height="32" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="56" y="784" font-size="12" fill="#000">Inspect evidence</text>
+    <rect x="208" y="760" width="176" height="32" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="216" y="784" font-size="12" fill="#000">Open frozen citation</text>
+    </g>
+    <g data-pane="p4">
+    <rect x="32" y="832" width="704" height="160" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="48" y="872" font-size="14" fill="#000" font-weight="600">Expanded claim detail</text>
+    <text x="48" y="896" font-size="12" fill="#000">Arbiter Analysis (model-labelled)</text>
+    <text x="48" y="920" font-size="12" fill="#000">Classification: allegation · rationale recorded</text>
+    <text x="48" y="944" font-size="12" fill="#000">Party positions: for 2 · against 1 · neutral 1</text>
+    <text x="48" y="968" font-size="12" fill="#000">Consensus: divided · not truth</text>
+    </g>
+  </g>
+  <g id="annotations" font-family="-apple-system, system-ui, sans-serif">
+    <rect data-region="1" x="24" y="24" width="720" height="64" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="2" x="24" y="96" width="720" height="104" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="3" x="24" y="208" width="720" height="88" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="4" x="24" y="304" width="720" height="240" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="5" x="24" y="552" width="720" height="176" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="6" x="24" y="736" width="720" height="80" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="7" x="24" y="824" width="720" height="176" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <text x="16" y="48" font-size="12" font-weight="600" fill="#000">1</text>
+    <text x="16" y="120" font-size="12" font-weight="600" fill="#000">2</text>
+    <text x="16" y="232" font-size="12" font-weight="600" fill="#000">3</text>
+    <text x="16" y="328" font-size="12" font-weight="600" fill="#000">4</text>
+    <text x="16" y="576" font-size="12" font-weight="600" fill="#000">5</text>
+    <text x="16" y="760" font-size="12" font-weight="600" fill="#000">6</text>
+    <text x="16" y="848" font-size="12" font-weight="600" fill="#000">7</text>
+  </g>
+</svg>

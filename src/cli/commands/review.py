@@ -21,6 +21,7 @@ from src.storage import (
     case_write_admission,
     get_database,
 )
+from src.storage.models import verification_status_value
 from src.storage.review_state import (
     bind_review_decision,
     compute_event_analysis_hash,
@@ -96,7 +97,7 @@ def review_event(event: Event, session) -> None:
         Panel.fit(
             f"[bold]{event.title}[/bold]\n\n"
             f"{event.summary}\n\n"
-            f"Status: [yellow]{event.verification_status.value}[/yellow] | "
+            f"Status: [yellow]{verification_status_value(event.verification_status)}[/yellow] | "
             f"Claims: {len(claims)} | "
             f"Date: {event.timestamp.strftime('%Y-%m-%d %H:%M')}",
             title="Event Review",
@@ -114,7 +115,7 @@ def review_event(event: Event, session) -> None:
             table.add_row(
                 str(i),
                 claim.claim_text[:80],
-                claim.verification_status.value,
+                verification_status_value(claim.verification_status),
             )
 
         console.print(table)

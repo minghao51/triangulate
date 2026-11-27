@@ -1,12 +1,22 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { useState } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { Link, MemoryRouter, Route, Routes, useLocation, useParams } from 'react-router-dom';
+import {
+  Link,
+  MemoryRouter,
+  Route,
+  Routes,
+  useLocation,
+  useParams,
+  useSearchParams,
+} from 'react-router-dom';
 
 import { EvidenceInspector } from './EvidenceInspector';
 import EvidenceTab from '../../pages/tabs/EvidenceTab';
 import { ApiError } from '../../services/api-error';
 import type {
+  AlignmentStatus,
   CaptureSummary,
   CaptureWindow,
   CitationDetail,
@@ -820,6 +830,42 @@ describe('EvidenceInspector historical observations', () => {
     expect(apiMocks.getEvidenceDetail).toHaveBeenCalledWith('case-1', 'ev-1', 'snap-1');
   });
 
+  it('offers an explicit transition from a pinned observation to current evidence', async () => {
+    apiMocks.getEvidenceDetail.mockResolvedValue(
+      evidenceDetail({
+        snapshotId: 'snap-1',
+        liveState: {
+          present: true,
+          claimSignature: null,
+          textMatchesSnapshot: null,
+          currentCaptureId: 'cap-1',
+          currentCaptureMatchesSnapshot: true,
+        },
+      })
+    );
+    apiMocks.getCaptureWindow.mockResolvedValue(windowFor('Example body text'));
+
+    renderInspector('/cases/case-1/evidence?evidence=ev-1&snapshot=snap-1');
+
+    const transition = await screen.findByRole('button', { name: /open current evidence/i });
+    expect(apiMocks.getEvidenceDetail).toHaveBeenCalledWith('case-1', 'ev-1', 'snap-1');
+    // Nothing is fetched as current until the operator chooses the transition.
+    expect(apiMocks.getEvidenceDetail).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(transition);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('location').textContent).not.toContain('snapshot');
+    });
+    await waitFor(() => {
+      expect(apiMocks.getEvidenceDetail).toHaveBeenLastCalledWith(
+        'case-1',
+        'ev-1',
+        null
+      );
+    });
+  });
+
   it('explains that a snapshot 404 can mean the entity is absent from that observation', async () => {
     apiMocks.getEvidenceDetail.mockRejectedValue(new ApiError('missing', 404));
 
@@ -839,5 +885,340 @@ describe('EvidenceInspector historical observations', () => {
     expect(await screen.findByRole('heading', { name: /Frozen citation/ })).toBeDefined();
     expect(apiMocks.getCitationDetail).toHaveBeenCalledWith('case-1', 'cit-1');
     expect(apiMocks.getCitationDetail).toHaveBeenCalledTimes(1);
+    await screen.findByTestId('capture-text');
+    // The capture-window reader is frozen by capture ID too: the browser's
+    // `snapshot` selector must not be forwarded to it either.
+    const [, , , windowOptions] = apiMocks.getCaptureWindow.mock.calls[0] as [
+      string,
+      string,
+      string,
+      Record<string, unknown>,
+    ];
+    expect(Object.keys(windowOptions).sort()).toEqual(['length', 'start']);
+    expect(JSON.stringify(apiMocks.getCaptureWindow.mock.calls)).not.toMatch(
+      /snapshot/i
+    );
+  });
+});
+
+describe('EvidenceInspector explicit diagnostics', () => {
+  const states: Array<{
+    name: string;
+    status: AlignmentStatus | string;
+    quote: string | null;
+    attribute: string;
+    message: RegExp;
+  }> = [
+    {
+      name: 'missing quotation',
+      status: 'not_provided',
+      quote: null,
+      attribute: 'inspector-missing-quotation',
+      message: /records no quotation/i,
+    },
+    {
+      name: 'source unavailable',
+      status: 'source_unavailable',
+      quote: 'quote',
+      attribute: 'inspector-source-unavailable',
+      message: /captured source text was unavailable/i,
+    },
+    {
+      name: 'ambiguous',
+      status: 'ambiguous',
+      quote: 'repeat',
+      attribute: 'inspector-ambiguous',
+      message: /occurs more than once/i,
+    },
+    {
+      name: 'no match',
+      status: 'no_match',
+      quote: 'absent words',
+      attribute: 'inspector-no-match',
+      message: /does not appear exactly/i,
+    },
+    {
+      name: 'legacy',
+      status: 'legacy_unknown',
+      quote: null,
+      attribute: 'inspector-legacy',
+      message: /predates that assessment/i,
+    },
+  ];
+
+  it.each(states)(
+    'renders its own $name diagnostic with a stable data-state',
+    async ({ status, quote, attribute, message }) => {
+      apiMocks.getEvidenceDetail.mockResolvedValue(
+        evidenceDetail({
+          relatedClaims: [
+            reference({
+              alignmentStatus: status as AlignmentStatus,
+              quote,
+              startChar: quote ? 0 : null,
+              endChar: quote ? Array.from(quote).length : null,
+            }),
+          ],
+        })
+      );
+      apiMocks.getCaptureWindow.mockResolvedValue(windowFor('repeat and repeat'));
+
+      const { container } = renderInspector(
+        '/cases/case-1/evidence?evidence=ev-1&claim=claim-1&capture=cap-1'
+      );
+
+      const panel = await waitFor(() => {
+        const element = container.querySelector(`[data-state="${attribute}"]`);
+        expect(element).not.toBeNull();
+        return element as HTMLElement;
+      });
+      // Distinct text, never colour alone.
+      expect(panel.textContent).toMatch(message);
+      expect(panel.getAttribute('data-state')).toBe(attribute);
+
+      // Exactly one of the five diagnostics is active at a time.
+      const active = container.querySelectorAll(
+        '.inspector-diagnostic-state[data-state]'
+      );
+      expect(active).toHaveLength(1);
+      expect(active[0].getAttribute('data-state')).toBe(attribute);
+
+      // No fabricated highlight for any non-exact reading.
+      expect(container.querySelector('mark')).toBeNull();
+    }
+  );
+
+  it('gives the five diagnostics five distinct messages', async () => {
+    const messages = new Set<string>();
+
+    for (const state of states) {
+      apiMocks.getEvidenceDetail.mockResolvedValue(
+        evidenceDetail({
+          relatedClaims: [
+            reference({
+              alignmentStatus: state.status as AlignmentStatus,
+              quote: state.quote,
+            }),
+          ],
+        })
+      );
+      apiMocks.getCaptureWindow.mockResolvedValue(windowFor('repeat and repeat'));
+
+      const { container, unmount } = renderInspector(
+        `/cases/case-1/evidence?evidence=ev-1&claim=claim-1&capture=cap-1&start=${messages.size}`
+      );
+      const panel = await waitFor(() => {
+        const element = container.querySelector(
+          `.inspector-diagnostic-state[data-state="${state.attribute}"]`
+        );
+        expect(element).not.toBeNull();
+        return element as HTMLElement;
+      });
+      messages.add(panel.textContent ?? '');
+      unmount();
+    }
+
+    expect(messages.size).toBe(states.length);
+  });
+
+  it('keeps the exact reading as alignment, not a confirmation', async () => {
+    apiMocks.getEvidenceDetail.mockResolvedValue(
+      evidenceDetail({
+        relatedClaims: [
+          reference({ alignmentStatus: 'exact', quote: 'quote', startChar: 0, endChar: 5 }),
+        ],
+      })
+    );
+    apiMocks.getCaptureWindow.mockResolvedValue(windowFor('quote in body'));
+
+    const { container } = renderInspector(
+      '/cases/case-1/evidence?evidence=ev-1&claim=claim-1&capture=cap-1'
+    );
+
+    await waitFor(() => expect(container.querySelector('mark')).not.toBeNull());
+    expect(container.querySelector('[data-state="inspector-exact"]')).not.toBeNull();
+    expect(container.querySelector('.inspector-diagnostic-state')).toBeNull();
+    // The label never reads as a confirmation badge.
+    expect(document.body.textContent ?? '').not.toMatch(/\bConfirmed\b/);
+    expect(container.querySelector('.badge-success')).toBeNull();
+  });
+});
+
+describe('EvidenceInspector frozen citation read-only context', () => {
+  it('renders frozen citation values without editable controls', async () => {
+    apiMocks.getCitationDetail.mockResolvedValue(citation());
+    apiMocks.getCaptureWindow.mockResolvedValue(windowFor('abcde東京 😀 tail'));
+
+    const { container } = renderInspector(
+      '/cases/case-1/evidence?citation=cit-1&snapshot=snap-1'
+    );
+
+    const frozen = await waitFor(() => {
+      const element = container.querySelector('[data-frozen="true"]');
+      expect(element).not.toBeNull();
+      return element as HTMLElement;
+    });
+    expect(frozen.getAttribute('data-readonly')).toBe('true');
+    expect(frozen.textContent).toContain('Frozen claim text');
+    expect(frozen.textContent).toMatch(/read from the immutable citation record/i);
+
+    // Nothing in the frozen context (or the inspector) is an editable field.
+    for (const selector of ['input', 'textarea', 'select', '[contenteditable="true"]']) {
+      expect(container.querySelectorAll(selector)).toHaveLength(0);
+    }
+
+    // The captured text is static, read-only text.
+    const capturedText = await screen.findByTestId('capture-text');
+    expect(capturedText.tagName).toBe('PRE');
+    expect(capturedText.getAttribute('data-readonly')).toBe('true');
+    expect(capturedText.querySelectorAll('input, textarea')).toHaveLength(0);
+
+    // The citation reader is frozen by ID, so it never receives a snapshot.
+    expect(apiMocks.getCitationDetail).toHaveBeenCalledWith('case-1', 'cit-1');
+  });
+});
+
+describe('EvidenceInspector focus restoration', () => {
+  const OpenerProbe = () => {
+    const [, setSearchParams] = useSearchParams();
+    return (
+      <button
+        type="button"
+        onClick={() => setSearchParams({ evidence: 'ev-1', capture: 'cap-1' })}
+      >
+        Inspect this source
+      </button>
+    );
+  };
+
+  it('returns focus to the invoking control when the inspector closes', async () => {
+    apiMocks.getEvidenceDetail.mockResolvedValue(evidenceDetail({ relatedClaims: [] }));
+    apiMocks.getCaptureWindow.mockResolvedValue(windowFor('body'));
+
+    withProviders(
+      '/cases/case-1/evidence',
+      <>
+        <OpenerProbe />
+        <EvidenceInspector caseId="case-1" />
+      </>
+    );
+
+    const opener = screen.getByRole('button', { name: 'Inspect this source' });
+    opener.focus();
+    expect(document.activeElement).toBe(opener);
+
+    fireEvent.click(opener);
+
+    const heading = await screen.findByRole('heading', { name: /Evidence inspector/ });
+    await waitFor(() => expect(document.activeElement).toBe(heading));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close inspector' }));
+
+    await waitFor(() => expect(document.activeElement).toBe(opener));
+    expect(screen.queryByRole('heading', { name: /Evidence inspector/ })).toBeNull();
+  });
+
+  it('uses an explicit return-focus target when one is supplied', async () => {
+    apiMocks.getEvidenceDetail.mockResolvedValue(evidenceDetail({ relatedClaims: [] }));
+    apiMocks.getCaptureWindow.mockResolvedValue(windowFor('body'));
+
+    const ReturnProbe = () => {
+      const [anchor, setAnchor] = useState<HTMLButtonElement | null>(null);
+      return (
+        <>
+          <button type="button" ref={setAnchor} data-testid="return-target">
+            Return target
+          </button>
+          <EvidenceInspector caseId="case-1" returnFocusTo={anchor} />
+        </>
+      );
+    };
+
+    withProviders('/cases/case-1/evidence?evidence=ev-1&capture=cap-1', <ReturnProbe />);
+    // The heading takes focus on open…
+    const heading = await screen.findByRole('heading', { name: /Evidence inspector/ });
+    await waitFor(() => expect(document.activeElement).toBe(heading));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close inspector' }));
+    // …and focus returns to the supplied target rather than to the body.
+    await waitFor(() =>
+      expect(document.activeElement).toBe(screen.getByTestId('return-target'))
+    );
+  });
+});
+
+describe('EvidenceInspector narrow viewport metadata', () => {
+  const METADATA_LABELS = [
+    'Evidence ID',
+    'Title',
+    'Publisher',
+    'Source type',
+    'Recorded verification',
+    'Published',
+    'Original URL',
+    'Canonical URL',
+    'Capture ID',
+    'Capture kind',
+    'Current capture',
+    'Recorded at',
+    'Observed at',
+    'Content SHA-256',
+    'Capture length',
+    'Extraction scope',
+    'Analysis provenance',
+    'Extraction metadata',
+    'Code-point range',
+    'Assessment origin',
+    'Assessment version',
+    'Citation ID',
+    'Claim signature',
+    'Original claim ID',
+  ];
+
+  it('exposes every metadata field, stacked, at 375px', async () => {
+    // jsdom performs no layout: this asserts the DOM contract (every label/value
+    // pair rendered, wrap-friendly classes, no fixed widths) plus the narrow
+    // stylesheet rules. Visual proof belongs to the F16 browser gate.
+    const originalWidth = window.innerWidth;
+    window.innerWidth = 375;
+
+    apiMocks.getCitationDetail.mockResolvedValue(citation());
+    apiMocks.getCaptureWindow.mockResolvedValue(windowFor('abcde東京 😀 tail'));
+
+    const { container } = renderInspector('/cases/case-1/evidence?citation=cit-1');
+
+    await screen.findByRole('heading', { name: 'Frozen claim text' });
+    await screen.findByTestId('capture-text');
+
+    const labels = Array.from(container.querySelectorAll('.inspector-field-label')).map(
+      (element) => element.textContent ?? ''
+    );
+    for (const label of METADATA_LABELS) {
+      expect(labels).toContain(label);
+    }
+
+    const fields = Array.from(container.querySelectorAll('.inspector-field'));
+    expect(fields.length).toBeGreaterThanOrEqual(METADATA_LABELS.length);
+    for (const field of fields) {
+      expect(field.querySelectorAll('.inspector-field-label')).toHaveLength(1);
+      const value = field.querySelector('.inspector-field-value');
+      expect(value).not.toBeNull();
+      expect((value?.textContent ?? '').trim()).not.toBe('');
+    }
+
+    // Nothing may force a fixed width or suppress wrapping inside the panel.
+    for (const element of Array.from(container.querySelectorAll('*'))) {
+      const style = element.getAttribute('style') ?? '';
+      expect(style).not.toMatch(/width\s*:/);
+      expect(style).not.toMatch(/nowrap/);
+    }
+
+    // Every metadata value is rendered through the wrap-friendly value class,
+    // so a long capture id or hash wraps instead of widening the panel.
+    expect(container.querySelectorAll('.inspector-field-value').length).toBe(
+      fields.length
+    );
+
+    window.innerWidth = originalWidth;
   });
 });

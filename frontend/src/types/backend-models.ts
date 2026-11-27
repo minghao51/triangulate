@@ -159,6 +159,13 @@ export interface Claim {
   alternativePerspective?: string | null;
   evidence: ClaimEvidenceLink[];
   sourceStanceBreakdown?: SourceStanceBreakdown;
+  /**
+   * Additive F04 typing: a frozen or removed claim is read-only for annotation
+   * targeting. Current-case readers normally omit these; the annotation picker
+   * refuses to invent a target for either.
+   */
+  isFrozen?: boolean;
+  isRemoved?: boolean;
 }
 
 export interface EvidenceVerificationCheck {
@@ -179,6 +186,12 @@ export interface Evidence {
   publisher: string | null;
   sourceType: string;
   verificationStatus: VerificationStatus;
+  /**
+   * Additive: the stored text only when it is outside the recorded status set.
+   * `verificationStatus` stays `unknown` for such a value; the raw text lets the
+   * reader state it verbatim instead of collapsing it into Unknown.
+   */
+  rawVerificationStatus?: string | null;
   credibilityTier: string | null;
   requiresHumanReview: boolean;
   /** Pointer to the immutable current capture. Capture text is never inlined. */
@@ -199,6 +212,8 @@ export interface Evidence {
     relation: string;
     importedAt: string | null;
   }>;
+  /** Recorded publication timestamp; `null` means no date is recorded. */
+  publishedAt?: string | null;
   verificationChecks: EvidenceVerificationCheck[];
 }
 
@@ -258,6 +273,11 @@ export interface TimelineEvent {
   title: string;
   summary: string | null;
   verificationStatus: VerificationStatus;
+  /**
+   * Additive: the stored text only when it is outside the recorded status set;
+   * `verificationStatus` stays `unknown` for such a value. Never coerced.
+   */
+  rawVerificationStatus?: string | null;
   linkedEvidenceCount: number;
   locationCountryCode?: string | null;
   locationLat?: number | null;
@@ -366,11 +386,146 @@ export interface RunChanges {
   hasMore: boolean;
 }
 
+/**
+ * X01 ad-hoc snapshot comparison (F17/F18).
+ *
+ * This DTO is **not** `RunChanges`: the delta is computed on request between two
+ * explicitly named immutable snapshots and was never recorded by a run. It
+ * carries no `observedByRun`, actor or causal field, and `entity_absent` means
+ * "absent from the later observation" only.
+ */
+export type SnapshotComparisonEntityType =
+  | 'case'
+  | 'articles'
+  | 'events'
+  | 'claims'
+  | 'links'
+  | 'citations'
+  | 'evidence'
+  | 'captures'
+  | 'reviews'
+  | 'exceptions'
+  | 'parties'
+  | 'partyInvestigations'
+  | 'narratives';
+
+export type SnapshotComparisonChangeKind =
+  | 'entity_added'
+  | 'entity_absent'
+  | 'field_changed';
+
+export type SnapshotComparisonUnavailableReason =
+  | 'incompatible_schema'
+  | 'incompatible_identity'
+  | 'incompatible_policy'
+  | 'unknown_version'
+  | 'payload_unreadable';
+
+/** One side's recorded metadata; `createdAt` is the snapshot-save time. */
+export interface SnapshotComparisonSide {
+  sequence: number;
+  createdAt: string | null;
+  schemaVersion: string;
+  identityVersion: string;
+  policyVersion: string;
+}
+
+/**
+ * Frozen references for one side of one item. Only ids that side actually
+ * recorded are present; nothing is invented for an entity without them.
+ */
+export interface SnapshotComparisonRef {
+  snapshotId: string;
+  claimId: string | null;
+  evidenceId: string | null;
+  captureId: string | null;
+  citationId: string | null;
+}
+
+export interface SnapshotComparisonItemRefs {
+  baseline: SnapshotComparisonRef;
+  target: SnapshotComparisonRef;
+}
+
+/** One entity-level difference between two frozen observations. */
+export interface SnapshotComparisonItem {
+  entityType: SnapshotComparisonEntityType | string;
+  entityId: string;
+  changeKind: SnapshotComparisonChangeKind | string;
+  changedFields: string[];
+  before: Record<string, unknown> | null;
+  after: Record<string, unknown> | null;
+  refs: SnapshotComparisonItemRefs;
+}
+
+/** `GET /api/cases/{case_id}/snapshot-comparison?baseline=&target=` */
+export interface SnapshotComparison {
+  mode: 'ad_hoc';
+  comparisonPolicyVersion: string;
+  baselineSnapshotId: string;
+  targetSnapshotId: string;
+  baselineRunId: string;
+  targetRunId: string;
+  baselineCoverage: InvestigationCoverage | string;
+  targetCoverage: InvestigationCoverage | string;
+  baselineMetadata: SnapshotComparisonSide;
+  targetMetadata: SnapshotComparisonSide;
+  availability: 'ready' | 'unavailable';
+  /** `null` exactly when the comparison is ready. */
+  unavailableReason: SnapshotComparisonUnavailableReason | null;
+  items: SnapshotComparisonItem[];
+  /** `null` when unavailable; an integer (including 0) when ready. */
+  total: number | null;
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+}
+
 export interface ReportData {
   status: 'generated' | 'pending';
   markdownPath: string | null;
   markdownContent: string | null;
   manifestPath: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// X02 / F19 published report artifacts of one grouped run
+// ---------------------------------------------------------------------------
+
+/**
+ * The only artifact types a successful publication writes. The F19 reader
+ * enforces this allowlist; the UI never offers anything else (no PDF, no ZIP,
+ * no bundle) and never generates or recomputes an artifact.
+ */
+export type ArtifactType =
+  | 'report_markdown'
+  | 'report_json'
+  | 'execution_manifest';
+
+/**
+ * `payload_json` means the stored canonical JSON payload re-hashes to the
+ * recorded value. `unknown` means that could not be established
+ * (e.g. the markdown record stores no payload).
+ *
+ * Either way the value is a **recorded payload checksum**, never a checksum of
+ * the downloaded file bytes and never a statement about who handled a file.
+ */
+export type ArtifactChecksumKind = 'payload_json' | 'unknown';
+
+/**
+ * One published report artifact of a grouped run (F19 descriptor).
+ *
+ * `downloadUrl` is a relative API URL and is not a file-existence claim: the
+ * bytes are checked when downloading, and a miss is a uniform 404. There is no
+ * filesystem path field, and no field names an actor, owner or cause.
+ */
+export interface ArtifactDescriptor {
+  artifactId: string;
+  type: ArtifactType;
+  displayName: string;
+  downloadUrl: string;
+  recordedChecksum: string | null;
+  checksumKind: ArtifactChecksumKind;
 }
 
 export interface OsintArtifact {
@@ -426,7 +581,7 @@ export interface EvaluationResult {
 }
 
 export interface EvaluationSummary {
-  latest: EvaluationResult;
+  latest: EvaluationResult | null;
   history: EvaluationResult[];
 }
 

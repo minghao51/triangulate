@@ -1,0 +1,72 @@
+<!-- viewport: 768×1024 tablet -->
+<svg xmlns="http://www.w3.org/2000/svg" width="768" height="1024" viewBox="0 0 768 1024" role="img" aria-labelledby="wf-title wf-desc">
+  <title id="wf-title">Pipeline monitor — tablet</title>
+  <desc id="wf-desc">Pipeline monitor — tablet (tablet, 768x1024). Proposal wireframe with synthetic data, not implementation evidence. Numbered regions: 1 Primary navigation (top bar) — GET reads only; CLI owns ingest and runs; 2 Pipeline monitor header — title, synthetic context and available actions; 3 Configured stages — configuration order and enabled flag; configuration is not an attempt. · frame 1 of 1; 4 Recorded attempts — only actually recorded attempts; an unrecorded stage is not a success. · frame 1 of 1.</desc>
+  <g id="ui" font-family="-apple-system, system-ui, sans-serif">
+    <rect x="0" y="0" width="768" height="1024" fill="#fff"/>
+    <rect x="8" y="8" width="752" height="1008" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <rect x="32" y="32" width="704" height="48" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="48" y="56" font-size="14" fill="#000" font-weight="600">TRIANGULATE</text>
+    <text x="168" y="56" font-size="12" fill="#000">Dashboard</text>
+    <text x="248" y="56" font-size="12" fill="#000" font-weight="600">Cases</text>
+    <text x="304" y="56" font-size="12" fill="#000">Network</text>
+    <text x="368" y="56" font-size="12" fill="#000">Sources</text>
+    <text x="432" y="56" font-size="12" fill="#000">Narratives</text>
+    <text x="520" y="56" font-size="12" fill="#000">Monitoring</text>
+    <text x="608" y="56" font-size="12" fill="#000">AI info</text>
+    <rect x="32" y="104" width="704" height="88" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="48" y="152" font-size="20" fill="#000" font-weight="600">Pipeline monitor</text>
+    <text x="48" y="176" font-size="12" fill="#666">Configured stages vs recorded attempts · Proposal · synthetic · not built</text>
+    <g data-pane="p1">
+    <rect x="32" y="216" width="704" height="224" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="48" y="256" font-size="14" fill="#000" font-weight="600">Configured stages</text>
+    <text x="48" y="280" font-size="12" fill="#000" font-weight="600">Stage</text>
+    <text x="360" y="280" font-size="12" fill="#000" font-weight="600">Order</text>
+    <text x="520" y="280" font-size="12" fill="#000" font-weight="600">Enabled</text>
+    <line x1="48" y1="288" x2="720" y2="288" stroke="#000" stroke-width="1.5"/>
+    <text x="48" y="320" font-size="12" fill="#000">extraction</text>
+    <text x="360" y="320" font-size="12" fill="#000">1</text>
+    <text x="520" y="320" font-size="12" fill="#000">yes</text>
+    <text x="48" y="352" font-size="12" fill="#000">party_classifier</text>
+    <text x="360" y="352" font-size="12" fill="#000">2</text>
+    <text x="520" y="352" font-size="12" fill="#000">yes</text>
+    <text x="48" y="384" font-size="12" fill="#000">party_investigators</text>
+    <text x="360" y="384" font-size="12" fill="#000">3</text>
+    <text x="520" y="384" font-size="12" fill="#000">yes</text>
+    <text x="48" y="416" font-size="12" fill="#000">arbiter</text>
+    <text x="360" y="416" font-size="12" fill="#000">4</text>
+    <text x="520" y="416" font-size="12" fill="#000">yes</text>
+    </g>
+    <g data-pane="p2">
+    <rect x="32" y="464" width="704" height="248" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="48" y="504" font-size="14" fill="#000" font-weight="600">Recorded attempts</text>
+    <text x="48" y="528" font-size="12" fill="#000" font-weight="600">Stage</text>
+    <text x="328" y="528" font-size="12" fill="#000" font-weight="600">Attempt</text>
+    <text x="464" y="528" font-size="12" fill="#000" font-weight="600">Status</text>
+    <line x1="48" y1="536" x2="720" y2="536" stroke="#000" stroke-width="1.5"/>
+    <text x="48" y="568" font-size="12" fill="#000">extraction</text>
+    <text x="328" y="568" font-size="12" fill="#000">attempt-11</text>
+    <text x="464" y="568" font-size="12" fill="#000">succeeded</text>
+    <text x="48" y="600" font-size="12" fill="#000">party_classifier</text>
+    <text x="328" y="600" font-size="12" fill="#000">attempt-12</text>
+    <text x="464" y="600" font-size="12" fill="#000">succeeded</text>
+    <text x="48" y="632" font-size="12" fill="#000">party_investigators</text>
+    <text x="328" y="632" font-size="12" fill="#000">attempt-13</text>
+    <text x="464" y="632" font-size="12" fill="#000">running</text>
+    <text x="48" y="664" font-size="12" fill="#000">arbiter</text>
+    <text x="328" y="664" font-size="12" fill="#000">—</text>
+    <text x="464" y="664" font-size="12" fill="#000">unrecorded</text>
+    <text x="48" y="688" font-size="12" fill="#666">Unrecorded is not success and not failure; no attempt row exists.</text>
+    </g>
+  </g>
+  <g id="annotations" font-family="-apple-system, system-ui, sans-serif">
+    <rect data-region="1" x="24" y="24" width="720" height="64" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="2" x="24" y="96" width="720" height="104" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="3" x="24" y="208" width="720" height="240" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="4" x="24" y="456" width="720" height="264" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <text x="16" y="48" font-size="12" font-weight="600" fill="#000">1</text>
+    <text x="16" y="120" font-size="12" font-weight="600" fill="#000">2</text>
+    <text x="16" y="232" font-size="12" font-weight="600" fill="#000">3</text>
+    <text x="16" y="480" font-size="12" font-weight="600" fill="#000">4</text>
+  </g>
+</svg>

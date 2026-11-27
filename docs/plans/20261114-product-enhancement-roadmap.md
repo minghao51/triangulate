@@ -10,7 +10,7 @@ Triangulate is best positioned as a **topic-oriented evidence investigation work
 
 Its strongest potential distinction is not “more AI agents” or a general RSS reader. It is showing **what each source actually supports, what independent sources disagree about, what changed, and what a human decided**. The existing case/evidence/run models are useful foundations, but current source attachment and synthetic UI data do not yet deliver that promise reliably.
 
-The website is intentionally read-only. It can become a strong evidence reader without adding a web execution backend. Creation, review, annotations or monitor editing in the browser require a separate decision to change that boundary.
+The website is intentionally read-only. It can become a strong evidence reader without adding a web execution backend. As implemented it already carries one narrow human-in-the-loop review surface: three POST routes for review decisions, exception actions and review annotations (2026-11-22 amendment to the [specification](20261114-evidence-workbench-specification.md)). Creation, reruns, ingestion or monitor editing in the browser require a separate decision to change that boundary.
 
 ## 2. Comparison method and limits
 

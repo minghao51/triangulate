@@ -1,0 +1,81 @@
+<!-- viewport: 768×1024 tablet -->
+<svg xmlns="http://www.w3.org/2000/svg" width="768" height="1024" viewBox="0 0 768 1024" role="img" aria-labelledby="wf-title wf-desc">
+  <title id="wf-title">Case explorer — tablet</title>
+  <desc id="wf-desc">Case explorer — tablet (tablet, 768x1024). Proposal wireframe with synthetic data, not implementation evidence. Numbered regions: 1 Primary navigation (top bar) — GET reads only; CLI owns ingest and runs; 2 Case explorer header — title, synthetic context and available actions; 3 Case filters — literal query, status and sort; no hidden full-text index is claimed. · frame 1 of 1; 4 Case table — per-case observed status, coverage and update time. · frame 1 of 1; 5 Pagination — disabled Previous on the first page; no synthetic totals. · frame 1 of 1.</desc>
+  <g id="ui" font-family="-apple-system, system-ui, sans-serif">
+    <rect x="0" y="0" width="768" height="1024" fill="#fff"/>
+    <rect x="8" y="8" width="752" height="1008" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <rect x="32" y="32" width="704" height="48" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="48" y="56" font-size="14" fill="#000" font-weight="600">TRIANGULATE</text>
+    <text x="168" y="56" font-size="12" fill="#000">Dashboard</text>
+    <text x="248" y="56" font-size="12" fill="#000" font-weight="600">Cases</text>
+    <text x="304" y="56" font-size="12" fill="#000">Network</text>
+    <text x="368" y="56" font-size="12" fill="#000">Sources</text>
+    <text x="432" y="56" font-size="12" fill="#000">Narratives</text>
+    <text x="520" y="56" font-size="12" fill="#000">Monitoring</text>
+    <text x="608" y="56" font-size="12" fill="#000">AI info</text>
+    <rect x="32" y="104" width="704" height="88" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="48" y="152" font-size="20" fill="#000" font-weight="600">Case explorer</text>
+    <text x="48" y="176" font-size="12" fill="#666">Browse cases · GET only · Proposal · synthetic · not built</text>
+    <g data-pane="p1">
+    <rect x="32" y="216" width="704" height="120" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="48" y="248" font-size="12" fill="#000">Query</text>
+    <rect x="48" y="256" width="200" height="32" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="56" y="280" font-size="12" fill="#000">any</text>
+    <text x="256" y="248" font-size="12" fill="#000">Status</text>
+    <rect x="256" y="256" width="200" height="32" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="264" y="280" font-size="12" fill="#000">all</text>
+    <text x="464" y="248" font-size="12" fill="#000">Sort</text>
+    <rect x="464" y="256" width="200" height="32" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="472" y="280" font-size="12" fill="#000">updated</text>
+    <rect x="48" y="288" width="96" height="32" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="56" y="312" font-size="12" fill="#000">Apply</text>
+    <rect x="152" y="288" width="96" height="32" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="160" y="312" font-size="12" fill="#000">Clear</text>
+    </g>
+    <g data-pane="p2">
+    <rect x="32" y="360" width="704" height="224" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="48" y="400" font-size="14" fill="#000" font-weight="600">Cases</text>
+    <text x="48" y="424" font-size="12" fill="#000" font-weight="600">Case</text>
+    <text x="224" y="424" font-size="12" fill="#000" font-weight="600">Status</text>
+    <text x="344" y="424" font-size="12" fill="#000" font-weight="600">Coverage</text>
+    <text x="464" y="424" font-size="12" fill="#000" font-weight="600">Updated</text>
+    <line x1="48" y1="432" x2="720" y2="432" stroke="#000" stroke-width="1.5"/>
+    <text x="48" y="464" font-size="12" fill="#000">case-2201-0417</text>
+    <text x="224" y="464" font-size="12" fill="#000">active</text>
+    <text x="344" y="464" font-size="12" fill="#000">partial</text>
+    <text x="464" y="464" font-size="12" fill="#000">2026-11-20</text>
+    <text x="48" y="496" font-size="12" fill="#000">case-2199-1180</text>
+    <text x="224" y="496" font-size="12" fill="#000">active</text>
+    <text x="344" y="496" font-size="12" fill="#000">complete</text>
+    <text x="464" y="496" font-size="12" fill="#000">2026-11-19</text>
+    <text x="48" y="528" font-size="12" fill="#000">case-2198-0922</text>
+    <text x="224" y="528" font-size="12" fill="#000">failed</text>
+    <text x="344" y="528" font-size="12" fill="#000">failed</text>
+    <text x="464" y="528" font-size="12" fill="#000">2026-11-18</text>
+    <text x="48" y="560" font-size="12" fill="#000">case-2197-0733</text>
+    <text x="224" y="560" font-size="12" fill="#000">closed</text>
+    <text x="344" y="560" font-size="12" fill="#000">complete</text>
+    <text x="464" y="560" font-size="12" fill="#000">2026-11-16</text>
+    </g>
+    <g data-pane="p3">
+    <rect x="32" y="608" width="704" height="64" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <rect x="48" y="624" width="128" height="32" fill="#e6e6e6" stroke="#000" stroke-width="1.5"/>
+    <text x="56" y="648" font-size="12" fill="#666">Previous page…</text>
+    <rect x="184" y="624" width="96" height="32" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="192" y="648" font-size="12" fill="#000">Next page</text>
+    </g>
+  </g>
+  <g id="annotations" font-family="-apple-system, system-ui, sans-serif">
+    <rect data-region="1" x="24" y="24" width="720" height="64" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="2" x="24" y="96" width="720" height="104" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="3" x="24" y="208" width="720" height="136" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="4" x="24" y="352" width="720" height="240" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="5" x="24" y="600" width="720" height="80" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <text x="16" y="48" font-size="12" font-weight="600" fill="#000">1</text>
+    <text x="16" y="120" font-size="12" font-weight="600" fill="#000">2</text>
+    <text x="16" y="232" font-size="12" font-weight="600" fill="#000">3</text>
+    <text x="16" y="376" font-size="12" font-weight="600" fill="#000">4</text>
+    <text x="16" y="624" font-size="12" font-weight="600" fill="#000">5</text>
+  </g>
+</svg>

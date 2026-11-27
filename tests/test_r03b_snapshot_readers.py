@@ -1142,6 +1142,9 @@ class TestSnapshotHttpContract:
     @pytest.fixture
     def api(self, monkeypatch, tmp_path):
         seed(tmp_path)
+        # The app selects storage once at startup; bind this test's disposable
+        # database instead of inheriting the module-level default.
+        app.state.database_path = tmp_path / "r03b.sqlite3"
         return TestClient(app)
 
     @pytest.mark.parametrize("selector", ["snapshotId", "snapshot_id"])

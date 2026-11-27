@@ -1,10 +1,14 @@
 """Database initialization and session management."""
 
 import os
+from contextlib import contextmanager
 from pathlib import Path
+from typing import Generator
+from urllib.parse import quote
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
-from typing import Generator
+from sqlalchemy.pool import NullPool
 
 from src.storage.models import Base
 
@@ -95,6 +99,47 @@ def init_database(db_path: str | None = None) -> Database:
     return db
 
 
+def read_only_engine(db_path: str | Path):
+    """Create an engine that opens an **existing** SQLite file read-only.
+
+    The ``mode=ro`` URI makes SQLite refuse to create a missing file or a
+    parent directory, so a probe can never bootstrap storage. The path is
+    percent-encoded so spaces, ``#``, ``?`` and ``%`` survive URI parsing. A
+    :class:`NullPool` means every session gets a fresh handle and nothing is
+    cached across app instances or tests. ``immutable=1`` is deliberately not
+    used: the database may be actively written by the server, and its journal
+    and locking behavior must stay intact.
+    """
+    path = Path(db_path)
+    if not path.is_absolute():
+        path = Path(os.path.abspath(path))
+    uri = f"file:{quote(str(path), safe='/')}?mode=ro"
+    return create_engine(
+        f"sqlite:///{uri}&uri=true",
+        connect_args={"check_same_thread": False},
+        poolclass=NullPool,
+        echo=False,
+    )
+
+
+@contextmanager
+def open_read_only_session(db_path: str | Path) -> Generator[Session, None, None]:
+    """Yield a session over an existing database opened in read-only mode.
+
+    The engine is created for this session only and disposed on every path, so
+    a missing file, a failed query or a closed client releases the handle. The
+    caller owns the transaction (see :func:`begin_read_transaction`); this
+    helper never commits.
+    """
+    engine = read_only_engine(db_path)
+    session = Session(bind=engine)
+    try:
+        yield session
+    finally:
+        session.close()
+        engine.dispose()
+
+
 def begin_read_transaction(session: Session) -> None:
     """Open an explicit SQLite read transaction for a consistent multi-read view.
 
@@ -112,4 +157,6 @@ __all__ = [
     "begin_read_transaction",
     "get_database",
     "init_database",
+    "open_read_only_session",
+    "read_only_engine",
 ]

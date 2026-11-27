@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -7,6 +7,7 @@ import {
   ChevronRight,
   Copy,
   ExternalLink,
+  FileSearch,
   GitCompare,
   RefreshCw,
   X,
@@ -25,8 +26,17 @@ import {
   getEvidenceDetail,
   getEvidenceForCase,
 } from '../../services/api';
+import {
+  comparisonContextFromSearchParams,
+  getComparisonTray,
+  reconcileComparisonTrayContext,
+  removeFromComparisonTray,
+  subscribeComparisonTray,
+  type TrayEntry,
+} from '../../services/comparison-tray';
 import { isNotFound } from '../../services/api-error';
 import {
+  buildComparisonUrl,
   buildInspectorUrl,
   parseComparisonSelection,
   toComparisonSearchParams,
@@ -241,7 +251,10 @@ const SourcePanel: React.FC<{ side: ComparisonSide; label: string }> = ({
         </span>
         {side.coverage.caveat && <p>{side.coverage.caveat}</p>}
         {!side.coverage.historicalAnalysisAvailable && (
-          <p className="compare-warning-text">
+          <p
+            className="compare-warning-text"
+            data-state="comparison-historical-unavailable"
+          >
             This capture's historical claim alignment is not available. The current
             claim links are not substituted.
           </p>
@@ -400,7 +413,12 @@ const ComparisonRowView: React.FC<{
 const DependencyBanner: React.FC<{ dependency: Comparison['dependency'] }> = ({
   dependency,
 }) => (
-  <div className={`compare-dependency ${dependency.detected ? 'is-warning' : ''}`}>
+  <div
+    className={`compare-dependency ${dependency.detected ? 'is-warning' : ''}`}
+    data-state={
+      dependency.detected ? 'comparison-dependency-warning' : 'comparison-dependency-none'
+    }
+  >
     <Copy size={16} />
     <div>
       <strong>
@@ -427,6 +445,121 @@ const DependencyBanner: React.FC<{ dependency: Comparison['dependency'] }> = ({
   </div>
 );
 
+const TRAY_DRAFT_TITLE = 'Comparison draft';
+
+const TrayDraft: React.FC<{
+  entries: readonly TrayEntry[];
+  notice: string | null;
+  rejection: string | null;
+  captureVersionCount: number;
+  onRemove: (evidenceId: string) => void;
+  onCommit: () => void;
+  onOpenCaptureHistory: (entry: TrayEntry) => void;
+}> = ({
+  entries,
+  notice,
+  rejection,
+  captureVersionCount,
+  onRemove,
+  onCommit,
+  onOpenCaptureHistory,
+}) => {
+  const single = entries.length === 1 ? entries[0] : null;
+  return (
+    <section
+      className="compare-tray glass-panel"
+      aria-labelledby="compare-tray-heading"
+      data-state={entries.length === 2 ? 'comparison-selection' : 'comparison-empty'}
+    >
+      <div className="compare-tray-heading">
+        <h4 id="compare-tray-heading">
+          <GitCompare size={16} /> {TRAY_DRAFT_TITLE} ({entries.length} of 2)
+        </h4>
+        <p className="compare-diagnostic">
+          Session-only draft for this case. Two distinct sources at most; a third is
+          refused and never substituted.
+        </p>
+      </div>
+
+      {notice && (
+        <p className="compare-tray-notice" role="status" data-state="comparison-tray-cleared">
+          {notice}
+        </p>
+      )}
+
+      {rejection && (
+        <p className="compare-tray-refusal" role="alert" data-state="comparison-tray-refused">
+          <AlertTriangle size={14} /> {rejection} No source in the draft was replaced.
+        </p>
+      )}
+
+      {entries.length === 0 ? (
+        <p className="compare-diagnostic">
+          No sources in the draft yet. Select an evidence row and use “Add to comparison”
+          on the Evidence tab.
+        </p>
+      ) : (
+        <ol className="compare-tray-entries">
+          {entries.map((entry, index) => (
+            <li key={entry.evidenceId} data-evidence-id={entry.evidenceId}>
+              <span className="compare-side-label">{index === 0 ? 'Left' : 'Right'}</span>
+              <span>{entry.title ?? entry.evidenceId}</span>
+              {entry.publisher ? <span> · {entry.publisher}</span> : null}
+              <code title={entry.evidenceId}>{shortId(entry.evidenceId)}</code>
+              <span className="compare-diagnostic">
+                {entry.captureId
+                  ? `pinned capture ${shortId(entry.captureId)}`
+                  : 'capture resolved when compared'}
+              </span>
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                aria-label={`Remove ${entry.evidenceId} from comparison draft`}
+                onClick={() => onRemove(entry.evidenceId)}
+              >
+                <X size={14} /> Remove
+              </button>
+            </li>
+          ))}
+        </ol>
+      )}
+
+      {single && (
+        <div className="compare-tray-single" data-state="comparison-no-second-source">
+          <p>
+            One source in the draft. Add one more distinct source before comparing;
+            a source is never compared with itself.
+          </p>
+          {captureVersionCount > 1 && (
+            <p>
+              This source has {captureVersionCount} recorded capture versions. Older
+              versions belong in capture history, not in Compare.
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => onOpenCaptureHistory(single)}
+              >
+                <FileSearch size={14} /> Open capture history
+              </button>
+            </p>
+          )}
+        </div>
+      )}
+
+      <div className="compare-tray-actions">
+        <button
+          type="button"
+          className="btn btn-primary btn-sm"
+          onClick={onCommit}
+          disabled={entries.length !== 2}
+        >
+          <GitCompare size={14} /> Compare draft
+        </button>
+      </div>
+    </section>
+  );
+};
+
 const CompareTab: React.FC<CompareTabProps> = ({ caseId }) => {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -435,6 +568,16 @@ const CompareTab: React.FC<CompareTabProps> = ({ caseId }) => {
     [searchParams]
   );
   const resultsRef = useRef<HTMLHeadingElement>(null);
+  const comparisonContext = comparisonContextFromSearchParams(searchParams);
+  const tray = useSyncExternalStore(subscribeComparisonTray, () =>
+    getComparisonTray(caseId, comparisonContext)
+  );
+
+  // A draft from another case or historical context is cleared here, with the
+  // explicit notice kept in the (now scoped) record. Nothing is mixed silently.
+  useEffect(() => {
+    reconcileComparisonTrayContext(caseId, comparisonContext);
+  }, [caseId, comparisonContext]);
 
   const evidenceQuery = useQuery({
     queryKey: ['compare-evidence', caseId],
@@ -452,6 +595,16 @@ const CompareTab: React.FC<CompareTabProps> = ({ caseId }) => {
     queryKey: ['compare-evidence-detail', caseId, selection.rightId],
     queryFn: () => getEvidenceDetail(caseId, selection.rightId!),
     enabled: Boolean(caseId && selection.rightId),
+    retry: false,
+  });
+
+  // A lone draft entry may have several capture versions; those belong in
+  // capture history, so the count is read only while exactly one is drafted.
+  const draftEntry = tray.entries.length === 1 ? tray.entries[0] : null;
+  const draftDetailQuery = useQuery({
+    queryKey: ['compare-tray-detail', caseId, draftEntry?.evidenceId ?? null],
+    queryFn: () => getEvidenceDetail(caseId, draftEntry!.evidenceId),
+    enabled: Boolean(caseId && draftEntry),
     retry: false,
   });
 
@@ -631,6 +784,37 @@ const CompareTab: React.FC<CompareTabProps> = ({ caseId }) => {
       offset: 0,
     });
 
+  /**
+   * Commit the draft through the existing URL builder. Any pinned captures ride
+   * along; the server resolves defaults for the rest and this view then replaces
+   * the URL those resolved capture IDs.
+   */
+  const commitTrayDraft = () => {
+    if (tray.entries.length !== 2) return;
+    const [left, right] = tray.entries;
+    navigate(
+      buildComparisonUrl(caseId, {
+        leftId: left.evidenceId,
+        rightId: right.evidenceId,
+        leftCaptureId: left.captureId,
+        rightCaptureId: right.captureId,
+      })
+    );
+  };
+
+  const removeDraftEntry = (evidenceId: string) => {
+    removeFromComparisonTray(caseId, comparisonContext, evidenceId);
+  };
+
+  const openCaptureHistory = (entry: TrayEntry) => {
+    navigate(
+      buildInspectorUrl(caseId, {
+        evidenceId: entry.evidenceId,
+        captureId: entry.captureId ?? draftDetailQuery.data?.currentCaptureId ?? null,
+      })
+    );
+  };
+
   return (
     <div className="compare-tab p-base">
       <div className="compare-header">
@@ -655,6 +839,16 @@ const CompareTab: React.FC<CompareTabProps> = ({ caseId }) => {
           Loading evidence sources…
         </div>
       )}
+      <TrayDraft
+        entries={tray.entries}
+        notice={tray.notice}
+        rejection={tray.rejection}
+        captureVersionCount={draftDetailQuery.data?.captures.length ?? 0}
+        onRemove={removeDraftEntry}
+        onCommit={commitTrayDraft}
+        onOpenCaptureHistory={openCaptureHistory}
+      />
+
       {evidenceQuery.error != null && (
         <div className="compare-state compare-state--error" role="alert">
           <AlertTriangle size={16} />
@@ -817,17 +1011,25 @@ const CompareTab: React.FC<CompareTabProps> = ({ caseId }) => {
       </div>
 
       {sameSelection && (
-        <div className="compare-state compare-state--error" role="alert">
+        <div
+          className="compare-state compare-state--error"
+          role="alert"
+          data-state="comparison-same-source"
+        >
           <AlertTriangle size={16} />
           <div>
             <strong>Choose two different sources.</strong>
             <p>The same evidence record cannot be compared with itself.</p>
+            <p className="compare-diagnostic">
+              This is a validation error, not a comparison. Differing capture versions of
+              one source belong in capture history.
+            </p>
           </div>
         </div>
       )}
 
       {!bothSelected && !sameSelection && (
-        <div className="compare-state" role="status">
+        <div className="compare-state" role="status" data-state="comparison-selection">
           Choose a left and a right source to compare their capture-linked claims.
         </div>
       )}
@@ -879,7 +1081,7 @@ const CompareTab: React.FC<CompareTabProps> = ({ caseId }) => {
           </div>
         ))}
 
-      {comparisonQuery.data && (
+      {comparisonQuery.data && !sameSelection && (
         <div className="compare-results">
           <h3 ref={resultsRef} tabIndex={-1} className="compare-results-heading">
             Comparison results

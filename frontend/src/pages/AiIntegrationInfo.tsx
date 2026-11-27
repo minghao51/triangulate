@@ -95,7 +95,9 @@ const AiIntegrationInfo: React.FC = () => {
         <p>
           Triangulate uses a multi-agent LangGraph workflow to interpret events. The pipeline
           extracts claims, clusters them by narrative, generates summaries, and assigns
-          verification statuses to determine event credibility.
+          verification statuses. Those agents run from the CLI and background workers: this page
+          only describes the pipeline, and every value on other pages is a recorded artifact read
+          back over HTTP.
         </p>
       </div>
 
@@ -124,11 +126,11 @@ const AiIntegrationInfo: React.FC = () => {
                 <span className="legend-line animated" />
                 <span>Data Flow</span>
               </div>
-              <div className="legend-item">
-                <span className="legend-line static" />
-                <span>State Transition</span>
-              </div>
             </div>
+            <p className="ai-info-note">
+              The diagram is the configured agent order. It is not a run trace: no stage on this
+              page is marked complete from its position, and no live execution is streamed.
+            </p>
           </CardBody>
         </Card>
 
@@ -194,6 +196,30 @@ const AiIntegrationInfo: React.FC = () => {
                 The <strong>Classifier</strong> agent uses these arbiter signals to assign
                 verification statuses, enabling analysts to quickly assess event credibility
                 and identify areas of contention.
+              </p>
+            </div>
+          </CardBody>
+        </Card>
+
+        <Card className="ai-boundaries-card">
+          <CardHeader>
+            <CardTitle>What The Browser Can Write</CardTitle>
+          </CardHeader>
+          <CardBody>
+            <div className="agent-content">
+              <p>
+                The web UI is a reader plus exactly three review POST families. Agent runs, case
+                creation, ingestion, reruns and index rebuilds happen outside it.
+              </p>
+              <ul>
+                <li><code>POST /api/cases/{'{case-id}'}/review-actions/review</code> — record a review decision</li>
+                <li><code>POST /api/cases/{'{case-id}'}/review-actions/exceptions/{'{exception-id}'}</code> — resolve, defer or reopen an exception</li>
+                <li><code>POST /api/cases/{'{case-id}'}/annotations</code> — write an annotation</li>
+              </ul>
+              <p className="ai-info-note">
+                Agent execution, case creation, ingestion, reruns, search-index rebuilds and writer
+                recovery are CLI-only. The UI has no notification, scheduling, role-management or
+                deployment features, and it never triggers an AI run.
               </p>
             </div>
           </CardBody>

@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 
 import PipelineMonitor from './PipelineMonitor';
@@ -65,9 +65,24 @@ function renderPipeline(path = '/cases/case-1/pipeline') {
   );
 }
 
+const setVisibility = (value: 'visible' | 'hidden') => {
+  Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => value });
+  act(() => {
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+};
+
 describe('PipelineMonitor truthful states', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      get: () => 'visible',
+    });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('never renders fabricated log lines for an empty run history', async () => {
@@ -189,6 +204,128 @@ describe('PipelineMonitor truthful states', () => {
     expect((refresh as HTMLButtonElement).disabled).toBe(true);
     expect(apiMocks.getCaseDetail).not.toHaveBeenCalled();
     expect(apiMocks.getRunHistoryForCase).not.toHaveBeenCalled();
+  });
+
+  it('labels configured workflow order apart from recorded attempts', async () => {
+    apiMocks.getCaseDetail.mockResolvedValue(caseDetail);
+    apiMocks.getRunHistoryForCase.mockResolvedValue([run({})]);
+    renderPipeline();
+
+    await screen.findByText(/saved stage attempts, not a log or event stream/i);
+
+    // Configured-vs-recorded distinction is explicit, not implied by styling.
+    expect(screen.getAllByText(/configured/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/recorded/i).length).toBeGreaterThan(0);
+    expect(screen.getByText('Recorded Stage Attempts')).toBeDefined();
+    expect(screen.getByText('Recorded Attempts')).toBeDefined();
+  });
+
+  it('claims no capability the read API does not provide', async () => {
+    apiMocks.getCaseDetail.mockResolvedValue(caseDetail);
+    apiMocks.getRunHistoryForCase.mockResolvedValue([]);
+    renderPipeline();
+
+    await screen.findByText(/No stage attempts are recorded/i);
+
+    expect(screen.queryByText(/Real-time/i)).toBeNull();
+    expect(screen.queryByText('Alerts')).toBeNull();
+    expect(screen.queryByText(/Notifications/i)).toBeNull();
+    expect(screen.queryByText(/RBAC|role-based/i)).toBeNull();
+    expect(screen.queryByText(/WebSocket/i)).toBeNull();
+    expect(screen.queryByText(/Scheduling/i)).toBeNull();
+    expect(screen.queryByText(/Deploy/i)).toBeNull();
+  });
+
+  it('labels client fetch time and recorded attempt time distinctly', async () => {
+    apiMocks.getCaseDetail.mockResolvedValue(caseDetail);
+    apiMocks.getRunHistoryForCase.mockResolvedValue([run({})]);
+    renderPipeline();
+
+    await screen.findByText('Recorded Stage Attempts');
+
+    const fetched = screen.getByTestId('pipeline-last-fetched');
+    const observed = screen.getByTestId('pipeline-last-observed');
+
+    expect(fetched.textContent).toContain('Last fetched');
+    expect(fetched.textContent).toContain('client request time');
+    expect(observed.textContent).toContain('Last observed');
+    expect(observed.textContent).toContain(
+      new Date('2026-03-19T10:00:00Z').toLocaleString()
+    );
+    expect(fetched).not.toBe(observed);
+  });
+
+  it('renders pipeline-unrecorded distinctly from an empty attempt list', async () => {
+    apiMocks.getCaseDetail.mockResolvedValue({
+      ...caseDetail,
+      case: { ...caseDetail.case, stage: null },
+    } as never);
+    apiMocks.getRunHistoryForCase.mockResolvedValue([]);
+    renderPipeline();
+
+    await screen.findByText(/No pipeline stage is recorded for this case/i);
+
+    const unrecorded = document.querySelector('[data-state="pipeline-unrecorded"]');
+    expect(unrecorded).not.toBeNull();
+    expect(unrecorded?.textContent).toContain('absent record');
+    // The empty attempt list belongs to a different branch and is not claimed here.
+    expect(document.querySelector('[data-state="pipeline-attempts-empty"]')).toBeNull();
+    expect(screen.queryByText(/No stage attempts are recorded/i)).toBeNull();
+  });
+
+  it('marks an empty attempt list as data, not as an unrecorded pipeline', async () => {
+    apiMocks.getCaseDetail.mockResolvedValue(caseDetail);
+    apiMocks.getRunHistoryForCase.mockResolvedValue([]);
+    renderPipeline();
+
+    await screen.findByText(/No stage attempts are recorded/i);
+
+    const empty = document.querySelector('[data-state="pipeline-attempts-empty"]');
+    expect(empty).not.toBeNull();
+    expect(empty?.textContent).toContain('empty attempt list, not a missing record');
+    expect(document.querySelector('[data-state="pipeline-unrecorded"]')).toBeNull();
+  });
+
+  it('stops polling while the tab is hidden and resumes when visible again', async () => {
+    vi.useFakeTimers();
+    apiMocks.getCaseDetail.mockResolvedValue(caseDetail);
+    apiMocks.getRunHistoryForCase.mockResolvedValue([run({})]);
+
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false } },
+    });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={['/cases/case-1/pipeline']}>
+          <Routes>
+            <Route path="/cases/:id/pipeline" element={<PipelineMonitor />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(apiMocks.getCaseDetail).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(16000);
+    });
+    const pollsWhileVisible = apiMocks.getCaseDetail.mock.calls.length;
+    expect(pollsWhileVisible).toBeGreaterThan(1);
+
+    setVisibility('hidden');
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60000);
+    });
+    expect(apiMocks.getCaseDetail).toHaveBeenCalledTimes(pollsWhileVisible);
+
+    setVisibility('visible');
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5000);
+    });
+    expect(apiMocks.getCaseDetail.mock.calls.length).toBeGreaterThan(pollsWhileVisible);
   });
 
   it('surfaces a case error with retry and does not fall back to BOOTSTRAP', async () => {

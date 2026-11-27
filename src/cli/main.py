@@ -26,7 +26,9 @@ from src.cli.commands.cases import (
     cmd_rebuild_case_search,
 )
 from src.cli.commands.osint import cmd_osint_ingest, cmd_osint_stream
-from src.storage import init_database
+from src.runtime import configured_database_path
+from src.settings import resolve_database_path
+from src.storage import init_database, run_migrations
 
 app = typer.Typer(
     name="triangulate",
@@ -134,9 +136,17 @@ def run_pipeline() -> None:
 
 @app.command()
 def init_db() -> None:
-    """Initialize the database."""
+    """Initialize the database and apply pending migrations.
+
+    The target path uses the same precedence as the HTTP server: a non-default
+    ``[database].path``, then ``DATABASE_PATH``, then ``./triangulate.db``,
+    relative to the current working directory. Running the server and this
+    command from the same directory therefore address the same file.
+    """
     console.print("[bold blue]Initializing database...[/bold blue]")
-    db = init_database()
+    db_path = resolve_database_path(configured_database_path())
+    db = init_database(str(db_path))
+    run_migrations(db.db_path)
     console.print("[green]Database initialized[/green]")
     console.print(f"Database file: {db.db_path}")
 

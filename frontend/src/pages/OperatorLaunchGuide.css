@@ -49,3 +49,16 @@
   color: var(--text-primary);
   overflow-x: auto;
 }
+
+.operator-guide-note {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
+  line-height: 1.6;
+}
+
+.operator-guide-command {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}

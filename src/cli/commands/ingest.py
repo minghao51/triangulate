@@ -4,6 +4,8 @@ import logging
 from rich.console import Console
 from rich.table import Table
 
+import typer
+
 from src.runtime import build_case_service
 
 logger = logging.getLogger(__name__)
@@ -56,3 +58,4 @@ def cmd_ingest(source: str | None = None, limit: int | None = None) -> None:
     except Exception as e:
         console.print(f"[red]Error during ingestion: {e}[/red]")
         logger.error(f"Ingestion error: {e}")
+        raise typer.Exit(1) from e

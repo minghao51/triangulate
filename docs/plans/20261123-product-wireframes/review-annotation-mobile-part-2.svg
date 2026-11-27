@@ -1,0 +1,54 @@
+<!-- viewport: 375×812 mobile -->
+<svg xmlns="http://www.w3.org/2000/svg" width="375" height="812" viewBox="0 0 375 812" role="img" aria-labelledby="wf-title wf-desc">
+  <title id="wf-title">Review and annotation — part 2 of 3 — mobile</title>
+  <desc id="wf-desc">Review and annotation — part 2 of 3 — mobile (mobile, 375x812). Proposal wireframe with synthetic data, not implementation evidence. Numbered regions: 1 Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest; 2 Review and annotation — frame 2 of 3; full coverage continues in the named companion frame; 3 Annotation form — type comment/flag/context, target case/claim/evidence/exception/narrative, target ID and content; save disabled while empty or pending. · frame 2 of 3; 4 Recorded annotations — stored rows with type and target; no attribution beyond the stored record. · frame 2 of 3.</desc>
+  <g id="ui" font-family="-apple-system, system-ui, sans-serif">
+    <rect x="0" y="0" width="368" height="808" fill="#fff"/>
+    <rect x="8" y="8" width="352" height="792" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <rect x="16" y="32" width="328" height="48" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="32" y="56" font-size="14" fill="#000" font-weight="600">TRIANGULATE</text>
+    <rect x="264" y="40" width="64" height="32" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="296" y="56" text-anchor="middle" font-size="12" fill="#000">Menu</text>
+    <rect x="16" y="104" width="328" height="104" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="32" y="144" font-size="14" fill="#000" font-weight="600">Review and annotation</text>
+    <text x="32" y="168" font-size="12" fill="#666">Part 2 of 3 · companion frames carry t…</text>
+    <text x="32" y="192" font-size="12" fill="#666">previous: review-annotation-mobile.svg…</text>
+    <g data-pane="p2">
+    <rect x="16" y="232" width="328" height="320" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="32" y="272" font-size="14" fill="#000" font-weight="600">New annotation</text>
+    <text x="32" y="296" font-size="12" fill="#000">Type</text>
+    <rect x="32" y="304" width="296" height="32" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="40" y="328" font-size="12" fill="#000">comment</text>
+    <text x="32" y="352" font-size="12" fill="#000">Target</text>
+    <rect x="32" y="360" width="296" height="32" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="40" y="384" font-size="12" fill="#000">claim</text>
+    <text x="32" y="408" font-size="12" fill="#000">Target ID</text>
+    <rect x="32" y="416" width="296" height="32" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="40" y="440" font-size="12" fill="#000">claim-8898</text>
+    <text x="32" y="464" font-size="12" fill="#000">Content</text>
+    <rect x="32" y="472" width="296" height="32" fill="#e6e6e6" stroke="#000" stroke-width="1.5"/>
+    <rect x="32" y="504" width="144" height="32" fill="#e6e6e6" stroke="#000" stroke-width="1.5"/>
+    <text x="40" y="528" font-size="12" fill="#666">Save annotation…</text>
+    </g>
+    <g data-pane="p3">
+    <rect x="16" y="576" width="328" height="160" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="32" y="616" font-size="14" fill="#000" font-weight="600">Existing annotations</text>
+    <text x="32" y="648" font-size="14" fill="#000">annotation-10…</text>
+    <text x="328" y="640" text-anchor="end" font-size="12" fill="#000">claim-8898</text>
+    <text x="32" y="680" font-size="14" fill="#000">annotation-10…</text>
+    <text x="328" y="672" text-anchor="end" font-size="12" fill="#000">ev-c71a</text>
+    <text x="32" y="712" font-size="14" fill="#000">annotation-10…</text>
+    <text x="328" y="704" text-anchor="end" font-size="12" fill="#000">exc-2310</text>
+    </g>
+  </g>
+  <g id="annotations" font-family="-apple-system, system-ui, sans-serif">
+    <rect data-region="1" x="8" y="24" width="344" height="64" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="2" x="8" y="96" width="344" height="120" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="3" x="8" y="224" width="344" height="336" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="4" x="8" y="568" width="344" height="176" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <text x="0" y="48" font-size="12" font-weight="600" fill="#000">1</text>
+    <text x="0" y="120" font-size="12" font-weight="600" fill="#000">2</text>
+    <text x="0" y="248" font-size="12" font-weight="600" fill="#000">3</text>
+    <text x="0" y="592" font-size="12" font-weight="600" fill="#000">4</text>
+  </g>
+</svg>

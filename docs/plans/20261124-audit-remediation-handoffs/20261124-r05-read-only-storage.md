@@ -1,0 +1,34 @@
+# R05 — Make historical GETs storage-read-only (P2)
+
+**Status:** Ready for worker · **Coordination:** R04 shares HTTP settings/runtime edits; R03 owns payload validation.  
+[Specification](../20261124-audit-remediation-specification.md) · [Storage test isolation](../../reference/20261115-test-database-incident.md)
+
+## Problem and read-before-edit
+
+`src/http/app.py:_artifact_read_session` and `_snapshot_comparison_session` both call `get_database().init_db()`. `src/storage/database.py` can create parent directories and SQLite opens can create missing DB files. Removing the explicit `init_db()` call alone is insufficient. Audit repro: first request to comparison on a scratch `DATABASE_PATH` that does not exist creates the DB even for a missing case. Read `src/http/dependencies.py`, `src/runtime.py:build_case_service`, `src/cli/main.py:init_db/serve`, `src/storage/database.py`, migrations and `tests/conftest.py`. The runtime service can choose a different DB from the initial `get_database` instance and initialize it, and its taxonomy sync is a write. Request order may not select storage.
+
+## Required behavior and boundary
+
+Routes: `GET /api/cases/{case_id}/snapshot-comparison`, `GET /api/cases/{case_id}/investigation-runs/{run_id}/artifacts`, and its `/{artifact_id}` download. All three use one narrow read-only dependency. Do **not** change the meaning of other reader/writer routes as a side effect.
+
+| Runtime state | Required result |
+| --- | --- |
+| Existing initialized DB, matching data or valid empty list/delta | Existing response schema/status. |
+| Existing initialized DB, unknown/foreign case, run, snapshot or artifact | Existing uniform scoped `404`. |
+| Existing initialized DB, invalid selector/order/ownership-independent input | Existing `422` family; document any readiness vs semantic-validation precedence, retain request-schema validation. |
+| Missing, uninitialized or unusable configured DB | Sanitized `503` such as `{"detail":"Historical storage is unavailable"}`; never initialize, silently fall back to another DB, expose a path/SQL/driver error, or mislabel it an unknown case. |
+
+1. Select one canonical DB path for the **HTTP instance** before either service or reader uses it. Resolve through a side-effect-free configuration path, not by calling `get_database()` to discover which path a mutable global points to. Preserve the existing normal precedence deliberately: a non-default `[database].path` in runtime config wins; otherwise a configured `DATABASE_PATH` wins, otherwise `./triangulate.db`. Resolve relative values against the same server cwd as the service. If the process uses an explicit app/fixture database binding, ensure both dependencies use it; don't let test overrides mask production selection. Record precedence and how to point `init-db` at the same resolved path. Don't silently rewrite persisted DB paths or read a default DB because a configured DB is absent.
+2. Open a connection for historical reads in SQLite existing-file/read-only mode (or an equivalently proven no-create/no-DML mechanism). Don't instantiate the `Database` constructor just to check the path if it creates directories; don't use `immutable=1` to bypass journal/locking behavior on an actively written database. Retain correctly scoped read transactions and always release sessions/handles. For paths needing URI escaping, verify spaces and special characters in a scratch directory. Guard engine/session caching against fixture leakage and multiple app instances; don't mutate global database binding from a GET.
+3. No builder, taxonomy sync, create-all, migration runner, output-root creation or write statements on these GETs. Do not introduce automatic DDL/migrations at server import or from a silent startup hook to make the test pass. Use the explicit operator bootstrap (`init-db`, same configured database) or the fixture setup. A readiness check may inspect the route's required schema through read-only operations; distinguish absent or partial required schema and on-disk read failures from data not found. Don't tie a historical read to an unrelated provider or index health check. Keep other programming errors actionable rather than swallowing all exceptions as 503. Ensure result paths, including failed connect/query and malformed-data responses, close read sessions. `/health` stays liveness only.
+4. Preserve scope: no broad read-only rewrite of legacy routes, no data/schema migration, no forced journal mode change. If SQLite needs normal journal sidecars for a supported deployment, demonstrate expected behavior on a disposable WAL fixture; do not weaken no-creation on missing paths, or promise bitwise stability under concurrent writes. Document relevant runtime caveats and the explicit setup path in HTTP/CLI docs.
+
+## Regression and acceptance
+
+- Test each route as the **first request** to a fresh app/instance with a deliberately nonexistent DB nested under a nonexistent scratch directory; assert 503, redacted body, no path/directory/DB created, no service builder/DDL/migration calls. Exercise the same routes on an existing empty or partial-schema SQLite file; assert identical pre/post schema, database contents, migration/version rows and no bootstrap. Use a valid request shape to exercise the dependency. The global autouse fixture pre-initializes a DB; use explicit app settings/fixture scope so it cannot accidentally satisfy the regression.
+- On a bootstrapped disposable DB, assert comparison, list and download results, unchanged snapshot/report/output/migration state, and proper 404/422 behavior. Include config-only custom DB, environment-only fallback, conflict precedence, path containing spaces, and historical-first versus legacy-case-first against distinct synthetic DB identities. Verify request order cannot choose different DBs. Include a test that read-only opening doesn't infer a fallback database even if a usable default path exists.
+- Exercise handled readiness/error scenarios without mutating checkout `config.toml`, using production-like wiring where possible. Preserve all current initialized HTTP/CLI behavior, and document `/health` not implying historical DB availability. R07 must start with a prebuilt, migrated disposable fixture and verify request order/end-to-end.
+
+Focused: `uv run pytest -q tests/test_refinement_snapshot_comparison.py tests/test_refinement_artifact_reader.py tests/test_http_api.py tests/test_cli.py` plus the new storage wiring tests and `uv run ruff check src tests scripts`.
+
+**Worker brief:** Implement R05 only, coordinated with R04. Prove cold reads can't create or initialize storage; prove all readers and case service use the same configured database independent of request order, and preserve valid results and scoped misses. Do not bootstrap the checkout DB, alter live configuration, commit or push.

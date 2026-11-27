@@ -13,6 +13,8 @@ Usage as demo:
 """
 
 import asyncio
+import ast
+import inspect
 import os
 import sys
 from datetime import UTC, datetime
@@ -72,9 +74,10 @@ MOCK_ARTICLE = {
 # ============================================================================
 
 
-@pytest.mark.asyncio
-async def test_current_workflow() -> dict[str, Any]:
-    """Test the current AIWorkflow implementation."""
+# Deliberately not named ``test_*``: this routine can reach the live LLM when a
+# credential is present, so it must never be collected by the default suite.
+async def run_current_workflow() -> dict[str, Any]:
+    """Run the current AIWorkflow implementation against the mock article."""
     print("\n" + "=" * 80)
     print("PART A: TESTING CURRENT WORKFLOW IMPLEMENTATION")
     print("=" * 80 + "\n")
@@ -96,6 +99,8 @@ async def test_current_workflow() -> dict[str, Any]:
     if has_api_key:
         # Test with actual LLM calls
         event_data = await workflow.process_article(MOCK_ARTICLE)
+        if event_data is None:
+            raise RuntimeError("Live workflow returned no event data")
         test_results = await analyze_results(event_data)
     else:
         # Test with manual mock data
@@ -313,7 +318,7 @@ async def classifier_node(state: WorkflowState) -> dict[str, Any]:
     return {"verification_status": event_verification, "claims": claims}
 
 
-def create_langgraph_workflow() -> StateGraph:
+def create_langgraph_workflow() -> Any:
     """Create a LangGraph StateGraph workflow.
 
     This demonstrates the proper LangGraph pattern using:
@@ -356,14 +361,14 @@ def create_langgraph_workflow() -> StateGraph:
     return app
 
 
-@pytest.mark.asyncio
-async def test_langgraph_workflow() -> dict[str, Any]:
-    """Test the LangGraph workflow implementation."""
+# Not named ``test_*`` for the same reason as ``run_current_workflow``.
+async def run_langgraph_workflow() -> dict[str, Any]:
+    """Run the LangGraph workflow implementation against the mock article."""
     print("Test 2: Processing article through LangGraph workflow...")
     print("-" * 80)
 
     # Create the workflow
-    app = create_langgraph_workflow()
+    app: Any = create_langgraph_workflow()
 
     # Initialize state with article
     initial_state: WorkflowState = {
@@ -422,7 +427,7 @@ def test_current_workflow_implementation():
 
 async def _test_current():
     """Async implementation of current workflow test."""
-    result = await test_current_workflow()
+    result = await run_current_workflow()
 
     # Assertions
     assert result["success"], "Workflow should complete successfully"
@@ -448,7 +453,7 @@ def test_langgraph_workflow_implementation():
 
 async def _test_langgraph():
     """Async implementation of LangGraph test."""
-    result = await test_langgraph_workflow()
+    result = await run_langgraph_workflow()
 
     # Assertions
     assert result["success"], "LangGraph workflow should complete successfully"
@@ -593,10 +598,10 @@ async def main():
 
     try:
         # Test current implementation
-        current_results = await test_current_workflow()
+        current_results = await run_current_workflow()
 
         # Test LangGraph implementation
-        langgraph_results = await test_langgraph_workflow()
+        langgraph_results = await run_langgraph_workflow()
 
         # Print comparison
         print_comparison(current_results, langgraph_results)
@@ -613,6 +618,37 @@ async def main():
         import traceback
         traceback.print_exc()
         sys.exit(1)
+
+
+# ============================================================================
+# COLLECTION SAFETY (default suite, no live calls)
+# ============================================================================
+
+
+def test_default_selection_cannot_reach_live_workflow(monkeypatch):
+    """A credential alone must not let default pytest run a live-capable routine."""
+    monkeypatch.setenv("LLM_API_KEY", "sk-default-suite-must-not-use-this")
+    module = sys.modules[__name__]
+    tree = ast.parse(Path(__file__).read_text(encoding="utf-8"))
+
+    live_routines = {
+        node.name
+        for node in ast.walk(tree)
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+        and any(
+            isinstance(call, ast.Call) and getattr(call.func, "id", "") == "AIWorkflow"
+            for call in ast.walk(node)
+        )
+    }
+    assert "run_current_workflow" in live_routines
+    assert [name for name in live_routines if name.startswith("test")] == []
+
+    async_entrypoints = [
+        name
+        for name, value in vars(module).items()
+        if name.startswith("test") and inspect.iscoroutinefunction(value)
+    ]
+    assert async_entrypoints == []
 
 
 if __name__ == "__main__":

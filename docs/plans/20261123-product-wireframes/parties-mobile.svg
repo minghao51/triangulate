@@ -1,0 +1,49 @@
+<!-- viewport: 375×812 mobile -->
+<svg xmlns="http://www.w3.org/2000/svg" width="375" height="812" viewBox="0 0 375 812" role="img" aria-labelledby="wf-title wf-desc">
+  <title id="wf-title">Parties — mobile</title>
+  <desc id="wf-desc">Parties — mobile (mobile, 375x812). Proposal wireframe with synthetic data, not implementation evidence. Numbered regions: 1 Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest; 2 Parties header — title, synthetic context and available actions; 3 Case tabs (12) — active Parties; the strip scrolls, no tab is removed; 4 Party table — recorded, inferred or confirmed basis; counts are recorded rows, never guessed stance. · frame 1 of 2.</desc>
+  <g id="ui" font-family="-apple-system, system-ui, sans-serif">
+    <rect x="0" y="0" width="368" height="808" fill="#fff"/>
+    <rect x="8" y="8" width="352" height="792" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <rect x="16" y="32" width="328" height="48" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="32" y="56" font-size="14" fill="#000" font-weight="600">TRIANGULATE</text>
+    <rect x="264" y="40" width="64" height="32" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="296" y="56" text-anchor="middle" font-size="12" fill="#000">Menu</text>
+    <rect x="16" y="104" width="328" height="80" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="32" y="144" font-size="14" fill="#000" font-weight="600">Parties</text>
+    <text x="32" y="168" font-size="12" fill="#666">Recorded vs inferred vs confirmed · Pr…</text>
+    <rect x="16" y="208" width="328" height="56" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="32" y="232" font-size="14" fill="#000" font-weight="600">Parties</text>
+    <text x="32" y="256" font-size="12" fill="#666">12 tabs · tab strip scrolls horizontally</text>
+    <g data-pane="p1">
+    <rect x="16" y="288" width="328" height="424" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="32" y="328" font-size="14" fill="#000" font-weight="600">Parties</text>
+    <text x="32" y="360" font-size="14" fill="#000">party-01 · ministry</text>
+    <text x="32" y="384" font-size="12" fill="#666">Basis: recorded</text>
+    <text x="32" y="408" font-size="12" fill="#666">Supported: 4</text>
+    <text x="32" y="432" font-size="12" fill="#666">Contested: 1</text>
+    <line x1="32" y1="440" x2="328" y2="440" stroke="#000" stroke-width="1.5"/>
+    <text x="32" y="472" font-size="14" fill="#000">party-02 · vendor</text>
+    <text x="32" y="496" font-size="12" fill="#666">Basis: inferred</text>
+    <text x="32" y="520" font-size="12" fill="#666">Supported: 2</text>
+    <text x="32" y="544" font-size="12" fill="#666">Contested: 3</text>
+    <line x1="32" y1="552" x2="328" y2="552" stroke="#000" stroke-width="1.5"/>
+    <text x="32" y="584" font-size="14" fill="#000">party-03 · regulator</text>
+    <text x="32" y="608" font-size="12" fill="#666">Basis: confirmed</text>
+    <text x="32" y="632" font-size="12" fill="#666">Supported: 1</text>
+    <text x="32" y="656" font-size="12" fill="#666">Contested: 0</text>
+    <line x1="32" y1="664" x2="328" y2="664" stroke="#000" stroke-width="1.5"/>
+    <text x="32" y="688" font-size="12" fill="#666">Missing investigation data stays expli…</text>
+    </g>
+  </g>
+  <g id="annotations" font-family="-apple-system, system-ui, sans-serif">
+    <rect data-region="1" x="8" y="24" width="344" height="64" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="2" x="8" y="96" width="344" height="96" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="3" x="8" y="200" width="344" height="72" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="4" x="8" y="280" width="344" height="440" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <text x="0" y="48" font-size="12" font-weight="600" fill="#000">1</text>
+    <text x="0" y="120" font-size="12" font-weight="600" fill="#000">2</text>
+    <text x="0" y="224" font-size="12" font-weight="600" fill="#000">3</text>
+    <text x="0" y="304" font-size="12" font-weight="600" fill="#000">4</text>
+  </g>
+</svg>

@@ -177,3 +177,209 @@
   color: var(--text-primary);
   overflow-wrap: anywhere;
 }
+
+/* Source summary, limitations and dependency groups (F09).
+
+   The summary reads the existing sources API; the limitation block sits directly
+   under the summary counts so the honest reading cannot be scrolled away from
+   the numbers it qualifies. */
+
+.source-analysis-independence {
+  margin: 1rem 0 0;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.source-analysis-independence strong {
+  color: var(--text-primary);
+}
+
+.source-analysis-limitations {
+  margin-top: 1rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--border-subtle);
+  border-left: 2px solid var(--status-warning);
+  border-radius: var(--radius-sm);
+  background-color: var(--bg-app);
+}
+
+.source-analysis-limitations h3 {
+  margin: 0 0 0.5rem;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.source-analysis-limitations h4 {
+  margin: 0.75rem 0 0.35rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.source-analysis-limitations ul {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin: 0;
+  padding-left: 1.1rem;
+  font-size: 0.8125rem;
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+
+.source-analysis-policy {
+  margin-top: 0.75rem;
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+}
+
+.source-analysis-policy summary {
+  cursor: pointer;
+  color: var(--text-primary);
+}
+
+.source-analysis-policy-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin: 0.5rem 0 0;
+}
+
+.source-analysis-policy-list dt {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+.source-analysis-policy-list dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.source-analysis-section-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  border-top: 1px solid var(--border-subtle);
+  padding-top: 1rem;
+}
+
+.source-analysis-section-heading h2 {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.source-analysis-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.source-analysis-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0.75rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background-color: var(--bg-app);
+  min-width: 0;
+}
+
+.source-analysis-group-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.source-analysis-group-id {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+.source-analysis-group-members {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.source-analysis-member {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background-color: var(--bg-surface-hover);
+  min-width: 0;
+}
+
+.source-analysis-member-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  font-size: 0.8125rem;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+.source-analysis-member-head code {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--accent-primary);
+}
+
+.source-analysis-member-meta {
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 760px) {
+  .source-analysis {
+    padding: 1rem;
+  }
+
+  .source-analysis-grid {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+
+  .source-analysis-stats {
+    grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr));
+    gap: 0.75rem;
+  }
+
+  .source-analysis-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .source-analysis-limitations {
+    padding: 0.75rem;
+  }
+
+  .source-analysis-group-head,
+  .source-analysis-member-head {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.25rem;
+  }
+}

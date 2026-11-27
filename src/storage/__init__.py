@@ -5,6 +5,8 @@ from src.storage.database import (
     begin_read_transaction,
     get_database,
     init_database,
+    open_read_only_session,
+    read_only_engine,
 )
 from src.storage.models import (
     Base,
@@ -74,6 +76,8 @@ __all__ = [
     "begin_read_transaction",
     "get_database",
     "init_database",
+    "open_read_only_session",
+    "read_only_engine",
     "Base",
     "Source",
     "Event",

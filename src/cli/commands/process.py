@@ -5,6 +5,8 @@ import logging
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
+import typer
+
 from src.runtime import build_case_service
 
 logger = logging.getLogger(__name__)
@@ -34,7 +36,7 @@ async def cmd_process_async(unreviewed: bool = False, limit: int | None = None) 
         except Exception as e:
             console.print(f"[red]Error processing intake queue: {e}[/red]")
             logger.error(f"Processing error: {e}")
-            return
+            raise typer.Exit(1) from e
         progress.update(task, completed=True)
 
     if summary["selected"] == 0:
@@ -45,6 +47,12 @@ async def cmd_process_async(unreviewed: bool = False, limit: int | None = None) 
         f"[green]Processed {summary['processed']} item(s)[/green]"
         f"{' with failures: ' + str(summary['failed']) if summary['failed'] else ''}"
     )
+
+    if summary["failed"] > 0:
+        console.print(
+            f"[red]{summary['failed']} item(s) failed while processing; durable results were kept.[/red]"
+        )
+        raise typer.Exit(1)
 
 def cmd_process(unreviewed: bool = False, limit: int | None = None) -> None:
     """Run AI processing pipeline.

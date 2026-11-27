@@ -7,6 +7,8 @@ from pathlib import Path
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
+import typer
+
 from src.ai.baseline_workflow import BaselineWorkflow
 from src.ingester.url_capture import fetch_article_content
 from src.runtime import build_case_service
@@ -123,7 +125,7 @@ async def cmd_process_url_async(
             progress.update(task, completed=True)
         except Exception as e:
             console.print(f"[red]✗ Failed to fetch article: {e}[/red]")
-            return
+            raise typer.Exit(1) from e
 
     console.print(f"[green]✓ Fetched: {article['title'][:60]}...[/green]")
     console.print(f"[green]✓ Content: {len(article['content'])} characters[/green]\n")
@@ -139,7 +141,7 @@ async def cmd_process_url_async(
         console.print(
             "[red]✗ Failed to process article. No claims were extracted.[/red]"
         )
-        return
+        raise typer.Exit(1)
 
     # Display or save results
     if json_output:
@@ -158,7 +160,10 @@ async def cmd_process_url_async(
         if summary["processed"] > 0:
             console.print("[green]✓ Saved through the durable intake pipeline[/green]")
         else:
-            console.print("[red]✗ Capture was queued but processing failed[/red]")
+            console.print(
+                "[red]✗ Capture was queued but processing failed (durable queue kept)[/red]"
+            )
+            raise typer.Exit(1)
 
 
 def cmd_process_url(

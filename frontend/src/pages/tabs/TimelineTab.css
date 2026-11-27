@@ -52,6 +52,18 @@
     background-color: var(--status-warning);
 }
 
+.dot-info {
+    background-color: var(--status-info);
+}
+
+.dot-danger {
+    background-color: var(--status-danger);
+}
+
+.dot-neutral {
+    background-color: var(--status-neutral);
+}
+
 .timeline-line {
     position: absolute;
     top: 24px;
@@ -109,4 +121,28 @@
     font-size: 0.875rem;
     color: var(--text-tertiary);
     font-weight: 500;
+}
+/* Date-unknown is a separate condition from status: the reader states that no
+   date is recorded rather than substituting a placeholder date. */
+.timeline-date--unknown {
+    color: var(--text-tertiary);
+    font-style: italic;
+    font-weight: 600;
+}
+
+.timeline-status {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+}
+
+.timeline-status-raw {
+    font-size: 0.78rem;
+    color: var(--text-tertiary);
+}
+
+.timeline-status-raw code {
+    font-size: 0.78rem;
+    color: var(--text-secondary);
 }

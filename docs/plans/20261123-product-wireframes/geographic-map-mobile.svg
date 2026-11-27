@@ -1,0 +1,52 @@
+<!-- viewport: 375×812 mobile -->
+<svg xmlns="http://www.w3.org/2000/svg" width="375" height="812" viewBox="0 0 375 812" role="img" aria-labelledby="wf-title wf-desc">
+  <title id="wf-title">Geographic map — mobile</title>
+  <desc id="wf-desc">Geographic map — mobile (mobile, 375x812). Proposal wireframe with synthetic data, not implementation evidence. Numbered regions: 1 Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest; 2 Geographic map header — title, synthetic context and available actions; 3 Case tabs (12) — active Map; the strip scrolls, no tab is removed; 4 Map area — placeholder X and geotagged markers; no map tiles are loaded or implied. · frame 1 of 2; 5 Event list — geotagged events only; untagged events are listed as unknown place. · frame 1 of 2.</desc>
+  <g id="ui" font-family="-apple-system, system-ui, sans-serif">
+    <rect x="0" y="0" width="368" height="808" fill="#fff"/>
+    <rect x="8" y="8" width="352" height="792" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <rect x="16" y="32" width="328" height="48" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="32" y="56" font-size="14" fill="#000" font-weight="600">TRIANGULATE</text>
+    <rect x="264" y="40" width="64" height="32" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="296" y="56" text-anchor="middle" font-size="12" fill="#000">Menu</text>
+    <rect x="16" y="104" width="328" height="80" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="32" y="144" font-size="14" fill="#000" font-weight="600">Geographic map</text>
+    <text x="32" y="168" font-size="12" fill="#666">Geotagged placeholders, no tiles · Pro…</text>
+    <rect x="16" y="208" width="328" height="56" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="32" y="232" font-size="14" fill="#000" font-weight="600">Map</text>
+    <text x="32" y="256" font-size="12" fill="#666">12 tabs · tab strip scrolls horizontally</text>
+    <g data-pane="p1">
+    <rect x="16" y="288" width="328" height="304" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="32" y="328" font-size="14" fill="#000" font-weight="600">Map</text>
+    <rect x="32" y="336" width="296" height="240" fill="#e6e6e6" stroke="#000" stroke-width="1.5"/>
+    <line x1="56" y1="360" x2="304" y2="552" stroke="#000" stroke-width="1.5"/>
+    <line x1="304" y1="360" x2="56" y2="552" stroke="#000" stroke-width="1.5"/>
+    <rect x="88" y="400" width="16" height="16" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <rect x="184" y="432" width="16" height="16" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <rect x="224" y="384" width="16" height="16" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="40" y="560" font-size="12" fill="#000">Map placeholder · no tiles</text>
+    </g>
+    <g data-pane="p2">
+    <rect x="16" y="616" width="328" height="160" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="32" y="656" font-size="14" fill="#000" font-weight="600">Events by place</text>
+    <text x="32" y="688" font-size="14" fill="#000">event-501 · e…</text>
+    <text x="328" y="680" text-anchor="end" font-size="12" fill="#000">geotagged</text>
+    <text x="32" y="720" font-size="14" fill="#000">event-500 · c…</text>
+    <text x="328" y="712" text-anchor="end" font-size="12" fill="#000">geotagged</text>
+    <text x="32" y="752" font-size="14" fill="#000">event-499 · u…</text>
+    <text x="328" y="744" text-anchor="end" font-size="12" fill="#000">untagged</text>
+    </g>
+  </g>
+  <g id="annotations" font-family="-apple-system, system-ui, sans-serif">
+    <rect data-region="1" x="8" y="24" width="344" height="64" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="2" x="8" y="96" width="344" height="96" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="3" x="8" y="200" width="344" height="72" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="4" x="8" y="280" width="344" height="320" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="5" x="8" y="608" width="344" height="176" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <text x="0" y="48" font-size="12" font-weight="600" fill="#000">1</text>
+    <text x="0" y="120" font-size="12" font-weight="600" fill="#000">2</text>
+    <text x="0" y="224" font-size="12" font-weight="600" fill="#000">3</text>
+    <text x="0" y="304" font-size="12" font-weight="600" fill="#000">4</text>
+    <text x="0" y="632" font-size="12" font-weight="600" fill="#000">5</text>
+  </g>
+</svg>

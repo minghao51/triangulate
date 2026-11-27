@@ -56,6 +56,7 @@ def seed_case(
     case_id: str = "case-r02",
     *,
     metadata_json: dict | None = None,
+    status: CaseStatus = CaseStatus.REVIEW_READY,
 ) -> TopicCase:
     session = db_session(service.output_root)
     try:
@@ -63,7 +64,7 @@ def seed_case(
             id=case_id,
             query="Fencing case",
             slug="fencing-case",
-            status=CaseStatus.REVIEW_READY,
+            status=status,
             metadata_json=metadata_json or {"exception_queue": []},
         )
         session.add(case)
@@ -126,6 +127,17 @@ def owner(tmp_path: Path, case_id: str):
     session = db_session(tmp_path)
     try:
         return read_case_owner(session, case_id)
+    finally:
+        session.close()
+
+
+def read_case_row(tmp_path: Path, case_id: str) -> TopicCase:
+    session = db_session(tmp_path)
+    try:
+        row = session.get(TopicCase, case_id)
+        assert row is not None
+        session.expunge(row)
+        return row
     finally:
         session.close()
 
@@ -350,6 +362,48 @@ async def test_review_exception_annotation_evaluation_osint_rejected(
     reviewed = service.review_case(case.id, "defer")
     assert reviewed.status == CaseStatus.REVIEW_READY
     assert not owner(tmp_path, case.id).is_owned
+
+
+def test_defer_conflict_on_terminal_case_leaves_decision_untouched(tmp_path):
+    """R06: a fenced ``defer`` cannot reopen an approved case or touch the queue."""
+    service = make_service(tmp_path)
+    exception = {
+        "id": "exc-r06",
+        "type": "needs_more_sources",
+        "severity": "high",
+        "stage": "RETRIEVE",
+        "status": "open",
+        "message": "Need more sources",
+        "resolution_notes": "Analyst note.",
+        "updated_at": "2026-03-20T10:00:00+00:00",
+    }
+    case = seed_case(
+        service,
+        case_id="case-r06-terminal",
+        status=CaseStatus.APPROVED,
+        metadata_json={"exception_queue": [exception]},
+    )
+    token = claim_case(tmp_path, case.id)
+    before = read_case_row(tmp_path, case.id)
+
+    with pytest.raises(CaseWriterConflict):
+        service.review_case(case.id, "defer", "Blocked deferral")
+
+    after = read_case_row(tmp_path, case.id)
+    assert after.status == CaseStatus.APPROVED
+    assert after.review_notes is None
+    assert after.last_reviewed_at is None
+    assert after.metadata_json == before.metadata_json
+    release_case(tmp_path, case.id, token)
+
+    # Once the writer is released the acknowledgement is recorded without
+    # reopening the terminal case or rewriting the exception queue.
+    reviewed = service.review_case(case.id, "defer", "Deferred after release")
+    assert reviewed.status == CaseStatus.APPROVED
+    stored = read_case_row(tmp_path, case.id)
+    assert stored.status == CaseStatus.APPROVED
+    assert stored.review_notes == "Deferred after release"
+    assert stored.metadata_json == before.metadata_json
 
 
 @pytest.mark.asyncio

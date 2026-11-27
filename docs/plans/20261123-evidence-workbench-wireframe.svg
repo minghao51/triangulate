@@ -1,0 +1,108 @@
+<!-- viewport: 1280×800 desktop -->
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="800" viewBox="0 0 1280 800" role="img" aria-labelledby="wf-title wf-desc">
+  <title id="wf-title">Triangulate evidence workbench: proposed desktop wireframe</title>
+  <desc id="wf-desc">Low-fidelity 1280 by 800 wireframe with seven numbered regions: primary navigation, case-scoped search, case identity and coverage status, case tabs, claim with linked sources, immutable capture inspector, and provenance and dependency context. Proposal only, not shipped. All cases, IDs, quotes and domains are synthetic.</desc>
+  <g id="ui" font-family="-apple-system, system-ui, sans-serif">
+    <rect x="0" y="0" width="1280" height="800" fill="#fff"/>
+    <rect x="8" y="8" width="1264" height="784" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <line x1="240" y1="8" x2="240" y2="792" stroke="#000" stroke-width="1.5"/>
+    <text x="32" y="48" font-size="14" font-weight="600" fill="#000">TRIANGULATE</text>
+    <text x="32" y="72" font-size="12" fill="#666">Evidence workbench · proposal</text>
+    <line x1="32" y1="88" x2="224" y2="88" stroke="#000" stroke-width="1.5"/>
+    <text x="32" y="112" font-size="12" font-weight="600" fill="#000">NAVIGATE</text>
+    <text x="32" y="136" font-size="14" font-weight="600" fill="#000">Cases</text>
+    <text x="32" y="160" font-size="14" fill="#000">Search</text>
+    <text x="32" y="184" font-size="14" fill="#000">Sources</text>
+    <text x="32" y="208" font-size="14" fill="#000">Runs and changes</text>
+    <text x="32" y="232" font-size="14" fill="#000">Diagnostics</text>
+    <line x1="32" y1="256" x2="224" y2="256" stroke="#000" stroke-width="1.5"/>
+    <text x="32" y="280" font-size="12" font-weight="600" fill="#000">RECENT CASES</text>
+    <text x="32" y="304" font-size="12" fill="#000">case-2201-0417</text>
+    <text x="32" y="328" font-size="12" fill="#000">case-2199-1180</text>
+    <text x="32" y="352" font-size="12" fill="#000">case-2198-0922</text>
+    <text x="32" y="400" font-size="12" font-weight="600" fill="#000">READ-ONLY BY DEFAULT</text>
+    <text x="32" y="424" font-size="12" fill="#000">GET requests only</text>
+    <text x="32" y="448" font-size="12" fill="#000">local / trusted</text>
+    <text x="32" y="472" font-size="12" fill="#000">Ingest / runs via CLI</text>
+    <text x="32" y="744" font-size="12" fill="#666">Wireframe · synthetic data</text>
+    <rect x="264" y="24" width="992" height="48" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <rect x="280" y="32" width="664" height="32" fill="#e6e6e6"/>
+    <text x="296" y="56" font-size="12" fill="#666">Search claims and captured text in this case</text>
+    <rect x="960" y="32" width="160" height="32" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="1040" y="56" font-size="12" fill="#000" text-anchor="middle">Search</text>
+    <text x="1152" y="56" font-size="12" fill="#000">Scope: this case</text>
+    <rect x="264" y="104" width="992" height="56" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="280" y="128" font-size="20" font-weight="600" fill="#000">case-2201-0417</text>
+    <text x="280" y="152" font-size="12" fill="#000">Synthetic case · local / trusted · GET only</text>
+    <text x="1064" y="128" font-size="14" font-weight="600" fill="#000">Coverage: partial</text>
+    <text x="1064" y="152" font-size="12" fill="#000">2 of 3 sources succeeded</text>
+    <rect x="264" y="184" width="992" height="40" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="280" y="208" font-size="14" font-weight="600" fill="#000">Claims</text>
+    <text x="360" y="208" font-size="14" fill="#000">Evidence</text>
+    <text x="456" y="208" font-size="14" fill="#000">Timeline</text>
+    <text x="552" y="208" font-size="14" fill="#000">Sources</text>
+    <text x="640" y="208" font-size="14" fill="#000">Runs</text>
+    <text x="712" y="208" font-size="14" fill="#000">Changes</text>
+    <text x="808" y="208" font-size="14" fill="#000">Search</text>
+    <rect x="264" y="256" width="608" height="496" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="280" y="288" font-size="12" font-weight="600" fill="#000">CLAIM</text>
+    <rect x="680" y="272" width="176" height="40" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="768" y="296" font-size="12" fill="#000" text-anchor="middle">Inspect evidence</text>
+    <text x="280" y="320" font-size="20" fill="#000">Plant reopened 12 March after audit</text>
+    <text x="280" y="352" font-size="12" fill="#000">reported_by · alignment: exact · not a truth score</text>
+    <line x1="280" y1="376" x2="856" y2="376" stroke="#000" stroke-width="1.5"/>
+    <text x="280" y="408" font-size="12" font-weight="600" fill="#000">LINKED SOURCES · 2 records</text>
+    <rect x="280" y="416" width="560" height="64" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="296" y="440" font-size="14" fill="#000">Regional Herald (synthetic)</text>
+    <text x="296" y="464" font-size="12" fill="#666">synthetic capture · 2026-11-20</text>
+    <text x="824" y="440" font-size="12" fill="#000" text-anchor="end">reported_by · exact</text>
+    <text x="824" y="464" font-size="12" fill="#000" text-anchor="end">Open source</text>
+    <rect x="280" y="488" width="560" height="64" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="296" y="512" font-size="14" fill="#000">Wire Desk (synthetic)</text>
+    <text x="296" y="536" font-size="12" fill="#666">synthetic capture · 2026-11-20</text>
+    <text x="824" y="512" font-size="12" fill="#000" text-anchor="end">quotation: not_provided</text>
+    <text x="824" y="536" font-size="12" fill="#000" text-anchor="end">Open source</text>
+    <text x="280" y="584" font-size="12" fill="#666">Second capture has no validated quote; nothing is highlighted.</text>
+    <text x="280" y="616" font-size="12" fill="#000">Deep link: claims/claim-8898?evidence=ev-c71a</text>
+    <text x="280" y="640" font-size="12" fill="#000">Keyboard-selectable; selection survives reload.</text>
+    <text x="280" y="664" font-size="12" fill="#666">Loading, empty, 404, retry, missing-quote states differ.</text>
+    <text x="280" y="688" font-size="12" fill="#666">1 case source is not linked to this claim.</text>
+    <rect x="896" y="256" width="360" height="344" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="912" y="288" font-size="12" font-weight="600" fill="#000">CAPTURE INSPECTOR</text>
+    <text x="912" y="320" font-size="14" font-weight="600" fill="#000">Regional Herald (synthetic)</text>
+    <text x="912" y="344" font-size="12" fill="#666">cap-9f31 · 3a7f…c19e</text>
+    <text x="1240" y="344" font-size="12" fill="#000" text-anchor="end">Open source</text>
+    <text x="912" y="368" font-size="12" fill="#000">kind: live · observed 2026-11-20 14:02 UTC</text>
+    <line x1="912" y1="392" x2="1240" y2="392" stroke="#000" stroke-width="1.5"/>
+    <text x="912" y="424" font-size="12" fill="#000">Synthetic text · quotation not highlighted</text>
+    <rect x="912" y="440" width="328" height="8" fill="#e6e6e6"/>
+    <rect x="912" y="456" width="328" height="8" fill="#e6e6e6"/>
+    <rect x="912" y="472" width="296" height="8" fill="#e6e6e6"/>
+    <rect x="912" y="488" width="320" height="8" fill="#e6e6e6"/>
+    <line x1="912" y1="512" x2="1240" y2="512" stroke="#000" stroke-width="1.5"/>
+    <text x="912" y="536" font-size="12" fill="#000">Quotation range: synthetic placeholder</text>
+    <text x="912" y="560" font-size="12" fill="#000">Published: unavailable · recorded 2026-11-20</text>
+    <text x="912" y="584" font-size="12" fill="#666">Focus moves to this heading after navigation.</text>
+    <rect x="896" y="624" width="360" height="128" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="912" y="656" font-size="12" font-weight="600" fill="#000">PROVENANCE AND DEPENDENCY</text>
+    <text x="912" y="680" font-size="12" fill="#000">Unknown publisher: 1 of 2 sources</text>
+    <text x="912" y="704" font-size="12" fill="#000">Independence: unknown · no verified claim</text>
+    <text x="912" y="728" font-size="12" fill="#666">Dependency groups: unavailable</text>
+  </g>
+  <g id="annotations" fill="none" font-family="-apple-system, system-ui, sans-serif">
+    <rect data-region="1" x="16" y="16" width="216" height="768" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="2" x="256" y="16" width="1008" height="64" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="3" x="256" y="96" width="1008" height="72" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="4" x="256" y="176" width="1008" height="56" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="5" x="256" y="248" width="624" height="512" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="6" x="888" y="248" width="376" height="360" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="7" x="888" y="616" width="376" height="144" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <text x="24" y="40" font-size="12" font-weight="600" fill="#000">1</text>
+    <text x="248" y="40" font-size="12" font-weight="600" fill="#000">2</text>
+    <text x="248" y="120" font-size="12" font-weight="600" fill="#000">3</text>
+    <text x="248" y="200" font-size="12" font-weight="600" fill="#000">4</text>
+    <text x="248" y="272" font-size="12" font-weight="600" fill="#000">5</text>
+    <text x="880" y="272" font-size="12" font-weight="600" fill="#000">6</text>
+    <text x="880" y="640" font-size="12" font-weight="600" fill="#000">7</text>
+  </g>
+</svg>

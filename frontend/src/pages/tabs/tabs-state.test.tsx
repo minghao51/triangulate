@@ -5,11 +5,14 @@ import { Link, MemoryRouter, Route, Routes, useLocation, useParams } from 'react
 
 import ClaimsTab from './ClaimsTab';
 import EvidenceTab from './EvidenceTab';
+import ExceptionsTab from './ExceptionsTab';
 import type { Claim, Evidence } from '../../types/backend-models';
 
 const apiMocks = vi.hoisted(() => ({
   getClaimsOverviewForCase: vi.fn(),
   getEvidenceForCase: vi.fn(),
+  getExceptionsForCase: vi.fn(),
+  submitExceptionAction: vi.fn(),
 }));
 
 vi.mock('../../services/api', () => apiMocks);
@@ -71,6 +74,16 @@ const ClaimsRoute = () => {
 const LocationProbe = () => {
   const location = useLocation();
   return <div data-testid="location">{location.pathname + location.search}</div>;
+};
+
+const ExceptionsRoute = () => {
+  const { id } = useParams<{ id: string }>();
+  return (
+    <>
+      <Link to="/cases/case-b/exceptions">to-b</Link>
+      <ExceptionsTab caseId={id!} />
+    </>
+  );
 };
 
 const EvidenceRoute = () => {
@@ -352,5 +365,52 @@ describe('case switch races', () => {
     expect(screen.getByText('Evidence from B')).toBeDefined();
     expect(screen.queryByText('Evidence from A')).toBeNull();
     expect(screen.getByRole('button', { name: 'All' }).getAttribute('aria-pressed')).toBe('true');
+  });
+});
+
+describe('exceptions case switch', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('drops a case A exception write outcome when the case switches', async () => {
+    apiMocks.getExceptionsForCase.mockImplementation((caseId: string) =>
+      Promise.resolve([
+        {
+          id: `exc-${caseId}`,
+          type: 'missing_source',
+          message: caseId === 'case-a' ? 'Exception A' : 'Exception B',
+          severity: 'medium',
+          status: 'open',
+          recommendedAction: 'Add corroboration',
+          isOpen: true,
+        },
+      ])
+    );
+    // The endpoint answers with a `CaseListItem`, which always carries the case id.
+    apiMocks.submitExceptionAction.mockResolvedValue({ id: 'case-a' });
+
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={['/cases/case-a/exceptions']}>
+          <Routes>
+            <Route path="/cases/:id/exceptions" element={<ExceptionsRoute />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+
+    expect(await screen.findByText('Exception A')).toBeDefined();
+    fireEvent.click(screen.getByRole('button', { name: 'Resolve' }));
+    expect(await screen.findByText('Saved and refreshed')).toBeDefined();
+
+    fireEvent.click(screen.getByRole('link', { name: 'to-b' }));
+    expect(await screen.findByText('Exception B')).toBeDefined();
+
+    // Case B starts with no inherited write state from case A.
+    expect(screen.queryByText('Saved and refreshed')).toBeNull();
+    expect(document.querySelector('[data-write-state]')).toBeNull();
+    expect(apiMocks.submitExceptionAction).toHaveBeenCalledTimes(1);
   });
 });

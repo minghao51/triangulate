@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 AutomationMode = Literal["autonomous", "blocked", "safe"]
@@ -175,8 +175,14 @@ class EvidenceDTO(BaseModel):
     publisher: str | None = None
     sourceType: str
     verificationStatus: VerificationStatus
+    # Additive: the stored text when it is outside the recorded status set, so a
+    # legacy value is visible instead of being collapsed into ``unknown``.
+    rawVerificationStatus: str | None = None
     credibilityTier: str | None = None
     requiresHumanReview: bool
+    # Recorded publication timestamp of the evidence item (F06 sort key);
+    # ``None`` means no date is recorded, never an inferred one.
+    publishedAt: str | None = None
     # Pointer to the immutable current capture; the body is never inlined.
     currentCaptureId: str | None = None
     linkedClaims: list[str] = Field(default_factory=list)
@@ -222,14 +228,59 @@ class ReviewActivityDTO(BaseModel):
     auditEntries: list[ReviewAuditEntryDTO] = Field(default_factory=list)
 
 
+# The narrow HITL write surface. These are the only accepted values; the
+# service re-checks them so a direct/CLI caller cannot bypass the contract.
+REVIEW_DECISIONS = frozenset(
+    {"approve", "reject", "defer", "action_required", "exception"}
+)
+EXCEPTION_ACTIONS = frozenset({"resolve", "defer", "reopen"})
+ANNOTATION_TARGET_TYPES = frozenset(
+    {"case", "claim", "evidence", "exception", "narrative"}
+)
+ANNOTATION_TYPES = frozenset({"comment", "flag", "context"})
+
+
+def _normalize_choice(
+    value: str, *, allowed: frozenset[str], field_name: str
+) -> str:
+    """Trim and lowercase a contract choice, rejecting anything unsupported."""
+    normalized = value.strip().lower()
+    if normalized not in allowed:
+        expected = ", ".join(sorted(allowed))
+        raise ValueError(f"{field_name} must be one of: {expected}")
+    return normalized
+
+
+def _require_non_blank(value: str, *, field_name: str) -> str:
+    """Trim a free-text field and reject an empty result."""
+    stripped = value.strip()
+    if not stripped:
+        raise ValueError(f"{field_name} must not be blank")
+    return stripped
+
+
 class ReviewActionRequest(BaseModel):
     decision: str
     notes: str | None = None
+
+    @field_validator("decision")
+    @classmethod
+    def _normalize_decision(cls, value: str) -> str:
+        return _normalize_choice(
+            value, allowed=REVIEW_DECISIONS, field_name="decision"
+        )
 
 
 class ExceptionActionRequest(BaseModel):
     action: str
     notes: str | None = None
+
+    @field_validator("action")
+    @classmethod
+    def _normalize_action(cls, value: str) -> str:
+        return _normalize_choice(
+            value, allowed=EXCEPTION_ACTIONS, field_name="action"
+        )
 
 
 class AnnotationCreateRequest(BaseModel):
@@ -239,6 +290,25 @@ class AnnotationCreateRequest(BaseModel):
     content: str
     author: str = "operator"
     metadata: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("targetType")
+    @classmethod
+    def _normalize_target_type(cls, value: str) -> str:
+        return _normalize_choice(
+            value, allowed=ANNOTATION_TARGET_TYPES, field_name="targetType"
+        )
+
+    @field_validator("annotationType")
+    @classmethod
+    def _normalize_annotation_type(cls, value: str) -> str:
+        return _normalize_choice(
+            value, allowed=ANNOTATION_TYPES, field_name="annotationType"
+        )
+
+    @field_validator("targetId", "content", "author")
+    @classmethod
+    def _require_non_blank_text(cls, value: str, info) -> str:
+        return _require_non_blank(value, field_name=info.field_name)
 
 
 class PartyDTO(BaseModel):
@@ -260,6 +330,9 @@ class TimelineEventDTO(BaseModel):
     title: str
     summary: str | None = None
     verificationStatus: VerificationStatus
+    # Additive: the stored text when it is outside the recorded status set, so a
+    # legacy value is visible instead of being collapsed into ``unknown``.
+    rawVerificationStatus: str | None = None
     linkedEvidenceCount: int
     locationCountryCode: str | None = None
     locationLat: float | None = None
@@ -352,7 +425,7 @@ class EvaluationResultDTO(BaseModel):
 
 
 class EvaluationSummaryDTO(BaseModel):
-    latest: EvaluationResultDTO
+    latest: EvaluationResultDTO | None = None
     history: list[EvaluationResultDTO] = Field(default_factory=list)
 
 
@@ -832,6 +905,28 @@ class RunChangesDTO(BaseModel):
     hasMore: bool
 
 
+ArtifactType = Literal["report_markdown", "report_json", "execution_manifest"]
+ArtifactChecksumKind = Literal["payload_json", "unknown"]
+
+
+class ArtifactDescriptorDTO(BaseModel):
+    """One published run artifact; never exposes a filesystem path.
+
+    ``recordedChecksum`` is the writer's canonical **payload** checksum, not a
+    checksum of the file bytes; ``checksumKind`` says whether that value could
+    be confirmed as the payload checksum (``payload_json``) or stays
+    ``unknown``. ``downloadUrl`` is a relative API URL and is not a
+    file-existence claim -- bytes are checked when downloading.
+    """
+
+    artifactId: str
+    type: ArtifactType
+    displayName: str
+    downloadUrl: str
+    recordedChecksum: str | None = None
+    checksumKind: ArtifactChecksumKind
+
+
 class SnapshotSummaryDTO(BaseModel):
     """Snapshot metadata/counts; entity bodies resolve through detail readers."""
 
@@ -846,6 +941,100 @@ class SnapshotSummaryDTO(BaseModel):
     createdAt: str | None = None
     counts: dict[str, int] = Field(default_factory=dict)
     observedAt: str | None = None
+
+
+SnapshotComparisonEntityType = Literal[
+    "case",
+    "articles",
+    "events",
+    "claims",
+    "links",
+    "citations",
+    "evidence",
+    "captures",
+    "reviews",
+    "exceptions",
+    "parties",
+    "partyInvestigations",
+    "narratives",
+]
+SnapshotComparisonChangeKind = Literal[
+    "entity_added", "entity_absent", "field_changed"
+]
+SnapshotComparisonUnavailableReason = Literal[
+    "incompatible_schema",
+    "incompatible_identity",
+    "incompatible_policy",
+    "unknown_version",
+    "payload_unreadable",
+]
+
+
+class SnapshotComparisonSideDTO(BaseModel):
+    """Metadata of one side of an ad-hoc comparison, recorded independently."""
+
+    sequence: int
+    #: Snapshot-save time, never the source-observation time.
+    createdAt: str | None = None
+    schemaVersion: str
+    identityVersion: str
+    policyVersion: str
+
+
+class SnapshotComparisonRefDTO(BaseModel):
+    """Frozen references for one side; only ids that side actually recorded."""
+
+    snapshotId: str
+    claimId: str | None = None
+    evidenceId: str | None = None
+    captureId: str | None = None
+    citationId: str | None = None
+
+
+class SnapshotComparisonItemRefsDTO(BaseModel):
+    baseline: SnapshotComparisonRefDTO
+    target: SnapshotComparisonRefDTO
+
+
+class SnapshotComparisonItemDTO(BaseModel):
+    """One entity-level difference between two frozen observations.
+
+    ``entity_absent`` means absent from the later observation only; it is never
+    a deletion, retraction or "no longer extracted" verdict. ``before``/``after``
+    are frozen semantic-field objects, never live ORM rows or capture bodies.
+    """
+
+    entityType: SnapshotComparisonEntityType
+    entityId: str
+    changeKind: SnapshotComparisonChangeKind
+    changedFields: list[str] = Field(default_factory=list)
+    before: dict[str, Any] | None = None
+    after: dict[str, Any] | None = None
+    refs: SnapshotComparisonItemRefsDTO
+
+
+class SnapshotComparisonDTO(BaseModel):
+    """Ad-hoc comparison of two snapshots; distinct from recorded run changes."""
+
+    mode: Literal["ad_hoc"]
+    comparisonPolicyVersion: str
+    baselineSnapshotId: str
+    targetSnapshotId: str
+    baselineRunId: str
+    targetRunId: str
+    baselineCoverage: str
+    targetCoverage: str
+    baselineMetadata: SnapshotComparisonSideDTO
+    targetMetadata: SnapshotComparisonSideDTO
+    availability: Literal["ready", "unavailable"]
+    #: ``None`` exactly when the comparison is ready.
+    unavailableReason: SnapshotComparisonUnavailableReason | None = None
+    items: list[SnapshotComparisonItemDTO] = Field(default_factory=list)
+    #: ``None`` when unavailable; an integer (including 0) when ready.
+    total: int | None = None
+    limit: int
+    offset: int
+    hasMore: bool
 
 
 SearchResultType = Literal["claim", "evidence"]

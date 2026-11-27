@@ -5,6 +5,7 @@ import Card, { CardHeader, CardTitle, CardBody } from '../components/design-syst
 import Badge from '../components/design-system/Badge';
 import Button from '../components/design-system/Button';
 import type { TopicCase } from '../types/backend-models';
+import { useVisibleRefetchInterval } from '../components/design-system/reader-polling';
 import './MonitoringCenter.css';
 
 /**
@@ -36,16 +37,20 @@ const MonitoringCenter: React.FC = () => {
   const [activeTab, setActiveTab] = useState<MonitoringTab>('monitors');
   const [selectedMonitorId, setSelectedMonitorId] = useState<string | null>(null);
 
+  // 30 s budget, and a hidden tab stops polling entirely.
+  const refetchInterval = useVisibleRefetchInterval(30000);
+
   const {
     data: cases,
     isLoading,
     error,
     refetch,
     isFetching,
+    dataUpdatedAt,
   } = useQuery({
     queryKey: ['cases'],
     queryFn: () => getCases(),
-    refetchInterval: 30000,
+    refetchInterval,
   });
 
   // Only recorded monitoring cases; nothing is synthesised from other statuses.
@@ -78,6 +83,21 @@ const MonitoringCenter: React.FC = () => {
   const hasResolvedData = !isLoading && !error && cases !== undefined;
   const unknownValue = '—';
 
+  // "Last fetched" is when this client's request completed; "Last observed" is
+  // the newest timestamp the server recorded on a monitoring case. They are
+  // different facts and are labelled separately.
+  const lastFetched =
+    Number.isFinite(dataUpdatedAt) && dataUpdatedAt > 0
+      ? new Date(dataUpdatedAt).toLocaleTimeString()
+      : '—';
+  const lastObserved = hasResolvedData
+    ? hasUnparseableTimestamp
+      ? 'Unknown (unparseable recorded timestamp)'
+      : newestUpdate
+        ? formatTimestamp(newestUpdate)
+        : 'Never recorded'
+    : unknownValue;
+
   return (
     <div className="monitoring-center">
       <div className="monitoring-header">
@@ -107,6 +127,19 @@ const MonitoringCenter: React.FC = () => {
         (<code>uv run triangulate case rerun &lt;case-id&gt; --from retrieve</code>) to start work
         for a case.
       </p>
+
+      <div className="monitoring-freshness">
+        <span className="monitoring-freshness-item" data-testid="monitoring-last-fetched">
+          <span className="monitoring-freshness-label">Last fetched</span>
+          <span className="monitoring-freshness-value">{lastFetched}</span>
+          <span className="monitoring-freshness-note">client request time</span>
+        </span>
+        <span className="monitoring-freshness-item" data-testid="monitoring-last-observed">
+          <span className="monitoring-freshness-label">Last observed</span>
+          <span className="monitoring-freshness-value">{lastObserved}</span>
+          <span className="monitoring-freshness-note">newest timestamp recorded on a case</span>
+        </span>
+      </div>
 
       <div className="monitoring-stats">
         <Card padding="sm">
@@ -142,13 +175,23 @@ const MonitoringCenter: React.FC = () => {
         <Card padding="sm">
           <CardBody>
             <div className="monitoring-stat-label">Schedule / Next Run</div>
-            <div className="monitoring-stat-value monitoring-stat-value--muted">{NOT_PROVIDED}</div>
+            <div
+              className="monitoring-stat-value monitoring-stat-value--muted"
+              data-state="monitoring-unavailable"
+            >
+              {NOT_PROVIDED}
+            </div>
           </CardBody>
         </Card>
         <Card padding="sm">
           <CardBody>
             <div className="monitoring-stat-label">System Health</div>
-            <div className="monitoring-stat-value monitoring-stat-value--muted">{NOT_PROVIDED}</div>
+            <div
+              className="monitoring-stat-value monitoring-stat-value--muted"
+              data-state="monitoring-unavailable"
+            >
+              {NOT_PROVIDED}
+            </div>
           </CardBody>
         </Card>
       </div>
@@ -202,7 +245,11 @@ const MonitoringCenter: React.FC = () => {
                 {monitors.length === 0 ? (
                   <Card>
                     <CardBody>
-                      <div className="monitoring-state" role="status">
+                      <div
+                        className="monitoring-state"
+                        role="status"
+                        data-state="monitoring-empty"
+                      >
                         <div className="monitoring-state-title">No monitoring cases recorded</div>
                         <p>
                           No case currently has the recorded status <code>monitoring</code>. This is
@@ -273,7 +320,12 @@ const MonitoringCenter: React.FC = () => {
                         </div>
                         <div>
                           <dt>Schedule / next run</dt>
-                          <dd className="monitoring-unavailable">{NOT_PROVIDED}</dd>
+                          <dd
+                            className="monitoring-unavailable"
+                            data-state="monitoring-unavailable"
+                          >
+                            {NOT_PROVIDED}
+                          </dd>
                         </div>
                       </dl>
                       <div className="monitoring-detail-actions">
@@ -317,7 +369,11 @@ const MonitoringCenter: React.FC = () => {
                 <CardTitle>{activeTab === 'alerts' ? 'Alerts' : 'Performance'}</CardTitle>
               </CardHeader>
               <CardBody>
-                <div className="monitoring-state monitoring-state--unavailable" role="status">
+                <div
+                  className="monitoring-state monitoring-state--unavailable"
+                  role="status"
+                  data-state="monitoring-unavailable"
+                >
                   <Badge variant="neutral" size="sm">Unavailable</Badge>
                   <p>{UNAVAILABLE_EXPLANATIONS[activeTab]}</p>
                 </div>

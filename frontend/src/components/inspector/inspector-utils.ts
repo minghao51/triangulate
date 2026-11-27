@@ -77,6 +77,30 @@ export function codePointLength(text: string): number {
   return Array.from(text).length;
 }
 
+/**
+ * One exact code-point window, matching the server's Python slice semantics
+ * (`text[start:start + length]`).
+ *
+ * String indices are UTF-16 code units, so `text.slice` would split surrogate
+ * pairs and count astral characters twice. `Array.from` iterates code points
+ * instead: one emoji, one Deseret letter and one combining-mark sequence all
+ * count exactly as Python counts them. No NFKC/casefold normalisation happens
+ * here — offsets are only meaningful against unchanged text.
+ */
+export function codePointSlice(
+  text: string,
+  start: number,
+  length: number
+): string {
+  if (!Number.isFinite(start) || !Number.isFinite(length) || length <= 0) {
+    return '';
+  }
+  const chars = Array.from(text);
+  const from = Math.min(Math.max(0, Math.trunc(start)), chars.length);
+  const to = Math.min(from + Math.trunc(length), chars.length);
+  return chars.slice(from, to).join('');
+}
+
 export interface HighlightParts {
   before: string;
   match: string;
@@ -107,13 +131,127 @@ export function splitHighlight(
   if (relativeStart < 0 || relativeEnd > chars.length || relativeEnd <= relativeStart) {
     return null;
   }
-  const match = chars.slice(relativeStart, relativeEnd).join('');
+  const match = codePointSlice(windowText, relativeStart, relativeEnd - relativeStart);
   if (match !== quote) return null;
   return {
     before: chars.slice(0, relativeStart).join(''),
     match,
     after: chars.slice(relativeEnd).join(''),
   };
+}
+
+/**
+ * The five explicit inspector diagnostics plus the `exact` reading.
+ *
+ * Every state has distinct text and its own stable `data-state` attribute, so
+ * the diagnostic is never carried by colour alone. `legacy` is the honest
+ * fallback for records that predate alignment assessment: nothing is inferred
+ * from the absence of a recognised status.
+ */
+export type InspectorDiagnosticState =
+  | 'exact'
+  | 'missing-quotation'
+  | 'source-unavailable'
+  | 'ambiguous'
+  | 'no-match'
+  | 'legacy';
+
+export interface InspectorDiagnostic {
+  state: InspectorDiagnosticState;
+  /** Stable hook for tests and consumers; never a CSS-only distinction. */
+  attribute: string;
+  label: string;
+  message: string;
+  tone: 'ok' | 'warning' | 'neutral';
+}
+
+const KNOWN_ALIGNMENT = new Set<string>([
+  'exact',
+  'ambiguous',
+  'no_match',
+  'not_provided',
+  'source_unavailable',
+]);
+
+const DIAGNOSTICS: Record<InspectorDiagnosticState, InspectorDiagnostic> = {
+  exact: {
+    state: 'exact',
+    attribute: 'inspector-exact',
+    label: ALIGNMENT_LABELS.exact,
+    message:
+      'The quotation matches these code points exactly. That is alignment with the captured text, not corroboration and not reviewer confirmation.',
+    tone: 'ok',
+  },
+  'missing-quotation': {
+    state: 'missing-quotation',
+    attribute: 'inspector-missing-quotation',
+    label: 'No quotation was recorded',
+    message:
+      'This link records no quotation, so there is nothing to highlight in the captured text. A missing quotation is not a failed match and does not make the claim supported.',
+    tone: 'neutral',
+  },
+  'source-unavailable': {
+    state: 'source-unavailable',
+    attribute: 'inspector-source-unavailable',
+    label: 'Source text unavailable',
+    message:
+      'The captured source text was unavailable when this link was assessed, so the quotation could not be checked against it. This does not claim the quotation is absent from the source.',
+    tone: 'warning',
+  },
+  ambiguous: {
+    state: 'ambiguous',
+    attribute: 'inspector-ambiguous',
+    label: 'Ambiguous quotation',
+    message:
+      'The quotation occurs more than once in the captured text and no offsets disambiguate it. The inspector never picks one occurrence for you.',
+    tone: 'warning',
+  },
+  'no-match': {
+    state: 'no-match',
+    attribute: 'inspector-no-match',
+    label: 'No exact match in the captured text',
+    message:
+      'The recorded quotation does not appear exactly in this capture. It may differ in wording or punctuation; nothing is re-matched fuzzily here.',
+    tone: 'warning',
+  },
+  legacy: {
+    state: 'legacy',
+    attribute: 'inspector-legacy',
+    label: 'Legacy record — alignment not recorded',
+    message:
+      'This link carries no recognised alignment status, offsets or quotation because it predates that assessment. Stored values are shown exactly as recorded and nothing is inferred.',
+    tone: 'neutral',
+  },
+};
+
+/**
+ * Resolve one explicit diagnostic for a passage, derived only from the frozen
+ * record: the recorded alignment status and whether a quotation exists.
+ */
+export function resolveInspectorDiagnostic(
+  alignmentStatus: string | null | undefined,
+  quote: string | null | undefined
+): InspectorDiagnostic {
+  const hasQuote = typeof quote === 'string' && quote.length > 0;
+  switch (alignmentStatus) {
+    case 'exact':
+      return hasQuote ? DIAGNOSTICS.exact : DIAGNOSTICS.legacy;
+    case 'ambiguous':
+      return DIAGNOSTICS.ambiguous;
+    case 'no_match':
+      return DIAGNOSTICS['no-match'];
+    case 'source_unavailable':
+      return DIAGNOSTICS['source-unavailable'];
+    case 'not_provided':
+      return DIAGNOSTICS['missing-quotation'];
+    default:
+      return DIAGNOSTICS.legacy;
+  }
+}
+
+/** Known statuses are recognised; anything else is a legacy/unknown record. */
+export function isKnownAlignment(value: string | null | undefined): boolean {
+  return Boolean(value) && KNOWN_ALIGNMENT.has(value as string);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

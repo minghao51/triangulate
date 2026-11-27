@@ -1,4 +1,5 @@
 import type {
+  ArtifactDescriptor,
   CaseDetail,
   CaseSearchResponse,
   CaptureWindow,
@@ -20,6 +21,7 @@ import type {
   InvestigationRunList,
   RunChanges,
   RunHistoryItem,
+  SnapshotComparison,
   TimelineEvent,
   TopicCase,
 } from '../types/backend-models';
@@ -29,6 +31,16 @@ export { ApiError, isNotFound, isUnprocessable } from './api-error';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '';
 const USE_STATIC_DATA = !API_BASE_URL || API_BASE_URL === '';
+
+// Static fixtures are a development convenience, not a claim that no backend is
+// reachable: a missing fixture still falls through to the same-origin /api path.
+if (USE_STATIC_DATA && import.meta.env.DEV && import.meta.env.MODE !== 'test') {
+  console.warn(
+    '[triangulate] VITE_API_BASE_URL is not set; serving bundled static fixtures. ' +
+      'Set VITE_API_BASE_URL to the backend origin, or run scripts/dev-with-api.sh, ' +
+      'for live case data. A missing fixture falls through to the same-origin /api path.'
+  );
+}
 
 function mapStaticPath(apiPath: string): string {
   if (apiPath === '/api/cases') {
@@ -46,6 +58,9 @@ function mapStaticPath(apiPath: string): string {
   if (tabMatch) {
     return `/data/cases/${tabMatch[1]}/${tabMatch[2]}.json`;
   }
+  if (apiPath === '/api/monitoring/summary') {
+    return '/data/monitoring/summary.json';
+  }
   return apiPath.replace('/api/', '/data/');
 }
 
@@ -54,7 +69,7 @@ async function fetchStatic<T>(path: string): Promise<T | null> {
   try {
     const response = await fetch(path);
     if (!response.ok) return null;
-    return response.json() as Promise<T>;
+    return await response.json() as T;
   } catch {
     return null;
   }
@@ -160,6 +175,14 @@ export const getEvidenceDetail = async (
       snapshotQuery(snapshotId)
   );
 
+/**
+ * Frozen readers: the citation and the capture window are addressed by their
+ * own immutable IDs, so they accept no snapshot selector. The backend rejects a
+ * `snapshot`/`snapshotId` query on both routes with 422, which is why neither
+ * fetcher below has a snapshot parameter — the browser's `snapshot` value is
+ * never forwarded here. Only the claim/evidence/comparison readers are
+ * snapshot-aware.
+ */
 export const getCitationDetail = async (
   caseId: string,
   citationId: string
@@ -168,7 +191,11 @@ export const getCitationDetail = async (
     `/api/cases/${encodeURIComponent(caseId)}/citations/${encodeURIComponent(citationId)}`
   );
 
-/** One bounded code-point window of an immutable capture. */
+/**
+ * One bounded code-point window of an immutable capture. `start`/`length` are
+ * the only accepted query values: this route is frozen per capture ID and
+ * rejects a snapshot selector with 422.
+ */
 export const getCaptureWindow = async (
   caseId: string,
   evidenceId: string,
@@ -184,6 +211,99 @@ export const getCaptureWindow = async (
       evidenceId
     )}/captures/${encodeURIComponent(captureId)}${query ? `?${query}` : ''}`
   );
+};
+
+/**
+ * P01 source dependency summary (GET /api/cases/{case_id}/sources).
+ *
+ * These are **observed** counts and grouping metadata. Nothing here rates bias,
+ * factuality or independence: `independenceStatus` is either `unknown` or
+ * `dependency_detected`, never a positive independence verdict.
+ */
+export interface SourcePolicy {
+  version: string;
+  urlNormalization: string[];
+  publisherIdentity: string[];
+  dependencyEdges: string[];
+  textFingerprint: string;
+  textFingerprintNormalization: string;
+  minCopyNonWhitespaceCodePoints: number;
+  limitations: string[];
+}
+
+/** One evidence/capture record inside a dependency group (no capture body). */
+export interface SourceMember {
+  evidenceId: string;
+  publisher: string | null;
+  publisherKey: string | null;
+  publisherKeyProvisional: boolean;
+  host: string | null;
+  originUrl: string | null;
+  canonicalUrl: string | null;
+  sourceUrl: string | null;
+  caseArticleId: string | null;
+  explicitOriginKey: string | null;
+  captureId: string | null;
+  captureKind: string | null;
+  captureTextSha256: string | null;
+  captureNormalizedTextSha256: string | null;
+  captureCharLength: number | null;
+  recordedAt: string | null;
+  observedAt: string | null;
+  copyFingerprint: string | null;
+  copyNonWhitespaceCount: number;
+  dependencyReasons: string[];
+}
+
+/** One connected dependency component, with inspectable membership. */
+export interface SourceDependencyGroup {
+  id: string;
+  reasons: string[];
+  publisherKeys: string[];
+  evidenceCount: number;
+  members: SourceMember[];
+}
+
+/** Observed evidence count for one known publisher identity. */
+export interface PublisherCount {
+  publisherKey: string;
+  publisher: string | null;
+  evidenceCount: number;
+  dependencyGroupCount: number;
+  provisional: boolean;
+}
+
+/** `GET /api/cases/{case_id}/sources` — never an independence score. */
+export interface SourceSummary {
+  caseId: string;
+  scope: 'case' | 'claim';
+  claimId: string | null;
+  claimSignature: string | null;
+  evidenceCount: number;
+  distinctPublisherCount: number;
+  dependencyGroupCount: number;
+  unknownPublisherCount: number;
+  independenceStatus: 'unknown' | 'dependency_detected';
+  policy: SourcePolicy;
+  publisherCounts: PublisherCount[];
+  groups: SourceDependencyGroup[];
+}
+
+/**
+ * Observed publishers and dependency groups for one case (read-only).
+ *
+ * The route is current-only and rejects a `snapshot` selector with 422, so this
+ * fetcher accepts no snapshot parameter — the browser's `snapshot` value is
+ * never forwarded here.
+ */
+export const getCaseSources = async (
+  caseId: string,
+  options: { claimId?: string | null } = {}
+): Promise<SourceSummary> => {
+  const claimId =
+    typeof options.claimId === 'string' ? options.claimId.trim() : '';
+  const query = claimId ? `?claimId=${encodeURIComponent(claimId)}` : '';
+  return request(`/api/cases/${encodeURIComponent(caseId)}/sources${query}`);
 };
 
 export interface ComparisonQuery {
@@ -265,8 +385,97 @@ export const getRunChanges = async (
       `${encodeURIComponent(runId)}/changes${runQueryString(query)}`
   );
 
+export interface SnapshotComparisonQuery {
+  /** Baseline snapshot id (API query name `baseline`). */
+  baseline: string;
+  /** Target snapshot id (API query name `target`). */
+  target: string;
+  limit?: number;
+  offset?: number;
+}
+
+/**
+ * X01 ad-hoc comparison of two pinned snapshots (GET-only, zero writes).
+ *
+ * Distinct from the recorded-run changes reader: `baseline` and `target` are
+ * explicit immutable snapshot ids, never resolved from "latest" here. An
+ * unsupported pair answers 200 with `availability: "unavailable"` and a reason,
+ * so the caller must never render it as an empty delta.
+ */
+export const getSnapshotComparison = async (
+  caseId: string,
+  query: SnapshotComparisonQuery
+): Promise<SnapshotComparison> => {
+  const params = new URLSearchParams();
+  params.set('baseline', query.baseline);
+  params.set('target', query.target);
+  if (typeof query.limit === 'number') params.set('limit', String(query.limit));
+  if (typeof query.offset === 'number') params.set('offset', String(query.offset));
+  return request(
+    `/api/cases/${encodeURIComponent(caseId)}/snapshot-comparison?${params.toString()}`
+  );
+};
+
 export const getReportForCase = async (caseId: string): Promise<ReportData> =>
   request(`/api/cases/${caseId}/report`);
+
+// ---------------------------------------------------------------------------
+// X02 / F19 published report artifacts of one grouped run (GET-only)
+// ---------------------------------------------------------------------------
+
+/**
+ * The only artifact types the publication step writes, and therefore the only
+ * ones this client will ever offer for download. No PDF, ZIP or bundle type
+ * exists here, and nothing below generates, repairs or republishes a report.
+ */
+export const INVESTIGATION_ARTIFACT_TYPES = [
+  'report_markdown',
+  'report_json',
+  'execution_manifest',
+] as const;
+
+/**
+ * Descriptors of one recorded grouped run's published report artifacts.
+ *
+ * An unknown or wrong-case run is a 404 (`isNotFound`), and a recorded run
+ * without eligible published reports is `[]`. Neither case is ever resolved to
+ * a nearby, newer or "latest" run — that decision belongs to the caller, and
+ * the honest answer is to show the recorded state.
+ */
+export const getInvestigationRunArtifacts = async (
+  caseId: string,
+  runId: string
+): Promise<ArtifactDescriptor[]> =>
+  request(
+    `/api/cases/${encodeURIComponent(caseId)}/investigation-runs/` +
+      `${encodeURIComponent(runId)}/artifacts`
+  );
+
+/**
+ * Download the bytes of one descriptor through the F19 download URL.
+ *
+ * The type must be on the allowlist and the descriptor's `downloadUrl` must be
+ * exactly the canonical URL for this case, run and artifact id; anything else
+ * is refused locally instead of being fetched. A 404 from the reader (missing
+ * bytes, wrong owner, unlisted artifact) surfaces as `ApiError` with status
+ * 404 and is never retried into a different artifact.
+ */
+export const downloadInvestigationRunArtifact = async (
+  caseId: string,
+  runId: string,
+  descriptor: ArtifactDescriptor
+): Promise<void> => {
+  if (!(INVESTIGATION_ARTIFACT_TYPES as readonly string[]).includes(descriptor.type)) {
+    throw new Error('This artifact type is not offered for download.');
+  }
+  const expected =
+    `/api/cases/${encodeURIComponent(caseId)}/investigation-runs/` +
+    `${encodeURIComponent(runId)}/artifacts/${encodeURIComponent(descriptor.artifactId)}`;
+  if (descriptor.downloadUrl !== expected) {
+    throw new Error('This download reference does not address the recorded artifact.');
+  }
+  await downloadBlob(descriptor.downloadUrl, descriptor.displayName);
+};
 
 export const getReviewActivityForCase = async (caseId: string): Promise<ReviewActivity> =>
   request(`/api/cases/${caseId}/review-activity`);
@@ -339,7 +548,12 @@ async function downloadBlob(path: string, fallbackName: string): Promise<void> {
   const response = await fetch(`${API_BASE_URL}${path}`);
   if (!response.ok) {
     const detail = await response.text();
-    throw new Error(detail || `Request failed with status ${response.status}`);
+    // Keep the HTTP status on the error so a reader can distinguish a missing
+    // recorded artifact (404) from a genuine transport failure.
+    throw new ApiError(
+      detail || `Request failed with status ${response.status}`,
+      response.status
+    );
   }
 
   const blob = await response.blob();

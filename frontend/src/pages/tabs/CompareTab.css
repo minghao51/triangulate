@@ -549,3 +549,138 @@
         color: var(--text-tertiary);
     }
 }
+
+/* Comparison tray (session-only draft; F07 hooks, styled here).
+
+   The tray is a bounded two-slot draft: entries, explicit refusal/notice text and
+   the commit action. States are conveyed by text, and the layout stacks at the
+   narrow viewport instead of clipping. */
+
+.compare-tray {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    padding: 1rem;
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    background: var(--bg-surface-hover);
+    min-width: 0;
+}
+
+.compare-tray-heading h4 {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin: 0;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.compare-tray-heading p {
+    margin: 0.25rem 0 0;
+}
+
+.compare-tray-notice {
+    margin: 0;
+    padding: 0.5rem 0.6rem;
+    border: 1px solid var(--border-subtle);
+    border-left: 2px solid var(--status-info);
+    border-radius: var(--radius-sm);
+    font-size: 0.75rem;
+    line-height: 1.5;
+    color: var(--text-secondary);
+}
+
+.compare-tray-refusal {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.4rem;
+    margin: 0;
+    padding: 0.5rem 0.6rem;
+    border: 1px solid var(--status-warning);
+    border-radius: var(--radius-sm);
+    font-size: 0.75rem;
+    line-height: 1.5;
+    color: var(--text-primary);
+}
+
+.compare-tray-entries {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.compare-tray-entries li {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    padding: 0.5rem 0.6rem;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    background: var(--bg-app);
+    font-size: 0.8125rem;
+    color: var(--text-primary);
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.compare-tray-entries code {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    color: var(--accent-primary);
+}
+
+.compare-tray-entries .compare-diagnostic {
+    flex-basis: 100%;
+}
+
+.compare-tray-single {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    padding: 0.6rem;
+    border: 1px dashed var(--border-strong);
+    border-radius: var(--radius-sm);
+    font-size: 0.75rem;
+    line-height: 1.5;
+    color: var(--text-secondary);
+}
+
+.compare-tray-single p {
+    margin: 0;
+}
+
+.compare-tray-single button {
+    margin-left: 0.4rem;
+}
+
+.compare-tray-actions {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+@media (max-width: 760px) {
+    .compare-tray {
+        padding: 0.75rem;
+    }
+
+    .compare-tray-entries li {
+        align-items: flex-start;
+    }
+
+    .compare-tray-single button {
+        margin: 0.4rem 0 0;
+        display: inline-flex;
+    }
+
+    .compare-tray-actions button {
+        width: 100%;
+        justify-content: center;
+    }
+}

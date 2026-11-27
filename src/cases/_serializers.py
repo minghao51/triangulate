@@ -6,6 +6,7 @@ from typing import Any
 
 from sqlalchemy import or_
 
+from src.storage.models import verification_status_value
 from src.storage import (
     AgentOutput,
     CaseArtifact,
@@ -270,7 +271,7 @@ def build_case_detail_payload(session, case: TopicCase) -> dict[str, Any]:
             "event_id": claim.event_id,
             "claim_text": claim.claim_text,
             "narrative_cluster_id": claim.narrative_cluster_id,
-            "verification_status": claim.verification_status.value,
+            "verification_status": verification_status_value(claim.verification_status),
             "fact_allegation_type": claim.fact_allegation_type.value
             if claim.fact_allegation_type
             else None,
@@ -290,7 +291,7 @@ def build_case_detail_payload(session, case: TopicCase) -> dict[str, Any]:
             {
                 "claim_signature": signature,
                 "claim_text": claim.claim_text,
-                "verification_status": claim.verification_status.value,
+                "verification_status": verification_status_value(claim.verification_status),
                 "support_count": 0,
                 "oppose_count": 0,
                 "source_diversity_count": 0,
@@ -371,7 +372,7 @@ def build_case_detail_payload(session, case: TopicCase) -> dict[str, Any]:
                 "timestamp": event.timestamp.isoformat() if event.timestamp else None,
                 "title": event.title,
                 "summary": event.summary,
-                "verification_status": event.verification_status.value,
+                "verification_status": verification_status_value(event.verification_status),
                 "workflow_route": getattr(event, 'workflow_route', None),
                 "source_url": getattr(event, 'source_url', None),
             }

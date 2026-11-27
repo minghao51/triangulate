@@ -1,0 +1,95 @@
+<!-- viewport: 1280×800 desktop -->
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="800" viewBox="0 0 1280 800" role="img" aria-labelledby="wf-title wf-desc">
+  <title id="wf-title">Operator, pipeline and monitoring flow — desktop flow</title>
+  <desc id="wf-desc">Operator, pipeline and monitoring flow — desktop flow (desktop, 1280x800). Proposal wireframe with synthetic data, not implementation evidence. Numbered regions: 1 Flow title — reading rule stated before any transition; order is navigation, not execution; 2 Thumbnail 1 — Operator launch guide (operator-launch); geometry-derived miniature, source text omitted; 3 Transition 1 — 'run CLI': navigation/review path only; 4 Thumbnail 2 — Pipeline monitor (pipeline); geometry-derived miniature, source text omitted; 5 Transition 2 — 'observe': navigation/review path only; 6 Thumbnail 3 — Runs and changes (runs-changes); geometry-derived miniature, source text omitted; 7 Transition 3 — 'status': navigation/review path only; 8 Thumbnail 4 — Monitoring (monitoring); geometry-derived miniature, source text omitted; 9 Legend — thumbnail abstraction and grid rules; no automatic transition is implied.</desc>
+  <g id="ui" font-family="-apple-system, system-ui, sans-serif">
+    <rect x="0" y="0" width="1280" height="800" fill="#fff"/>
+    <rect x="8" y="8" width="1264" height="784" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="32" y="80" font-size="28" fill="#000" font-weight="600">Operator, pipeline and monitoring flow</text>
+    <text x="32" y="112" font-size="12" fill="#666">Left-to-right order is a navigation/review path — not automatic execution or a causal state transition.</text>
+    <text x="32" y="136" font-size="12" fill="#666">Thumbnails are geometry-derived from each screen's desktop SVG; source text is omitted as illegible at this scale.</text>
+    <rect x="64" y="200" width="240" height="168" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <rect x="80" y="216" width="40" height="128" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <line x1="80" y1="224" x2="120" y2="224" stroke="#000" stroke-width="1.5"/>
+    <line x1="80" y1="272" x2="120" y2="272" stroke="#000" stroke-width="1.5"/>
+    <line x1="80" y1="296" x2="120" y2="296" stroke="#000" stroke-width="1.5"/>
+    <rect x="120" y="216" width="168" height="16" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <rect x="120" y="240" width="112" height="24" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <rect x="240" y="240" width="48" height="32" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <line x1="240" y1="248" x2="288" y2="248" stroke="#000" stroke-width="1.5"/>
+    <rect x="120" y="272" width="168" height="24" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="64" y="400" font-size="12" fill="#000">1 · operator-launch</text>
+    <line x1="312" y1="288" x2="360" y2="288" stroke="#000" stroke-width="1.5"/>
+    <line x1="360" y1="288" x2="352" y2="280" stroke="#000" stroke-width="1.5"/>
+    <line x1="360" y1="288" x2="352" y2="296" stroke="#000" stroke-width="1.5"/>
+    <text x="336" y="312" text-anchor="middle" font-size="12" fill="#666">run CLI</text>
+    <rect x="368" y="200" width="240" height="168" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <rect x="384" y="216" width="40" height="128" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <line x1="384" y1="224" x2="424" y2="224" stroke="#000" stroke-width="1.5"/>
+    <line x1="384" y1="272" x2="424" y2="272" stroke="#000" stroke-width="1.5"/>
+    <line x1="384" y1="296" x2="424" y2="296" stroke="#000" stroke-width="1.5"/>
+    <rect x="424" y="216" width="168" height="16" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <rect x="424" y="232" width="168" height="40" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <line x1="432" y1="248" x2="592" y2="248" stroke="#000" stroke-width="1.5"/>
+    <rect x="424" y="280" width="168" height="40" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <line x1="432" y1="288" x2="592" y2="288" stroke="#000" stroke-width="1.5"/>
+    <text x="368" y="400" font-size="12" fill="#000">2 · pipeline</text>
+    <line x1="616" y1="288" x2="664" y2="288" stroke="#000" stroke-width="1.5"/>
+    <line x1="664" y1="288" x2="656" y2="280" stroke="#000" stroke-width="1.5"/>
+    <line x1="664" y1="288" x2="656" y2="296" stroke="#000" stroke-width="1.5"/>
+    <text x="640" y="312" text-anchor="middle" font-size="12" fill="#666">observe</text>
+    <rect x="672" y="200" width="240" height="168" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <rect x="688" y="216" width="40" height="128" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <line x1="688" y1="224" x2="728" y2="224" stroke="#000" stroke-width="1.5"/>
+    <line x1="688" y1="272" x2="728" y2="272" stroke="#000" stroke-width="1.5"/>
+    <line x1="688" y1="296" x2="728" y2="296" stroke="#000" stroke-width="1.5"/>
+    <rect x="728" y="216" width="168" height="16" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <rect x="728" y="232" width="168" height="8" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <rect x="728" y="248" width="168" height="24" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <rect x="736" y="256" width="160" height="8" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <rect x="736" y="264" width="16" height="8" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <rect x="752" y="264" width="16" height="8" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <rect x="728" y="280" width="88" height="24" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <rect x="816" y="280" width="80" height="24" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <rect x="728" y="304" width="168" height="40" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <line x1="736" y1="320" x2="896" y2="320" stroke="#000" stroke-width="1.5"/>
+    <text x="672" y="400" font-size="12" fill="#000">3 · runs-changes</text>
+    <line x1="920" y1="288" x2="968" y2="288" stroke="#000" stroke-width="1.5"/>
+    <line x1="968" y1="288" x2="960" y2="280" stroke="#000" stroke-width="1.5"/>
+    <line x1="968" y1="288" x2="960" y2="296" stroke="#000" stroke-width="1.5"/>
+    <text x="944" y="312" text-anchor="middle" font-size="12" fill="#666">status</text>
+    <rect x="976" y="200" width="240" height="168" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <rect x="992" y="216" width="40" height="128" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <line x1="992" y1="224" x2="1032" y2="224" stroke="#000" stroke-width="1.5"/>
+    <line x1="992" y1="272" x2="1032" y2="272" stroke="#000" stroke-width="1.5"/>
+    <line x1="992" y1="296" x2="1032" y2="296" stroke="#000" stroke-width="1.5"/>
+    <rect x="1032" y="216" width="168" height="16" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <rect x="1032" y="232" width="168" height="40" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <line x1="1040" y1="248" x2="1200" y2="248" stroke="#000" stroke-width="1.5"/>
+    <rect x="1032" y="272" width="168" height="24" fill="#fff" stroke="#000" stroke-width="1.5"/>
+    <text x="976" y="400" font-size="12" fill="#000">4 · monitoring</text>
+    <text x="32" y="480" font-size="14" fill="#000" font-weight="600">Legend</text>
+    <text x="32" y="512" font-size="12" fill="#000">Screens are numbered in reading order; arrows are navigation or review transitions.</text>
+    <text x="32" y="536" font-size="12" fill="#666">Geometry is snapped to the 8 px grid; text, icons, images and external references are omitted.</text>
+  </g>
+  <g id="annotations" font-family="-apple-system, system-ui, sans-serif">
+    <rect data-region="1" x="24" y="24" width="1240" height="128" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="2" x="56" y="192" width="256" height="224" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="3" x="320" y="272" width="32" height="80" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="4" x="360" y="192" width="256" height="224" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="5" x="624" y="272" width="32" height="80" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="6" x="664" y="192" width="256" height="224" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="7" x="928" y="272" width="32" height="80" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="8" x="968" y="192" width="256" height="224" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <rect data-region="9" x="24" y="440" width="1240" height="136" fill="none" stroke="#d33" stroke-width="1.5" stroke-dasharray="8 8"/>
+    <text x="16" y="48" font-size="12" font-weight="600" fill="#000">1</text>
+    <text x="48" y="216" font-size="12" font-weight="600" fill="#000">2</text>
+    <text x="320" y="256" font-size="12" font-weight="600" fill="#000">3</text>
+    <text x="352" y="216" font-size="12" font-weight="600" fill="#000">4</text>
+    <text x="624" y="256" font-size="12" font-weight="600" fill="#000">5</text>
+    <text x="656" y="216" font-size="12" font-weight="600" fill="#000">6</text>
+    <text x="928" y="256" font-size="12" font-weight="600" fill="#000">7</text>
+    <text x="960" y="216" font-size="12" font-weight="600" fill="#000">8</text>
+    <text x="16" y="464" font-size="12" font-weight="600" fill="#000">9</text>
+  </g>
+</svg>
