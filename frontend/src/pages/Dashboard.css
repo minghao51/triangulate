@@ -67,79 +67,36 @@
   gap: 1.5rem;
 }
 
-/* Metrics Grid */
-.dashboard-metrics {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 1rem;
-}
-
-.metric-card {
+/* Observed totals — plain prose, deliberately not a KPI tile grid */
+.dashboard-observed {
+  padding: 1rem 1.25rem;
+  background: var(--bg-surface-hover);
   border: 1px solid var(--border-subtle);
-  transition: all var(--transition-fast);
-}
-
-.metric-card:hover {
-  border-color: var(--border-strong);
-  box-shadow: var(--shadow-md);
-}
-
-.metric-card-body {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  padding: 1.25rem;
-}
-
-.metric-icon {
-  width: 48px;
-  height: 48px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
   border-radius: var(--radius-sm);
-  flex-shrink: 0;
 }
 
-.metric-icon-primary {
-  background: rgba(0, 212, 255, 0.1);
-  color: var(--accent-primary);
-}
-
-.metric-icon-success {
-  background: rgba(0, 255, 157, 0.1);
-  color: var(--status-success);
-}
-
-.metric-icon-warning {
-  background: rgba(255, 184, 0, 0.1);
-  color: var(--status-warning);
-}
-
-.metric-icon-danger {
-  background: rgba(255, 71, 87, 0.1);
-  color: var(--status-danger);
-}
-
-.metric-content {
-  flex: 1;
-}
-
-.metric-value {
-  font-size: 2rem;
-  font-weight: 700;
-  color: var(--text-primary);
-  line-height: 1;
-  margin-bottom: 0.25rem;
-  font-family: var(--font-mono);
-}
-
-.metric-label {
+.dashboard-observed-title {
+  margin: 0 0 0.5rem;
   font-size: 0.75rem;
-  color: var(--text-tertiary);
+  font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.1em;
-  font-weight: 500;
+  color: var(--text-tertiary);
+}
+
+.dashboard-observed-line {
+  margin: 0 0 0.25rem;
+  font-size: 0.875rem;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  line-height: 1.5;
+}
+
+.dashboard-observed-note {
+  margin: 0.5rem 0 0;
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
+  font-style: italic;
 }
 
 /* Main Grid */
@@ -447,10 +404,6 @@
 
   .dashboard-header-right {
     display: flex;
-  }
-
-  .dashboard-metrics {
-    grid-template-columns: repeat(2, 1fr);
   }
 
   .dashboard-grid {

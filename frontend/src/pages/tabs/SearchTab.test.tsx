@@ -241,6 +241,37 @@ describe('SearchTab', () => {
     expect(screen.queryByText(/Showing 0–0 of 0/)).toBeNull();
   });
 
+  it('offers a permalink that pins the current query, filters and offset', async () => {
+    apiMocks.getCaseSearch.mockResolvedValue(response({ total: 100, limit: 25, offset: 25 }));
+    renderSearch('/cases/case-1/search?q=term&type=evidence&offset=25');
+    await screen.findByText('Found term');
+
+    const permalink = () => screen.getByRole('link', { name: 'Permalink for this selection' });
+    expect(permalink().getAttribute('href')).toBe(
+      '/cases/case-1/search?q=term&type=evidence&offset=25'
+    );
+
+    // The link follows the URL, so paging pins the new offset.
+    fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+    await waitFor(() =>
+      expect(permalink().getAttribute('href')).toBe(
+        '/cases/case-1/search?q=term&type=evidence&offset=50'
+      )
+    );
+
+    // A filter change resets paging and keeps the query in the link.
+    fireEvent.change(screen.getByLabelText('Result type'), { target: { value: 'claim' } });
+    await waitFor(() =>
+      expect(permalink().getAttribute('href')).toBe('/cases/case-1/search?q=term&type=claim')
+    );
+  });
+
+  it('offers no permalink when no query is present', () => {
+    renderSearch('/cases/case-1/search?type=evidence');
+    expect(screen.getByRole('status').textContent).toMatch(/enter a search query/i);
+    expect(screen.queryByRole('link', { name: 'Permalink for this selection' })).toBeNull();
+  });
+
   it('re-derives request parameters when navigating back and forward', async () => {
     const HistoryControls = () => {
       const navigate = useNavigate();

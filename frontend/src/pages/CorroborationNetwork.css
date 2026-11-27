@@ -1,0 +1,19 @@
+/* Scoped styles for the corroboration network reading rule. */
+
+/*
+ * Same caveat treatment the rest of the app uses for an honesty note
+ * (see .changes-caveat / .compare-caveats): small, muted, and always visible
+ * rather than dismissible.
+ */
+.network-legend-rule {
+  margin: 0.5rem 0;
+  border: 0;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.network-reading-rule {
+  margin: 0;
+  color: var(--text-tertiary);
+  font-size: 0.75rem;
+  line-height: 1.5;
+}

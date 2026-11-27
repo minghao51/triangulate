@@ -5,7 +5,6 @@ import {
   Plus,
   Activity,
   AlertTriangle,
-  CheckCircle,
   Clock,
   FileText,
   BarChart3,
@@ -31,9 +30,6 @@ import './Dashboard.css';
  */
 
 interface DashboardMetrics {
-  totalCases: number;
-  activeCases: number;
-  reviewReady: number;
   openExceptions: number;
   stages: {
     name: string;
@@ -41,6 +37,17 @@ interface DashboardMetrics {
     color: string;
   }[];
 }
+
+/** Plain row totals for the observed-totals pane. Counts only, never a score. */
+interface ObservedTotals {
+  cases: number;
+  articles: number;
+  events: number;
+  reviewItems: number;
+}
+
+const plural = (count: number, noun: string): string =>
+  `${count} ${noun}${count === 1 ? '' : 's'}`;
 
 interface PriorityQueueEntry {
   case: TopicCase;
@@ -139,10 +146,6 @@ const Dashboard: React.FC = () => {
   });
 
   const metrics = useMemo<DashboardMetrics>(() => {
-    const activeCases = cases.filter(
-      (c) => c.status !== 'approved' && c.status !== 'rejected'
-    );
-    const reviewReady = cases.filter((c) => c.status === 'review ready');
     const openExceptions = cases.reduce((sum, c) => sum + c.openExceptionsCount, 0);
 
     const stageCounts = cases.reduce((acc, c) => {
@@ -166,12 +169,29 @@ const Dashboard: React.FC = () => {
       color: stageColors[name] || '#6c7385',
     }));
 
+    return { openExceptions, stages };
+  }, [cases]);
+
+  /**
+   * Observed row totals, summed from the case rows already loaded. One source
+   * only: the monitoring summary's review backlog covers a different scope, so
+   * mixing it in would make one label mean two quantities depending on what the
+   * summary happened to report. No request is added and nothing is estimated.
+   */
+  const observedTotals = useMemo<ObservedTotals>(() => {
+    const summed = cases.reduce(
+      (acc, caseItem) => ({
+        articles: acc.articles + caseItem.counts.articles,
+        events: acc.events + caseItem.counts.events,
+        reviewItems: acc.reviewItems + caseItem.counts.reviewItems,
+      }),
+      { articles: 0, events: 0, reviewItems: 0 }
+    );
     return {
-      totalCases: cases.length,
-      activeCases: activeCases.length,
-      reviewReady: reviewReady.length,
-      openExceptions,
-      stages,
+      cases: cases.length,
+      articles: summed.articles,
+      events: summed.events,
+      reviewItems: summed.reviewItems,
     };
   }, [cases]);
 
@@ -242,56 +262,30 @@ const Dashboard: React.FC = () => {
         <div className="dashboard-loading">Loading dashboard...</div>
       ) : (
         <div className="dashboard-content">
-          {/* Metrics Grid */}
-          <div className="dashboard-metrics">
-            <Card className="metric-card glass-panel">
-              <CardBody className="metric-card-body">
-                <div className="metric-icon metric-icon-primary">
-                  <FileText size={20} />
-                </div>
-                <div className="metric-content">
-                  <div className="metric-value">{metrics.totalCases}</div>
-                  <div className="metric-label">Total Cases</div>
-                </div>
-              </CardBody>
-            </Card>
-
-            <Card className="metric-card glass-panel">
-              <CardBody className="metric-card-body">
-                <div className="metric-icon metric-icon-success">
-                  <Activity size={20} />
-                </div>
-                <div className="metric-content">
-                  <div className="metric-value">{metrics.activeCases}</div>
-                  <div className="metric-label">Active Investigations</div>
-                </div>
-              </CardBody>
-            </Card>
-
-            <Card className="metric-card glass-panel">
-              <CardBody className="metric-card-body">
-                <div className="metric-icon metric-icon-warning">
-                  <CheckCircle size={20} />
-                </div>
-                <div className="metric-content">
-                  <div className="metric-value">{metrics.reviewReady}</div>
-                  <div className="metric-label">Ready for Review</div>
-                </div>
-              </CardBody>
-            </Card>
-
-            <Card className="metric-card glass-panel">
-              <CardBody className="metric-card-body">
-                <div className="metric-icon metric-icon-danger">
-                  <AlertTriangle size={20} />
-                </div>
-                <div className="metric-content">
-                  <div className="metric-value">{metrics.openExceptions}</div>
-                  <div className="metric-label">Open Exceptions</div>
-                </div>
-              </CardBody>
-            </Card>
-          </div>
+          {/*
+           * Observed totals — the concept's plain-text pane, drawn where four
+           * scoreboard tiles used to sit. It is prose on purpose: row counts,
+           * no score, no health, no trend.
+           *
+           * Two concept panes are deferred rather than faked: the per-case
+           * *Coverage* column has no field on the list DTO (`CaseListItem`
+           * carries no coverage), and the *Recent runs* panel would need a
+           * cross-case runs read that does not exist — every runs endpoint is
+           * case-scoped, so it cannot be built without backend work.
+           */}
+          <section className="dashboard-observed" data-testid="dashboard-observed-totals">
+            <h2 className="dashboard-observed-title">Observed totals</h2>
+            <p className="dashboard-observed-line" data-testid="dashboard-observed-material">
+              {plural(observedTotals.cases, 'case')} · {plural(observedTotals.articles, 'article')}
+            </p>
+            <p className="dashboard-observed-line" data-testid="dashboard-observed-review">
+              {plural(observedTotals.events, 'event')} ·{' '}
+              {plural(observedTotals.reviewItems, 'review item')}
+            </p>
+            <p className="dashboard-observed-note">
+              Counts are observed rows, not health.
+            </p>
+          </section>
 
           {/* Main Grid */}
           <div className="dashboard-grid">

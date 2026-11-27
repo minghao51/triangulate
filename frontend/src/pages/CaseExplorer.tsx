@@ -90,6 +90,22 @@ const compareCases = (sort: CaseSortKey, a: TopicCase, b: TopicCase): number => 
 const formatFetched = (epochMs: number): string =>
   Number.isFinite(epochMs) && epochMs > 0 ? new Date(epochMs).toLocaleTimeString() : '—';
 
+/**
+ * The recorded update stamp for one row, as a labelled value. An absent or
+ * unparseable stamp reads as an explicit unknown — never "Invalid Date" and
+ * never a blank cell. The relative form reuses the file's existing `date-fns`
+ * helper; the exact recorded timestamp stays available in the title.
+ */
+const formatUpdated = (tc: TopicCase): string => {
+  const recorded = tc.lastUpdated;
+  if (!recorded) return 'Updated unknown (no recorded timestamp)';
+  const parsed = parseISO(recorded);
+  if (Number.isNaN(parsed.getTime())) {
+    return 'Updated unknown (unparseable recorded timestamp)';
+  }
+  return `Updated ${formatDistanceToNow(parsed, { addSuffix: true })}`;
+};
+
 const CaseExplorer: React.FC = () => {
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
@@ -482,10 +498,12 @@ const CaseExplorer: React.FC = () => {
                       </span>
                     </div>
 
-                    <div className="case-time">
-                      {caseItem.lastUpdated
-                        ? formatDistanceToNow(parseISO(caseItem.lastUpdated), { addSuffix: true })
-                        : 'Unknown'}
+                    <div
+                      className="case-time"
+                      data-testid="case-updated"
+                      title={caseItem.lastUpdated ?? 'No recorded timestamp'}
+                    >
+                      {formatUpdated(caseItem)}
                     </div>
                   </div>
                 </CardBody>

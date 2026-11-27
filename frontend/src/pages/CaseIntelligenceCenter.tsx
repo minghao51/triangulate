@@ -449,10 +449,6 @@ const CaseIntelligenceCenter: React.FC = () => {
             </Button>
             <div className="case-title-section">
               <h1 className="case-title">{activeCase.query}</h1>
-              <div className="case-meta">
-                <Badge variant="neutral" size="sm">{activeCase.conflictDomain}</Badge>
-                <span className="case-id">ID: {activeCase.id.slice(0, 8)}</span>
-              </div>
             </div>
           </div>
 
@@ -464,14 +460,23 @@ const CaseIntelligenceCenter: React.FC = () => {
                 icon={<RefreshCw size={14} />}
                 onClick={() => refetch()}
               >
-                Refresh
+                {/* The label is visually clipped (not removed) on phones so the
+                    title keeps its full width; the accessible name is intact. */}
+                <span className="case-header-action-label">Refresh</span>
               </Button>
             </div>
           </div>
         </div>
 
-        {/* Metrics Bar */}
+        {/* Metrics strip: the case identity (domain + ID) rides on the same
+            dense row as every count and the status group, so no capability is
+            dropped and the strip stays one row at any width. */}
         <div className="case-metrics-bar">
+          <div className="case-meta">
+            <Badge variant="neutral" size="sm">{activeCase.conflictDomain}</Badge>
+            <span className="case-id">ID: {activeCase.id.slice(0, 8)}</span>
+          </div>
+
           <div className="case-metric">
             <FileText size={14} />
             <span className="metric-label">Articles</span>

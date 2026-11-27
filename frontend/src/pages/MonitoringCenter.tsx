@@ -12,8 +12,9 @@ import './MonitoringCenter.css';
  * Monitoring overview.
  *
  * Only values the read API actually returns are rendered here. The API has no
- * schedule, next-run, alert, acknowledgement or performance endpoints, so those
- * panels state that the data is not provided instead of inventing numbers.
+ * health, schedule, next-run, alert, acknowledgement or performance endpoints,
+ * so none of them is published as a metric; one disclosure states what is
+ * missing instead of inventing numbers.
  */
 
 type MonitoringTab = 'monitors' | 'alerts' | 'performance';
@@ -172,29 +173,17 @@ const MonitoringCenter: React.FC = () => {
             </div>
           </CardBody>
         </Card>
-        <Card padding="sm">
-          <CardBody>
-            <div className="monitoring-stat-label">Schedule / Next Run</div>
-            <div
-              className="monitoring-stat-value monitoring-stat-value--muted"
-              data-state="monitoring-unavailable"
-            >
-              {NOT_PROVIDED}
-            </div>
-          </CardBody>
-        </Card>
-        <Card padding="sm">
-          <CardBody>
-            <div className="monitoring-stat-label">System Health</div>
-            <div
-              className="monitoring-stat-value monitoring-stat-value--muted"
-              data-state="monitoring-unavailable"
-            >
-              {NOT_PROVIDED}
-            </div>
-          </CardBody>
-        </Card>
       </div>
+
+      {/*
+        Health and scheduling are not metrics this page can show: the concept is
+        recorded observation time and status only. Stating the gap once, in the
+        disclosure, avoids presenting health/unavailable as headline numbers.
+      */}
+      <p className="monitoring-notice" role="note" data-state="monitoring-unavailable">
+        Not provided by the API: health, scheduler and alert state. This view shows recorded
+        observation time and status only.
+      </p>
 
       <div className="monitoring-tabs" role="tablist" aria-label="Monitoring sections">
         {(['monitors', 'alerts', 'performance'] as MonitoringTab[]).map((tab) => (

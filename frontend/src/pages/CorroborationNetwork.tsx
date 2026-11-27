@@ -8,6 +8,7 @@ import { NetworkGraph, type NodeType } from '../components/data-visualization/Ne
 import Card, { CardHeader, CardTitle, CardBody } from '../components/design-system/Card';
 import Badge from '../components/design-system/Badge';
 import Button from '../components/design-system/Button';
+import './CorroborationNetwork.css';
 
 interface StanceBasis {
   kind: 'model-derived' | 'recorded' | 'unknown';
@@ -486,6 +487,12 @@ export const CorroborationNetwork: React.FC = () => {
                 <div className="w-8 h-0.5 bg-[#6c7385] border-dashed" style={{ borderStyle: 'dashed' }} />
                 <span className="text-[#f0f2f5]">Links</span>
               </div>
+              {/* Reading rule: legend and caveat are read together. */}
+              <hr className="network-legend-rule" />
+              <p className="network-reading-rule" role="note">
+                A shared edge is not independent proof. Graph shape alone supports no
+                independence or completion claim.
+              </p>
             </CardBody>
           </Card>
         </div>

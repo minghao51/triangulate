@@ -77,11 +77,6 @@
   color: var(--text-primary);
 }
 
-.monitoring-stat-value--muted {
-  font-size: 0.9375rem;
-  color: var(--text-tertiary);
-}
-
 .monitoring-tabs {
   display: flex;
   gap: 1.5rem;

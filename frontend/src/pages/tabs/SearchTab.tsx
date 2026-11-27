@@ -472,6 +472,14 @@ const SearchTab: React.FC<SearchTabProps> = ({ caseId }) => {
           ) : null}
         </>
       ) : null}
+
+      {/* The link always describes the selection currently in the URL: query,
+          filters and offset, using the same canonical builder the route uses. */}
+      {activeQuery ? (
+        <p className="case-search-permalink">
+          <a href={buildSearchUrl(caseId, selection)}>Permalink for this selection</a>
+        </p>
+      ) : null}
     </section>
   );
 };

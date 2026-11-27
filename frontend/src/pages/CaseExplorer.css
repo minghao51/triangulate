@@ -345,7 +345,12 @@
 .case-time {
   font-size: 0.6875rem;
   color: var(--text-tertiary);
-  flex-shrink: 0;
+  flex-shrink: 1;
+  min-width: 0;
+  /* An explicit "unknown" stamp is longer than a date; let it wrap rather than
+     push the card into horizontal overflow on a narrow viewport. */
+  overflow-wrap: anywhere;
+  text-align: right;
 }
 
 /* Empty State */

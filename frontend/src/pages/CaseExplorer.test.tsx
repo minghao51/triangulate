@@ -265,6 +265,65 @@ describe('CaseExplorer — sort', () => {
   });
 });
 
+const caseCard = (query: string): HTMLElement => {
+  const card = Array.from(document.querySelectorAll('.case-card')).find(
+    (el) => el.querySelector('.case-query')?.textContent === query
+  );
+  if (!card) throw new Error(`no card for ${query}`);
+  return card as HTMLElement;
+};
+
+const updatedStamp = (query: string): string =>
+  caseCard(query).querySelector('[data-testid="case-updated"]')?.textContent ?? '';
+
+describe('CaseExplorer — recorded update stamp', () => {
+  // One parseable stamp plus both kinds of missing stamp. Coverage stays out:
+  // the list DTO has no coverage field, so no such column is rendered.
+  const stampCases: TopicCase[] = [
+    makeCase({ id: 'case-u1', query: 'Stamped case', lastUpdated: '2026-03-19T10:00:00Z' }),
+    makeCase({ id: 'case-u2', query: 'Unstamped case', lastUpdated: null }),
+    makeCase({ id: 'case-u3', query: 'Garbled case', lastUpdated: 'not-a-timestamp' }),
+  ];
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    apiMocks.getCases.mockResolvedValue(stampCases);
+  });
+
+  it('shows a labelled update value for every row', async () => {
+    renderExplorer();
+    await screen.findByText('Stamped case');
+
+    const stamp = updatedStamp('Stamped case');
+    expect(stamp).toMatch(/^Updated /);
+    expect(stamp).not.toMatch(/unknown/i);
+    // The exact recorded timestamp stays reachable, not an invented one.
+    const el = caseCard('Stamped case').querySelector('[data-testid="case-updated"]');
+    expect(el?.getAttribute('title')).toBe('2026-03-19T10:00:00Z');
+  });
+
+  it('reads an absent or unparseable timestamp as an explicit unknown', async () => {
+    renderExplorer();
+    await screen.findByText('Stamped case');
+
+    expect(updatedStamp('Unstamped case')).toBe('Updated unknown (no recorded timestamp)');
+    expect(updatedStamp('Garbled case')).toBe(
+      'Updated unknown (unparseable recorded timestamp)'
+    );
+    // Never the JS artefact, never a blank cell.
+    expect(document.body.textContent).not.toContain('Invalid Date');
+    expect(updatedStamp('Garbled case').trim()).not.toBe('');
+  });
+
+  it('renders no coverage column, because the list DTO carries no coverage', async () => {
+    renderExplorer();
+    await screen.findByText('Stamped case');
+
+    expect(screen.queryByText(/coverage/i)).toBeNull();
+    expect(document.querySelector('[data-testid="case-coverage"]')).toBeNull();
+  });
+});
+
 describe('CaseExplorer — pagination', () => {
   beforeEach(() => {
     vi.clearAllMocks();

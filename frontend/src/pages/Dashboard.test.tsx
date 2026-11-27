@@ -91,6 +91,106 @@ function renderDashboard() {
   );
 }
 
+describe('Dashboard — observed totals, no KPI tiles', () => {
+  // Two cases: the concept's own pane shape (cases · articles / events · review
+  // items) pinned against a fixture whose row counts are unambiguous.
+  const twoCases: TopicCase[] = [
+    makeCase({
+      id: 'case-1',
+      query: 'First observed case',
+      counts: { articles: 3, events: 1, reviewItems: 0 },
+    }),
+    makeCase({
+      id: 'case-2',
+      query: 'Second observed case',
+      counts: { articles: 9, events: 6, reviewItems: 2 },
+    }),
+  ];
+
+  const emptySummary = {
+    cases: {},
+    review: {},
+    pipeline: {},
+    intake: {},
+    evaluation: {},
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    apiMocks.getCases.mockResolvedValue(twoCases);
+    apiMocks.getMonitoringSummary.mockResolvedValue(emptySummary);
+  });
+
+  it('renders the observed-totals lines from already-loaded rows', async () => {
+    renderDashboard();
+    const totals = await screen.findByTestId('dashboard-observed-totals');
+
+    expect(screen.getByText('Observed totals')).toBeDefined();
+    expect(screen.getByTestId('dashboard-observed-material').textContent).toBe(
+      '2 cases · 12 articles'
+    );
+    expect(screen.getByTestId('dashboard-observed-review').textContent).toBe(
+      '7 events · 2 review items'
+    );
+    // The concept's own framing: these are rows, not a health claim.
+    expect(totals.textContent).toContain('Counts are observed rows, not health');
+
+    // Two reads only, each once: the pane adds no request.
+    expect(apiMocks.getCases).toHaveBeenCalledTimes(1);
+    expect(apiMocks.getMonitoringSummary).toHaveBeenCalledTimes(1);
+    expect(apiMocks.getCaseDetail).not.toHaveBeenCalled();
+  });
+
+  it('drops the four KPI tiles and keeps the legitimate readers', async () => {
+    renderDashboard();
+    await screen.findByTestId('dashboard-observed-totals');
+
+    expect(screen.queryByText('Total Cases')).toBeNull();
+    expect(screen.queryByText('Active Investigations')).toBeNull();
+    expect(screen.queryByText('Ready for Review')).toBeNull();
+    expect(screen.queryByText('Open Exceptions')).toBeNull();
+    expect(document.querySelector('.dashboard-metrics')).toBeNull();
+    expect(document.querySelector('.metric-card')).toBeNull();
+    expect(document.querySelector('.metric-value')).toBeNull();
+
+    expect(screen.getByText('Pipeline Stage Distribution')).toBeDefined();
+    expect(screen.getByText('Priority Queue')).toBeDefined();
+    expect(screen.getByText('Recent Cases')).toBeDefined();
+    // Provenance strip and the boundary notice survive untouched.
+    expect(screen.getByTestId('dashboard-last-fetched')).toBeDefined();
+    expect(screen.getByTestId('dashboard-last-observed')).toBeDefined();
+    expect(screen.getByText(/liveness only/i)).toBeDefined();
+  });
+
+  it('keeps one source for review items when the summary reports a backlog', async () => {
+    // The summary's review backlog covers a different scope than the loaded case
+    // rows, so it must not silently replace the observed total for the same label.
+    apiMocks.getMonitoringSummary.mockResolvedValue({
+      ...emptySummary,
+      review: { open_exceptions: 1, backlog: 5 },
+    });
+    renderDashboard();
+    await screen.findByTestId('dashboard-observed-totals');
+
+    expect(screen.getByTestId('dashboard-observed-review').textContent).toBe(
+      '7 events · 2 review items'
+    );
+  });
+
+  it('prints singular nouns for a one-row total', async () => {
+    apiMocks.getCases.mockResolvedValue([twoCases[0]]);
+    renderDashboard();
+    await screen.findByTestId('dashboard-observed-totals');
+
+    expect(screen.getByTestId('dashboard-observed-material').textContent).toBe(
+      '1 case · 3 articles'
+    );
+    expect(screen.getByTestId('dashboard-observed-review').textContent).toBe(
+      '1 event · 0 review items'
+    );
+  });
+});
+
 describe('Dashboard — two reads, counts-only queue', () => {
   beforeEach(() => {
     vi.clearAllMocks();

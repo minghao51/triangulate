@@ -343,3 +343,64 @@ The two fixes were then proven in a real browser against a scratch database with
 five cards and Next disabled, sort returns to page 1, and the exception row states
 `Severity: High` / `Severity: Medium` at both viewports with zero horizontal overflow — 4/4 browser
 assertions passed. Sort *ordering* is pinned by the new unit tests rather than the browser capture.
+
+## 9. SVG-versus-app parity audit and the fixes it produced
+
+Section 8 compared the app to the wireframe set's *prose*. This section compares it to the
+**artwork**, and fixes what that comparison found.
+
+**Method.** All 263 concept SVGs were rendered to PNG at native size, and the app was captured as
+**scroll frames** — one image per viewport-height step of its inner scroll container. The frame
+model matters: `fullPage: true` silently produced viewport-only images because the app scrolls
+`#shell-main{overflow-y:auto}`, which had made every below-the-fold pane look absent in the first
+pass. The manifest's `required` control labels (110 per viewport) were also diffed mechanically
+against rendered text.
+
+**Findings, and what happened to each.**
+
+| Finding | Class | Outcome |
+| --- | --- | --- |
+| Dashboard led with four KPI tiles while its own concept header states "No KPI tiles, scores or health metrics" | contradiction | **fixed** — tiles deleted, observed-totals prose restored |
+| Monitoring rendered `System Health` and `Schedule / Next Run`, the two states the concept excludes ("no health, scheduler or alert state") | contradiction | **fixed** — stat blocks removed, the not-provided disclosure kept |
+| Repeated case chrome consumed 69% of the desktop viewport and 146% of mobile before any tab content | density | **fixed** — see the measurements below |
+| Corroboration network had no reading rule ("a shared edge is not independent proof… no independence or completion claim from graph shape alone") | missing | **fixed** — always-visible caveat beside the legend |
+| Search had no permalink control | missing | **fixed** — permalink for the current query/filters/offset |
+| Case explorer showed no updated date | missing | **fixed** — labelled relative value, explicit unknown for missing/unparseable |
+| Per-case **Coverage** column (dashboard and explorer) | missing | **deferred** — `CaseListItem` has no coverage field; needs a backend DTO change |
+| **Recent runs** panel (dashboard) | missing | **deferred** — every runs endpoint is case-scoped; a cross-case read does not exist and no N+1 fan-out was added |
+| "Grouped runs on Run history contradict the stage-only rule" | claimed contradiction | **refuted** — `RunHistoryTab` documents that it lists grouped-run IDs as an identifier legend so two ID kinds are never conflated |
+| "Comparison relabels alignment" | claimed relabel | **refuted** — `left_only: 'Extracted only on the left'` exists; the other string is a complementary cell message |
+| Claims detail/provenance "missing" | claimed missing | **refuted as absence** — present after selecting a claim; the real issue is discoverability, recorded as a nit |
+| Timeline six-state vocabulary "missing" | claimed missing | **refuted as absence** — present as per-event badges; only the legend table is absent |
+
+**Case-chrome measurements** (real API, scratch DB, Chrome; task content = bottom of the tab nav):
+
+| viewport | tab-nav block | task content starts at | share of screen |
+| --- | --- | --- | --- |
+| 1280×800 | 216 → **67 px** | 553 → **250 px** | 69% → **31%** |
+| 375×812 | 418 → **36 px** | 1189 → **295–322 px** | 146% → **36–40%** |
+
+The rail also moved 280 → 240 px, the concept's own width. The desktop target (≤400 px) is met.
+The mobile target (≤300 px) is met on most tabs and **missed by up to 22 px** where the case header
+wraps — reported rather than rounded up. All 16 tab links remain real links with a unique
+`aria-current`, which the 228-cell matrix verifies at three viewports.
+
+**Review corrections applied before commit.** An independent review caught two must-fixes: the
+dashboard's review-item total silently switched between the case-row sum and the monitoring
+summary's differently-scoped backlog (now one source only, with a test that pins it), and the
+boundary notice had been compressed to 10 px on phones (now 12 px, wrapping, still always visible —
+a security notice is read, not skimmed).
+
+**Verification.** `npm run test:ci` → **588 passed / 33 files**; `npm run check` exit 0; mocked
+matrix **228 expected, 0 unexpected, 2 skipped**; the fold measurements above taken independently
+of the implementing worker.
+
+**Environment incident, no repo impact.** A subagent's `pnpm` invocation restructured
+`node_modules` (symlinked `@types`, removed `.bin`) and left `pnpm-lock.yaml` /
+`pnpm-workspace.yaml`. The tree was restored from the verified install and the stray files deleted;
+`git status` confirms no tracked file, lockfile or manifest changed.
+
+**Residual, accepted.** The Refresh label is visually clipped on phones while its accessible name is
+preserved; the mobile tab strip scrolls horizontally (all links keyboard-reachable, but no automated
+test asserts focus visibility at 375 px); and the two deferred panes above stay unbuilt until the
+backend can supply them honestly.

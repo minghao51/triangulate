@@ -249,10 +249,10 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--spacing-md);
+  gap: var(--spacing-sm);
   flex-wrap: wrap;
-  min-height: 56px;
-  padding: 0.5rem var(--spacing-md);
+  min-height: 40px;
+  padding: 0.25rem var(--spacing-md);
   border-bottom: 1px solid var(--border-subtle);
   background-color: var(--bg-app);
   flex-shrink: 0;
@@ -264,15 +264,24 @@
   flex: 1 1 auto;
 }
 
+/* One line, scrolled rather than wrapped: the trail stays complete and every
+   segment remains a real link. */
 .breadcrumb-list {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   gap: 0.375rem;
   margin: 0;
   padding: 0;
   list-style: none;
   min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+
+.breadcrumb-list::-webkit-scrollbar {
+  height: 0;
 }
 
 .breadcrumb-segment {
@@ -280,15 +289,16 @@
   align-items: center;
   gap: 0.375rem;
   min-width: 0;
+  flex: 0 0 auto;
 }
 
 .breadcrumb-item {
-  font-size: 0.8125rem;
+  font-size: 0.75rem;
   color: var(--text-secondary);
   font-weight: 500;
   text-decoration: none;
+  white-space: nowrap;
   transition: color var(--transition-fast);
-  overflow-wrap: anywhere;
 }
 
 .breadcrumb-item:hover {
@@ -346,18 +356,21 @@
 
 /* ===== TRUST BOUNDARY + DATA MODE ===== */
 
+/* One dense, always-visible line set. Nothing is collapsed or clipped: the
+   boundary statement, its consequence and the /health caveat stay in the
+   document and on screen, so the honesty claim is read, not merely reachable. */
 .shell-boundary {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
-  gap: 0.25rem 1rem;
+  gap: 0 0.75rem;
   flex-shrink: 0;
-  padding: 0.5rem var(--spacing-md);
+  padding: 0.1875rem var(--spacing-md);
   border-bottom: 1px solid var(--border-subtle);
   background-color: var(--bg-surface-hover);
   color: var(--text-secondary);
-  font-size: 0.75rem;
-  line-height: 1.45;
+  font-size: 0.6875rem;
+  line-height: 1.35;
   overflow-wrap: anywhere;
 }
 
@@ -367,7 +380,7 @@
 }
 
 .shell-boundary-text {
-  flex: 1 1 20rem;
+  flex: 1 1 22rem;
   min-width: 0;
 }
 
@@ -379,14 +392,14 @@
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
-  gap: 0.375rem;
+  gap: 0.3125rem;
   flex: 0 1 auto;
   min-width: 0;
   font-family: var(--font-mono);
 }
 
 .shell-data-mode-label {
-  font-size: 0.625rem;
+  font-size: 0.5625rem;
   font-weight: 600;
   letter-spacing: 0.15em;
   text-transform: uppercase;
@@ -394,14 +407,14 @@
 }
 
 .shell-data-mode-value {
-  font-size: 0.75rem;
+  font-size: 0.6875rem;
   font-weight: 600;
   color: var(--text-primary);
 }
 
 .shell-boundary-note {
-  flex: 1 1 100%;
-  font-size: 0.6875rem;
+  flex: 0 1 auto;
+  font-size: 0.625rem;
   color: var(--text-tertiary);
   font-family: var(--font-mono);
 }
@@ -472,10 +485,68 @@
   }
 }
 
+/* <768px: the phone chrome is trimmed to the same single-line shape. */
+@media (max-width: 767px) {
+  .shell-nav-head {
+    min-height: 44px;
+    padding: 0.25rem 0.75rem;
+  }
+
+  .shell-header {
+    min-height: 32px;
+    padding: 0.125rem 0.75rem;
+  }
+
+  .header-action-btn {
+    width: 30px;
+    height: 30px;
+  }
+
+  /* Below the rail breakpoint the boundary becomes one run of text instead of
+     three stacked blocks. Every sentence stays visible — nothing is collapsed,
+     truncated or hidden behind a disclosure. */
+  .shell-boundary {
+    display: block;
+    padding: 0.1875rem 0.75rem;
+    /* Kept at the base size: this is the security boundary notice, so it is
+       read, not skimmed. Density is bought from the header, not from here. */
+    font-size: 0.75rem;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+  }
+
+  .shell-boundary-text,
+  .shell-boundary-note {
+    display: inline;
+  }
+
+  .shell-data-mode {
+    display: inline;
+  }
+
+  .shell-data-mode-label,
+  .shell-data-mode-value {
+    display: inline;
+  }
+
+  /* Separate the three statements once they flow as one run of text. */
+  .shell-boundary .shell-data-mode,
+  .shell-boundary .shell-boundary-note {
+    margin-inline-start: 0.375rem;
+  }
+
+  .shell-content {
+    padding: 0.5rem 0.75rem;
+  }
+}
+
 /* ≥1024px: persistent left navigation rail */
 @media (min-width: 1024px) {
+  /* 240px is the concept rail width: it buys 40px of content for the case
+     workspace without squeezing the longest navigation label below its
+     unbroken width. */
   .shell-container {
-    grid-template-columns: 280px minmax(0, 1fr);
+    grid-template-columns: 240px minmax(0, 1fr);
     grid-template-rows: minmax(0, 1fr);
     grid-template-areas: 'nav main';
   }
@@ -486,8 +557,8 @@
   }
 
   .shell-nav-head {
-    min-height: 64px;
-    padding: 0 1.25rem;
+    min-height: 56px;
+    padding: 0 1rem;
     border-bottom: 1px solid var(--border-subtle);
     background: linear-gradient(180deg, var(--bg-surface-hover) 0%, var(--bg-surface) 100%);
   }
@@ -508,7 +579,7 @@
 
   .shell-nav-section {
     display: block;
-    padding: 1.5rem 1rem 0;
+    padding: 1.125rem 0.75rem 0;
     border-left: none;
   }
 

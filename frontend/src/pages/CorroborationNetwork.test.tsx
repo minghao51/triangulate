@@ -170,6 +170,43 @@ describe('CorroborationNetwork unavailable and empty states', () => {
   });
 });
 
+describe('CorroborationNetwork reading rule', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('states next to the legend that graph shape proves nothing', async () => {
+    emptySuccess();
+
+    renderNetwork();
+    await screen.findByText('No claims, evidence or parties have been recorded for this case.');
+
+    expect(screen.getByText('Legend')).toBeDefined();
+    const caveat = screen.getByRole('note');
+    expect(caveat.textContent).toContain('A shared edge is not independent proof');
+    expect(caveat.textContent).toMatch(
+      /graph shape alone supports no independence or completion claim/i
+    );
+    // A reading rule, not a dismissible banner.
+    expect(screen.queryByRole('button', { name: /dismiss|close|hide/i })).toBeNull();
+  });
+
+  it('keeps the reading rule visible alongside a populated network', async () => {
+    apiMocks.getClaimsForCase.mockResolvedValue([makeClaim('claim-1')]);
+    apiMocks.getEvidenceForCase.mockResolvedValue([makeEvidence('evidence-1')]);
+    apiMocks.getPartiesForCase.mockResolvedValue([makeParty('party-1')]);
+
+    renderNetwork();
+    await screen.findByText('Network graph rendered');
+
+    expect(screen.getByRole('note').textContent).toContain(
+      'Graph shape alone supports no independence or completion claim'
+    );
+    // The rule never doubles as a corroboration verdict.
+    expect(screen.queryByText(/corroborated|verified/i)).toBeNull();
+  });
+});
+
 const makeParty = (id: string, overrides: Partial<Party> = {}): Party => ({
   id,
   name: `Party ${id}`,

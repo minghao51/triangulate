@@ -67,7 +67,7 @@ describe('MonitoringCenter truthful states', () => {
     expect(screen.queryByText('All time')).toBeNull();
 
     // Unavailable panels state that data is missing rather than "healthy"/"none".
-    expect(screen.getAllByText('Not provided by the API').length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Not provided by the API/).length).toBeGreaterThan(0);
     expect(screen.queryByText('No alerts')).toBeNull();
   });
 
@@ -125,8 +125,11 @@ describe('MonitoringCenter truthful states', () => {
     expect(screen.getByRole('tab', { name: 'Monitors' })).toBeDefined();
     expect(screen.queryByRole('tab', { name: /Monitors \(/ })).toBeNull();
 
-    // The always-unavailable telemetry cards stay explicitly unavailable.
-    expect(screen.getAllByText('Not provided by the API').length).toBe(2);
+    // Health/scheduling are disclosed once, never rendered as a metric card
+    // whose value is "unavailable".
+    expect(screen.queryByText('System Health')).toBeNull();
+    expect(screen.queryByText('Schedule / Next Run')).toBeNull();
+    expect(document.querySelectorAll('.monitoring-stat-label')).toHaveLength(3);
 
     apiMocks.getCases.mockResolvedValueOnce([monitoringCase]);
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
@@ -186,9 +189,38 @@ describe('MonitoringCenter truthful states', () => {
     const schedulingMentions = screen.getAllByText(/Schedul/i);
     expect(schedulingMentions.length).toBeGreaterThan(0);
     for (const mention of schedulingMentions) {
-      const container = mention.closest('.monitoring-stats, .monitoring-subtitle');
+      const container = mention.closest(
+        '.monitoring-stats, .monitoring-subtitle, .monitoring-notice, .monitoring-detail'
+      );
       expect(container?.textContent ?? '').toMatch(/Not provided by the API|not exposed/i);
     }
+  });
+
+  it('does not render health or schedule as headline metrics', async () => {
+    apiMocks.getCases.mockResolvedValue([monitoringCase]);
+    renderMonitoring();
+    await screen.findByRole('button', { name: /Port strike monitoring/i });
+
+    // The excluded concepts are gone from the stat grid entirely.
+    expect(screen.queryByText('System Health')).toBeNull();
+    expect(screen.queryByText('Schedule / Next Run')).toBeNull();
+    const statLabels = Array.from(document.querySelectorAll('.monitoring-stat-label')).map(
+      (node) => node.textContent
+    );
+    expect(statLabels).toEqual([
+      'Monitoring Cases',
+      'Cases With Recorded Update',
+      'Most Recent Valid Recorded Update',
+    ]);
+    expect(document.querySelector('.monitoring-stats')?.children).toHaveLength(3);
+
+    // The scope note keeps the honest disclosure that they are missing.
+    expect(
+      screen.getByText(/Scheduling, alerting and performance telemetry are not exposed/i)
+    ).toBeDefined();
+    const disclosure = document.querySelector('[data-state="monitoring-unavailable"]');
+    expect(disclosure?.textContent).toContain('Not provided by the API');
+    expect(disclosure?.textContent).toMatch(/health, scheduler and alert state/i);
   });
 
   it('labels client fetch time and recorded observation time distinctly', async () => {
@@ -220,12 +252,19 @@ describe('MonitoringCenter truthful states', () => {
     const unavailable = Array.from(
       document.querySelectorAll('[data-state="monitoring-unavailable"]')
     );
-    expect(unavailable).toHaveLength(2);
+    expect(unavailable.length).toBeGreaterThan(0);
     for (const node of unavailable) {
       expect(node.textContent).toContain('Not provided by the API');
       expect(node.getAttribute('data-state')).not.toBe('monitoring-empty');
     }
     expect(screen.queryByText('No alerts')).toBeNull();
+
+    // The unavailable panels still declare themselves on their own tab.
+    fireEvent.click(screen.getByRole('tab', { name: 'Alerts' }));
+    const alertPanel = document.querySelector(
+      '[role="tabpanel"] [data-state="monitoring-unavailable"]'
+    );
+    expect(alertPanel?.textContent).toContain('exposes no alert feed');
   });
 
   it('stops polling while the tab is hidden and resumes when it is visible again', async () => {
