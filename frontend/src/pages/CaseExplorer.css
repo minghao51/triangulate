@@ -145,6 +145,18 @@
   display: flex;
   gap: 0.5rem;
   flex-shrink: 0;
+  align-items: center;
+}
+
+/* Always-visible sort control (outside the collapsible filter panel). */
+.toolbar-sort {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.toolbar-sort .filter-label {
+  white-space: nowrap;
 }
 
 /* Filters */
@@ -170,7 +182,8 @@
   font-weight: 500;
 }
 
-.filter-select {
+.filter-select,
+.sort-select {
   padding: 0.5rem 0.625rem;
   background: var(--bg-app);
   border: 1px solid var(--border-subtle);
@@ -183,11 +196,13 @@
   transition: border-color var(--transition-fast);
 }
 
-.filter-select:hover {
+.filter-select:hover,
+.sort-select:hover {
   border-color: var(--border-strong);
 }
 
-.filter-select:focus {
+.filter-select:focus,
+.sort-select:focus {
   outline: none;
   border-color: var(--accent-primary);
 }
@@ -197,6 +212,29 @@
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
   gap: 1rem;
+}
+
+/* Pager — rendered only when the filtered set needs more than one page */
+.explorer-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 1rem;
+  padding: 0.75rem 1.25rem;
+  background: var(--bg-surface-hover);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+}
+
+.pagination-summary {
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+}
+
+.pagination-controls {
+  display: flex;
+  gap: 0.5rem;
 }
 
 .case-card {
@@ -384,6 +422,15 @@
 
   .explorer-grid {
     grid-template-columns: 1fr;
+  }
+
+  .explorer-pagination {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .pagination-controls button {
+    flex: 1;
   }
 
   .case-footer {

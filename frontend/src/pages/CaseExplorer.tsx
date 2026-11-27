@@ -53,6 +53,40 @@ const casePriorityComparator = (a: TopicCase, b: TopicCase): number => {
   return a.id.localeCompare(b.id);
 };
 
+/** One page of the case grid; the pager only renders past a single page. */
+const CASE_PAGE_SIZE = 10;
+
+/** The toolbar's three orderings, all derived from the list DTO only. */
+type CaseSortKey = 'priority' | 'updated' | 'name';
+
+const recordedUpdatedMs = (tc: TopicCase): number => {
+  if (!tc.lastUpdated) return Number.NaN;
+  const parsed = parseISO(tc.lastUpdated).getTime();
+  return Number.isNaN(parsed) ? Number.NaN : parsed;
+};
+
+/**
+ * `priority` keeps the recorded-count queue; `updated` puts the most recent
+ * recorded timestamp first and rows without one last; `name` is the case query
+ * in locale order. Every key falls back to the case id so ordering is stable.
+ */
+const compareCases = (sort: CaseSortKey, a: TopicCase, b: TopicCase): number => {
+  if (sort === 'updated') {
+    const aTime = recordedUpdatedMs(a);
+    const bTime = recordedUpdatedMs(b);
+    const aMissing = Number.isNaN(aTime);
+    const bMissing = Number.isNaN(bTime);
+    if (aMissing !== bMissing) return aMissing ? 1 : -1;
+    if (!aMissing && aTime !== bTime) return bTime - aTime;
+    return a.id.localeCompare(b.id);
+  }
+  if (sort === 'name') {
+    const byQuery = a.query.localeCompare(b.query);
+    return byQuery !== 0 ? byQuery : a.id.localeCompare(b.id);
+  }
+  return casePriorityComparator(a, b);
+};
+
 const formatFetched = (epochMs: number): string =>
   Number.isFinite(epochMs) && epochMs > 0 ? new Date(epochMs).toLocaleTimeString() : '—';
 
@@ -63,6 +97,10 @@ const CaseExplorer: React.FC = () => {
   const [stageFilter, setStageFilter] = useState<string>('all');
   const [domainFilter, setDomainFilter] = useState<string>('all');
   const [showFilters, setShowFilters] = useState(false);
+  const [sortKey, setSortKey] = useState<CaseSortKey>('priority');
+  // Local page state only: the explorer has no URL contract, so the page is not
+  // a search param and never appears in a deep link.
+  const [page, setPage] = useState(1);
   const [selectedCases, setSelectedCases] = useState<Set<string>>(new Set());
 
   // Same poll budget as the other operator surfaces; a hidden tab stops it.
@@ -79,7 +117,7 @@ const CaseExplorer: React.FC = () => {
   const stages = Array.from(new Set(cases.map((tc) => tc.stage)));
   const domains = Array.from(new Set(cases.map((tc) => tc.conflictDomain))).filter(Boolean);
 
-  // Filter cases, then order the queue from recorded counts only.
+  // Filter cases, then order the queue with the toolbar's sort key.
   const filteredCases = cases
     .filter((tc) => {
       const matchesSearch =
@@ -90,9 +128,16 @@ const CaseExplorer: React.FC = () => {
       const matchesDomain = domainFilter === 'all' || tc.conflictDomain === domainFilter;
       return matchesSearch && matchesStatus && matchesStage && matchesDomain;
     })
-    .sort(casePriorityComparator);
+    .sort((a, b) => compareCases(sortKey, a, b));
 
-  // Calculate statistics
+  // Pagination is derived, never stored: a shrunk filtered set clamps the page
+  // instead of rendering an empty grid.
+  const pageCount = Math.max(1, Math.ceil(filteredCases.length / CASE_PAGE_SIZE));
+  const currentPage = Math.min(page, pageCount);
+  const pageStart = (currentPage - 1) * CASE_PAGE_SIZE;
+  const visibleCases = filteredCases.slice(pageStart, pageStart + CASE_PAGE_SIZE);
+
+  // Statistics stay scoped to every filtered case, never to the current page.
   const stats = {
     total: filteredCases.length,
     active: filteredCases.filter((c) => c.status !== 'approved' && c.status !== 'rejected').length,
@@ -100,6 +145,9 @@ const CaseExplorer: React.FC = () => {
     withExceptions: filteredCases.filter((c) => c.openExceptionsCount > 0).length,
     withNewMaterial: filteredCases.filter((c) => c.hasNewMaterial).length,
   };
+
+  // Any narrowing or reorder returns to the first page.
+  const resetPage = () => setPage(1);
 
   const handleSelectCase = (caseId: string) => {
     const newSelected = new Set(selectedCases);
@@ -206,11 +254,35 @@ const CaseExplorer: React.FC = () => {
                   className="search-input"
                   placeholder="Search queries or domains..."
                   value={search}
-                  onChange={(e) => setSearch(e.target.value)}
+                  onChange={(e) => {
+                    setSearch(e.target.value);
+                    resetPage();
+                  }}
                 />
               </div>
 
               <div className="toolbar-actions">
+                {/* Sort is a primary list control, not a filter: it stays visible
+                    when the filter panel is collapsed. */}
+                <div className="toolbar-sort">
+                  <label className="filter-label" htmlFor="case-explorer-sort">
+                    Sort
+                  </label>
+                  <select
+                    id="case-explorer-sort"
+                    className="sort-select"
+                    value={sortKey}
+                    onChange={(e) => {
+                      setSortKey(e.target.value as CaseSortKey);
+                      resetPage();
+                    }}
+                  >
+                    <option value="priority">Priority</option>
+                    <option value="updated">Recently updated</option>
+                    <option value="name">Case name</option>
+                  </select>
+                </div>
+
                 <Button
                   variant="ghost"
                   size="sm"
@@ -259,7 +331,10 @@ const CaseExplorer: React.FC = () => {
                   <select
                     className="filter-select"
                     value={statusFilter}
-                    onChange={(e) => setStatusFilter(e.target.value)}
+                    onChange={(e) => {
+                      setStatusFilter(e.target.value);
+                      resetPage();
+                    }}
                   >
                     <option value="all">All Statuses</option>
                     {statuses.map((status) => (
@@ -273,7 +348,10 @@ const CaseExplorer: React.FC = () => {
                   <select
                     className="filter-select"
                     value={stageFilter}
-                    onChange={(e) => setStageFilter(e.target.value)}
+                    onChange={(e) => {
+                      setStageFilter(e.target.value);
+                      resetPage();
+                    }}
                   >
                     <option value="all">All Stages</option>
                     {stages.map((stage) => (
@@ -287,7 +365,10 @@ const CaseExplorer: React.FC = () => {
                   <select
                     className="filter-select"
                     value={domainFilter}
-                    onChange={(e) => setDomainFilter(e.target.value)}
+                    onChange={(e) => {
+                      setDomainFilter(e.target.value);
+                      resetPage();
+                    }}
                   >
                     <option value="all">All Domains</option>
                     {domains.map((domain) => (
@@ -304,6 +385,7 @@ const CaseExplorer: React.FC = () => {
                     setStageFilter('all');
                     setDomainFilter('all');
                     setSearch('');
+                    resetPage();
                   }}
                 >
                   Clear Filters
@@ -314,7 +396,7 @@ const CaseExplorer: React.FC = () => {
 
           {/* Cases Grid */}
           <div className="explorer-grid">
-            {filteredCases.map((caseItem) => (
+            {visibleCases.map((caseItem) => (
               <Card
                 key={caseItem.id}
                 className="case-card"
@@ -425,6 +507,34 @@ const CaseExplorer: React.FC = () => {
               </div>
             )}
           </div>
+
+          {/* Pager — only when there is more than one page to show. */}
+          {filteredCases.length > CASE_PAGE_SIZE && (
+            <nav className="explorer-pagination" aria-label="Case pagination">
+              <span className="pagination-summary">
+                Showing {pageStart + 1}–{pageStart + visibleCases.length} of{' '}
+                {filteredCases.length} cases
+              </span>
+              <div className="pagination-controls">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setPage(currentPage - 1)}
+                  disabled={currentPage <= 1}
+                >
+                  Previous
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setPage(currentPage + 1)}
+                  disabled={currentPage >= pageCount}
+                >
+                  Next
+                </Button>
+              </div>
+            </nav>
+          )}
         </>
       )}
     </div>

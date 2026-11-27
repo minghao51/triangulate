@@ -399,3 +399,56 @@ describe('ExceptionsTab write states', () => {
     expect(apiMocks.submitExceptionAction).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('ExceptionsTab severity disclosure', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    clearExceptionRowAttempts();
+    apiMocks.submitExceptionAction.mockResolvedValue({ id: 'case-1' });
+  });
+
+  it('writes the severity as text for every level, with the glyph decorative', async () => {
+    apiMocks.getExceptionsForCase.mockResolvedValue([
+      openException({ id: 'exc-high', severity: 'high', message: 'High row' }),
+      openException({ id: 'exc-medium', severity: 'medium', message: 'Medium row' }),
+      openException({ id: 'exc-low', severity: 'low', message: 'Low row' }),
+    ]);
+
+    renderTab();
+    await screen.findByText('High row');
+
+    const expected: Array<[string, string]> = [
+      ['exc-high', 'Severity: High'],
+      ['exc-medium', 'Severity: Medium'],
+      ['exc-low', 'Severity: Low'],
+    ];
+
+    for (const [id, text] of expected) {
+      const row = rowFor(id);
+      const label = within(row).getByText(text);
+      // Visible, real text — not a colour or a glyph alone.
+      expect(label.textContent).toBe(text);
+      expect(label.className).toBe('exc-severity');
+      expect(label.closest('[aria-hidden="true"]')).toBeNull();
+      // The glyph adds no second copy of the severity to the accessible tree.
+      const icon = row.querySelector('.exc-icon') as HTMLElement;
+      expect(icon.getAttribute('aria-hidden')).toBe('true');
+      expect(icon.textContent).toBe('');
+      // Exactly one announcement of the severity per row.
+      expect((row.textContent ?? '').match(new RegExp(text, 'g'))).toHaveLength(1);
+    }
+  });
+
+  it('keeps the severity class on the card alongside the written label', async () => {
+    apiMocks.getExceptionsForCase.mockResolvedValue([
+      openException({ id: 'exc-high', severity: 'high', message: 'High row' }),
+    ]);
+
+    renderTab();
+    await screen.findByText('High row');
+
+    const row = rowFor('exc-high');
+    expect(row.className).toContain('severity-high');
+    expect(within(row).getByText('Severity: High')).toBeDefined();
+  });
+});

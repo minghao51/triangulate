@@ -86,6 +86,13 @@
     color: var(--text-primary);
 }
 
+/* Written like the Status/Action lines: severity is text, not icon-only. */
+.exc-severity {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
 .exc-recommendation {
     font-size: 0.875rem;
     color: var(--text-secondary);

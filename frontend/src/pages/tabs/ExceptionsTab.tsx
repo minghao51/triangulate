@@ -486,6 +486,15 @@ const ExceptionsTab: React.FC<ExceptionsTabProps> = ({ caseId, refreshToken = 0 
     }
   };
 
+  /** Severity stated as text, so it is never conveyed by icon and colour alone. */
+  const getSeverityLabel = (severity: Exception['severity']): string => {
+    switch (severity) {
+      case 'high': return 'High';
+      case 'medium': return 'Medium';
+      case 'low': return 'Low';
+    }
+  };
+
   const getSeverityIcon = (severity: Exception['severity']) => {
     switch (severity) {
       case 'high': return <AlertOctagon size={18} className="text-danger" />;
@@ -563,9 +572,10 @@ const ExceptionsTab: React.FC<ExceptionsTabProps> = ({ caseId, refreshToken = 0 
               data-exception-id={exc.id}
             >
               <div className="exc-main">
-                <div className="exc-icon">{getSeverityIcon(exc.severity)}</div>
+                <div className="exc-icon" aria-hidden="true">{getSeverityIcon(exc.severity)}</div>
                 <div className="exc-content">
                   <div className="exc-type">{exc.type.replace(/_/g, ' ')}</div>
+                  <div className="exc-severity">Severity: {getSeverityLabel(exc.severity)}</div>
                   <div className="exc-message">{exc.message}</div>
                   <div className="exc-recommendation">Status: {exc.status}</div>
                   <div className="exc-recommendation">Action: {exc.recommendedAction}</div>

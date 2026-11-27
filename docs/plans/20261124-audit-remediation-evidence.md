@@ -294,3 +294,52 @@ Quoted only so they are not mistaken for this run's evidence: `npm run check` an
 within that audit's timeout**. Four scratch regressions failed as expected against that baseline.
 None of these figures is claimed as a result here; every number in §4 was produced fresh for
 `34ca121`.
+
+## 8. Concept-parity audit and follow-up fixes (post-release)
+
+The gates above prove the remediation contracts and the 42 named states. They do **not** prove
+that each screen renders what the [concept wireframe set](20261123-product-wireframe-set.md)
+specifies, so a separate parity audit was run after the release.
+
+**Method.** All 29 screens (the 24 concept screens plus five populated variants) were captured at
+desktop 1280×800 and mobile 375×812 against the real API and the V01 fixture — 58 captures — and
+compared pane by pane with the manifest's `pane_plan` and the set's per-file numbered annotations.
+This is a **content and control** comparison, not a pixel diff: the concept is a proposal wireframe
+with different typography and colour, so a pixel diff would not be meaningful. Tablet 768×1024 was
+not captured in this sweep; the mocked matrix covers tablet for state markers only.
+
+**Health of the run.** Zero failed API calls across all 58 captures; zero horizontal overflow at
+375 px.
+
+**Corrections to the first pass.** Four findings were artifacts of the capture, not defects, and
+are recorded here so they are not re-raised:
+
+| First-pass finding | Actual |
+| --- | --- |
+| Search shows no results | Captured `/search` with no query. With `?q=evacuation` the app shows "6 results", matched fields, publisher, dates and status. |
+| Comparison does not compare | Captured the empty draft. With `left`/`right` selected the app shows both sources, capture selectors, "Compare selected / Swap sides / Clear", an assertion table and dependency warnings. |
+| Report has no per-run artifact list | Captured with the wrong parameter. `reportRun` renders the per-run artifacts with recorded payload checksums and download actions. |
+| Network lacks the Collector→Arbiter flow | That flow is on the **Pipeline** screen (BOOTSTRAP→RETRIEVE→TRIAGE→INVESTIGATE→ARBITRATE→REPORT). Placement divergence, not a missing capability. |
+
+**Two genuine gaps found and fixed** (frontend only; no API, schema or dependency change):
+
+1. **Case explorer had no sort and no pagination** (`frontend/src/pages/CaseExplorer.tsx`). The
+   list filtered and ordered by priority in memory with no sort control and no paging. Added a
+   three-key sort (`priority` default / `updated` / `name`, all with a stable id tie-break) as an
+   always-visible toolbar control — deliberately outside the collapsible filter panel, and with a
+   distinct class so the three filters remain `select.filter-select` — plus a pager (page size 10)
+   that renders only past one page, shows `Showing X–Y of Z cases`, disables at the bounds, resets
+   on any filter/search/sort change and clamps when the filtered set shrinks. Summary counts stay
+   scoped to every filtered case, never to the current page; bulk selection survives paging.
+2. **Exception severity was icon-only** (`frontend/src/pages/tabs/ExceptionsTab.tsx`). Severity was
+   conveyed by glyph and colour with no text and no accessible name. The row now states
+   `Severity: High|Medium|Low` in the same register as the neighbouring `Status:` / `Action:` lines,
+   with the glyph marked `aria-hidden` so the name is not announced twice.
+
+**Evidence.** Frontend `npm run test:ci` → **576 passed / 33 files** (563 + 13 new); `npm run check`
+exit 0; mocked matrix **228 expected, 0 unexpected, 2 skipped**; Ruff unaffected (no Python change).
+The two fixes were then proven in a real browser against a scratch database with **15 cases**
+(fixture + 13 seeded): the pager shows `Showing 1–10 of 15`, Next shows `Showing 11–15 of 15` with
+five cards and Next disabled, sort returns to page 1, and the exception row states
+`Severity: High` / `Severity: Medium` at both viewports with zero horizontal overflow — 4/4 browser
+assertions passed. Sort *ordering* is pinned by the new unit tests rather than the browser capture.
