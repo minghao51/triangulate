@@ -1,7 +1,7 @@
 <!-- viewport: 1280×800 desktop -->
 <svg xmlns="http://www.w3.org/2000/svg" width="1280" height="800" viewBox="0 0 1280 800" role="img" aria-labelledby="wf-title wf-desc">
   <title id="wf-title">Runs and changes — part 2 of 2 — desktop</title>
-  <desc id="wf-desc">Runs and changes — part 2 of 2 — desktop (desktop, 1280x800). Proposal wireframe with synthetic data, not implementation evidence. Numbered regions: 1 Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest; 2 Runs and changes — frame 2 of 2; full coverage continues in the named companion frame; 3 Per-item run facts — origin run and observer run as separate recorded values; neither implies who caused a change. · frame 2 of 2; 4 Delta pagination — offset lives in the URL; the selected run stays pinned. · frame 2 of 2.</desc>
+  <desc id="wf-desc">Runs and changes — part 2 of 2 — desktop (desktop, 1280x800). Proposal wireframe with synthetic data, not implementation evidence. Numbered regions: 1 Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest; 2 Runs and changes — frame 2 of 2; full coverage continues in the named companion frame; 3 Per-item run facts — origin run and observer run as separate recorded values; neither implies who caused a change. · frame 2 of 2; 4 Delta pagination — offset lives in the URL; the selected run stays pinned. · frame 2 of 2.</desc>
   <g id="ui" font-family="-apple-system, system-ui, sans-serif">
     <rect x="0" y="0" width="1280" height="800" fill="#fff"/>
     <rect x="8" y="8" width="1264" height="784" fill="#fff" stroke="#000" stroke-width="1.5"/>

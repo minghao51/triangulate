@@ -1,7 +1,7 @@
 <!-- viewport: 375×812 mobile -->
 <svg xmlns="http://www.w3.org/2000/svg" width="375" height="812" viewBox="0 0 375 812" role="img" aria-labelledby="wf-title wf-desc">
   <title id="wf-title">Run history (stage-oriented) — mobile</title>
-  <desc id="wf-desc">Run history (stage-oriented) — mobile (mobile, 375x812). Proposal wireframe with synthetic data, not implementation evidence. Numbered regions: 1 Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest; 2 Run history (stage-oriented) header — title, synthetic context and available actions; 3 Case tabs (12) — active Run history; the strip scrolls, no tab is removed; 4 Stage attempts — per-stage model, duration, fallback flag, status and recorded time; not grouped investigation runs. · frame 1 of 3.</desc>
+  <desc id="wf-desc">Run history (stage-oriented) — mobile (mobile, 375x812). Proposal wireframe with synthetic data, not implementation evidence. Numbered regions: 1 Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest; 2 Run history (stage-oriented) header — title, synthetic context and available actions; 3 Case tabs (12) — active Run history; the strip scrolls, no tab is removed; 4 Stage attempts — per-stage model, duration, fallback flag, status and recorded time; not grouped investigation runs. · frame 1 of 3.</desc>
   <g id="ui" font-family="-apple-system, system-ui, sans-serif">
     <rect x="0" y="0" width="368" height="808" fill="#fff"/>
     <rect x="8" y="8" width="352" height="792" fill="#fff" stroke="#000" stroke-width="1.5"/>

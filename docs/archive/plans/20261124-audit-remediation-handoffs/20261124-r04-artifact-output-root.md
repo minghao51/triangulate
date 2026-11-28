@@ -1,7 +1,7 @@
 # R04 — Align artifact output-root configuration (P2)
 
 **Status:** Implemented and verified in `34ca121` ([evidence](../20261124-audit-remediation-evidence.md)) · **Coordination:** Agree settings/test setup with R05; apply sequentially.  
-[Specification](../20261124-audit-remediation-specification.md) · [Current artifact HTTP contract](../../reference/http-api.md)
+[Specification](../20261124-audit-remediation-specification.md) · [Current artifact HTTP contract](../../../reference/http-api.md)
 
 ## Problem and read-before-edit
 

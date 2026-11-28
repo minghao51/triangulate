@@ -1,7 +1,7 @@
 # R05 — Make historical GETs storage-read-only (P2)
 
 **Status:** Implemented and verified in `34ca121` ([evidence](../20261124-audit-remediation-evidence.md)) · **Coordination:** R04 shares HTTP settings/runtime edits; R03 owns payload validation.  
-[Specification](../20261124-audit-remediation-specification.md) · [Storage test isolation](../../reference/20261115-test-database-incident.md)
+[Specification](../20261124-audit-remediation-specification.md) · [Storage test isolation](../../../reference/20261115-test-database-incident.md)
 
 ## Problem and read-before-edit
 

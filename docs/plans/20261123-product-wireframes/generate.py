@@ -38,7 +38,7 @@ VP = {
     "mobile": dict(w=375, h=812, x0=16, y0=32, x1=344, y1=776, rail=0, topbar=True, caps=50),
 }
 
-NAV_ITEMS = ["Dashboard", "Cases", "Network", "Sources", "Narratives", "Monitoring", "AI info"]
+NAV_ITEMS = ["Dashboard", "Cases", "Monitoring", "AI info"]
 
 
 # --------------------------------------------------------------------------- geometry helpers
@@ -531,7 +531,7 @@ def draw_rail(c: Svg, x, y, w, h, active):
         c.text(x + PAD, cy + BASE[12], line, 12, INK if line[0].isupper() else MUTED)
         cy += LANE[12]
     c.text(x + PAD, y + h - PAD, "Wireframe \u00b7 synthetic data", 12, MUTED)
-    c.region(x, y, w, h, "Primary navigation \u2014 GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.")
+    c.region(x, y, w, h, "Primary navigation \u2014 global destinations only (Network, Sources and Narratives open inside a case); GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.")
 
 
 def draw_topbar(c: Svg, x, y, w, active):
@@ -545,11 +545,11 @@ def draw_topbar(c: Svg, x, y, w, active):
                 break
             c.text(cx, y + 24, item, 12, INK, 600 if item == active else None)
             cx += r8(len(item) * 7.4 + 16)
-        c.region(x, y, w, h, "Primary navigation (top bar) \u2014 GET reads only; CLI owns ingest and runs.")
+        c.region(x, y, w, h, "Primary navigation (top bar) \u2014 global destinations only (case views open inside a case); GET reads only; CLI owns ingest and runs.")
     else:
         c.rect(x + w - PAD - 64, y + 8, 64, 32, WHITE, stroke=True)
         c.text(x + w - PAD - 32, y + 8 + BASE[12], "Menu", 12, INK, anchor="middle")
-        c.region(x, y, w, h, "Primary navigation (menu) \u2014 all seven destinations remain reachable; CLI owns ingest.")
+        c.region(x, y, w, h, "Primary navigation (menu) \u2014 the four global destinations; case views open inside a case; CLI owns ingest.")
 
 
 def header_parts(defn, vp, w):
@@ -934,12 +934,12 @@ SCREENS = [
             [(2, TB("Cases", [("Case", 3), ("Status", 2), ("Coverage", 2)],
                    [("case-2201-0417", "active", "partial"), ("case-2199-1180", "active", "complete"),
                     ("case-2198-0922", "failed", "failed"), ("case-2197-0733", "closed", "complete")],
-                   "Case portfolio \u2014 observed status and acquisition coverage per case, not a truth score.")),
+                   "Case portfolio \u2014 observed status and acquisition coverage per case, not a truth score. Requires backend support: a coverage field on the case-list DTO; CaseListItem has none today.")),
              (1, LN("Observed totals", ["4 cases \u00b7 12 articles", "31 events \u00b7 7 review items", "Counts are observed rows, not health"],
                     "Observed totals \u2014 row counts only; no confidence, health or trend claim."))],
             [(1, L("Recent runs", [("run-0007 \u00b7 case-2201-0417", "succeeded"), ("run-0006 \u00b7 case-2199-1180", "partial"),
                                    ("run-0005 \u00b7 case-2198-0922", "failed")],
-                   "Recent grouped runs \u2014 recorded status and coverage across cases.")),
+                   "Recent grouped runs \u2014 recorded status and coverage across cases. Requires backend support: a cross-case runs read; every runs endpoint is case-scoped today.")),
              (1, NT("Entry points", ["Monitoring: recorded status only", "AI info: capabilities, no chat"],
                     "Navigation entry points \u2014 monitoring and AI info are readers, not control planes."))],
         ],
@@ -1127,7 +1127,7 @@ SCREENS = [
             "Overview", "Evidence", "Claims", "Compare", "Parties", "Map", "Timeline",
             "Exceptions", "Report", "Changes", "Search", "Run history"],
         tab_active="Evidence", route="/cases/:id/sources", context="provenance reader",
-        title="Source provenance", nav="Sources",
+        title="Source provenance", nav="Cases",
         meta=[f"Observed groups only \u00b7 {PROPOSAL}"],
         body=[
             [(1, TB("Dependency groups", [("Group", 2), ("Sources", 2), ("Method", 3), ("Status", 3)],
@@ -1333,7 +1333,7 @@ SCREENS = [
         ],
     ),
     dict(
-        id="corroboration-network", kind="screen", title="Corroboration network", nav="Network",
+        id="corroboration-network", kind="screen", title="Corroboration network", nav="Cases",
         route="/cases/:id/network", context="route-level network reader",
         meta=[f"Claim\u2013source edges, not independent proof \u00b7 {PROPOSAL}"],
         body=[
@@ -1352,7 +1352,7 @@ SCREENS = [
         ],
     ),
     dict(
-        id="narratives", kind="screen", title="Narratives", nav="Narratives",
+        id="narratives", kind="screen", title="Narratives", nav="Cases",
         route="/cases/:id/narratives", context="route-level narrative reader",
         meta=[f"Persisted clusters, not generated stance \u00b7 {PROPOSAL}"],
         body=[
@@ -1402,10 +1402,10 @@ PARENT_NAV = {
     "dashboard": "Dashboard", "case-explorer": "Cases", "operator-launch": "Cases",
     "case-overview": "Cases", "review-annotation": "Cases", "evidence-gallery": "Cases",
     "claims": "Cases", "capture-inspector": "Cases", "comparison": "Cases",
-    "source-provenance": "Sources", "runs-changes": "Cases", "historical-snapshot": "Cases",
+    "source-provenance": "Cases", "runs-changes": "Cases", "historical-snapshot": "Cases",
     "search": "Cases", "stage-history": "Cases", "pipeline": "Cases", "exception-queue": "Cases",
     "parties": "Cases", "geographic-map": "Cases", "timeline": "Cases", "report": "Cases",
-    "corroboration-network": "Network", "narratives": "Narratives", "monitoring": "Monitoring",
+    "corroboration-network": "Cases", "narratives": "Cases", "monitoring": "Monitoring",
     "ai-info": "AI info",
 }
 
@@ -2124,6 +2124,18 @@ def render_doc(manifest) -> str:
             "`frontend/src/pages/tabs/`, `docs/plans/20261114-evidence-workbench-specification.md` \u00a7\u00a74\u20138, "
             "`docs/architecture/20261118-comparison-ui.md`, `docs/architecture/20261120-changes-ui.md`, "
             "`docs/architecture/20261120-search-api.md`, `docs/reference/http-api.md`.", "",
+            "## Known inconsistencies and backend dependencies", "",
+            "Status: proposal. Two limits of this set are recorded here rather than drawn as shipped behaviour.", "",
+            "- **Navigation.** Earlier revisions drew Network, Sources and Narratives in the global navigation rail. "
+            "The route table (\u00a73) scopes them to a case (`/cases/:id/network`, `/cases/:id/sources`, "
+            "`/cases/:id/narratives`), so the rail now lists only the global destinations (Dashboard, Cases, Monitoring, "
+            "AI info). The three readers are reached from a case and highlight `Cases`, with the case tab row and title "
+            "carrying their context.",
+            "- **Dashboard backend dependencies.** The Coverage column and the Recent runs panel depend on backend "
+            "changes that do not exist: the case-list DTO (`CaseListItem` in `src/http/schemas.py`) has no coverage "
+            "field, and every runs endpoint is case-scoped (`/api/cases/:id/...`), so no cross-case recent-runs read "
+            "exists. The application omits both today; the dashboard frames mark them as requiring backend support "
+            "rather than as an app deficiency.", "",
             "## 12. Per-file numbered annotations", "",
             "Region numbers match `data-region` in each SVG and the manifest `regions` array one-to-one. Empty list means "
             "the file failed generation; the validator rejects that.", ""]

@@ -15,7 +15,8 @@ import {
 /**
  * F16 — critical end-to-end journeys, run on every installed engine.
  *
- * Projects: chromium-journeys (reference), firefox-journeys, webkit-journeys.
+ * Projects: chromium-journeys (reference), firefox-journeys, and webkit-1280x800
+ * (the WebKit project runs the whole gate, so the journey is included there).
  * A missing engine or browser build is recorded as **not proven**; nothing here
  * downloads or upgrades a browser.
  *

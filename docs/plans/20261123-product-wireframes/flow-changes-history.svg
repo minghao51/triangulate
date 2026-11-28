@@ -11,8 +11,8 @@
     <rect x="224" y="200" width="240" height="168" fill="#fff" stroke="#000" stroke-width="1.5"/>
     <rect x="240" y="216" width="40" height="128" fill="#fff" stroke="#000" stroke-width="1.5"/>
     <line x1="240" y1="224" x2="280" y2="224" stroke="#000" stroke-width="1.5"/>
-    <line x1="240" y1="272" x2="280" y2="272" stroke="#000" stroke-width="1.5"/>
-    <line x1="240" y1="296" x2="280" y2="296" stroke="#000" stroke-width="1.5"/>
+    <line x1="240" y1="256" x2="280" y2="256" stroke="#000" stroke-width="1.5"/>
+    <line x1="240" y1="280" x2="280" y2="280" stroke="#000" stroke-width="1.5"/>
     <rect x="280" y="216" width="168" height="16" fill="#fff" stroke="#000" stroke-width="1.5"/>
     <rect x="280" y="232" width="168" height="8" fill="#fff" stroke="#000" stroke-width="1.5"/>
     <rect x="280" y="248" width="168" height="24" fill="#fff" stroke="#000" stroke-width="1.5"/>
@@ -31,8 +31,8 @@
     <rect x="528" y="200" width="240" height="168" fill="#fff" stroke="#000" stroke-width="1.5"/>
     <rect x="544" y="216" width="40" height="128" fill="#fff" stroke="#000" stroke-width="1.5"/>
     <line x1="544" y1="224" x2="584" y2="224" stroke="#000" stroke-width="1.5"/>
-    <line x1="544" y1="272" x2="584" y2="272" stroke="#000" stroke-width="1.5"/>
-    <line x1="544" y1="296" x2="584" y2="296" stroke="#000" stroke-width="1.5"/>
+    <line x1="544" y1="256" x2="584" y2="256" stroke="#000" stroke-width="1.5"/>
+    <line x1="544" y1="280" x2="584" y2="280" stroke="#000" stroke-width="1.5"/>
     <rect x="584" y="216" width="168" height="16" fill="#fff" stroke="#000" stroke-width="1.5"/>
     <rect x="584" y="232" width="88" height="32" fill="#fff" stroke="#000" stroke-width="1.5"/>
     <rect x="672" y="232" width="80" height="24" fill="#fff" stroke="#000" stroke-width="1.5"/>
@@ -47,8 +47,8 @@
     <rect x="832" y="200" width="240" height="168" fill="#fff" stroke="#000" stroke-width="1.5"/>
     <rect x="848" y="216" width="40" height="128" fill="#fff" stroke="#000" stroke-width="1.5"/>
     <line x1="848" y1="224" x2="888" y2="224" stroke="#000" stroke-width="1.5"/>
-    <line x1="848" y1="272" x2="888" y2="272" stroke="#000" stroke-width="1.5"/>
-    <line x1="848" y1="296" x2="888" y2="296" stroke="#000" stroke-width="1.5"/>
+    <line x1="848" y1="256" x2="888" y2="256" stroke="#000" stroke-width="1.5"/>
+    <line x1="848" y1="280" x2="888" y2="280" stroke="#000" stroke-width="1.5"/>
     <rect x="888" y="216" width="168" height="16" fill="#fff" stroke="#000" stroke-width="1.5"/>
     <rect x="888" y="232" width="168" height="8" fill="#fff" stroke="#000" stroke-width="1.5"/>
     <rect x="888" y="248" width="168" height="40" fill="#fff" stroke="#000" stroke-width="1.5"/>

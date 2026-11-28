@@ -1,19 +1,16 @@
 <!-- viewport: 768×1024 tablet -->
 <svg xmlns="http://www.w3.org/2000/svg" width="768" height="1024" viewBox="0 0 768 1024" role="img" aria-labelledby="wf-title wf-desc">
   <title id="wf-title">Narratives — tablet</title>
-  <desc id="wf-desc">Narratives — tablet (tablet, 768x1024). Proposal wireframe with synthetic data, not implementation evidence. Numbered regions: 1 Primary navigation (top bar) — GET reads only; CLI owns ingest and runs; 2 Narratives header — title, synthetic context and available actions; 3 Persisted clusters — stored cluster rows with their claim counts; no stance is generated on read. · frame 1 of 1; 4 Cluster detail — member claims and shared terms; the reader never invents a narrative position. · frame 1 of 1; 5 Reader rule — persisted data only; empty is distinct from unavailable. · frame 1 of 1.</desc>
+  <desc id="wf-desc">Narratives — tablet (tablet, 768x1024). Proposal wireframe with synthetic data, not implementation evidence. Numbered regions: 1 Primary navigation (top bar) — global destinations only (case views open inside a case); GET reads only; CLI owns ingest and runs; 2 Narratives header — title, synthetic context and available actions; 3 Persisted clusters — stored cluster rows with their claim counts; no stance is generated on read. · frame 1 of 1; 4 Cluster detail — member claims and shared terms; the reader never invents a narrative position. · frame 1 of 1; 5 Reader rule — persisted data only; empty is distinct from unavailable. · frame 1 of 1.</desc>
   <g id="ui" font-family="-apple-system, system-ui, sans-serif">
     <rect x="0" y="0" width="768" height="1024" fill="#fff"/>
     <rect x="8" y="8" width="752" height="1008" fill="#fff" stroke="#000" stroke-width="1.5"/>
     <rect x="32" y="32" width="704" height="48" fill="#fff" stroke="#000" stroke-width="1.5"/>
     <text x="48" y="56" font-size="14" fill="#000" font-weight="600">TRIANGULATE</text>
     <text x="168" y="56" font-size="12" fill="#000">Dashboard</text>
-    <text x="248" y="56" font-size="12" fill="#000">Cases</text>
-    <text x="304" y="56" font-size="12" fill="#000">Network</text>
-    <text x="368" y="56" font-size="12" fill="#000">Sources</text>
-    <text x="432" y="56" font-size="12" fill="#000" font-weight="600">Narratives</text>
-    <text x="520" y="56" font-size="12" fill="#000">Monitoring</text>
-    <text x="608" y="56" font-size="12" fill="#000">AI info</text>
+    <text x="248" y="56" font-size="12" fill="#000" font-weight="600">Cases</text>
+    <text x="304" y="56" font-size="12" fill="#000">Monitoring</text>
+    <text x="392" y="56" font-size="12" fill="#000">AI info</text>
     <rect x="32" y="104" width="704" height="88" fill="#fff" stroke="#000" stroke-width="1.5"/>
     <text x="48" y="152" font-size="20" fill="#000" font-weight="600">Narratives</text>
     <text x="48" y="176" font-size="12" fill="#666">Persisted clusters, not generated stance · Proposal · synthetic · not built</text>

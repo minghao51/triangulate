@@ -1,7 +1,7 @@
 <!-- viewport: 1280×800 desktop -->
 <svg xmlns="http://www.w3.org/2000/svg" width="1280" height="800" viewBox="0 0 1280 800" role="img" aria-labelledby="wf-title wf-desc">
   <title id="wf-title">Case search — part 2 of 2 — desktop</title>
-  <desc id="wf-desc">Case search — part 2 of 2 — desktop (desktop, 1280x800). Proposal wireframe with synthetic data, not implementation evidence. Numbered regions: 1 Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest; 2 Case search — frame 2 of 2; full coverage continues in the named companion frame; 3 Results — plain-text mock snippets with the matched field; each row has Open result navigation. Snippets never imply a validated quotation. · frame 2 of 2; 4 Pagination and permalink controls — result count and offset are shown with the results; offset is URL-persisted. · frame 2 of 2.</desc>
+  <desc id="wf-desc">Case search — part 2 of 2 — desktop (desktop, 1280x800). Proposal wireframe with synthetic data, not implementation evidence. Numbered regions: 1 Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest; 2 Case search — frame 2 of 2; full coverage continues in the named companion frame; 3 Results — plain-text mock snippets with the matched field; each row has Open result navigation. Snippets never imply a validated quotation. · frame 2 of 2; 4 Pagination and permalink controls — result count and offset are shown with the results; offset is URL-persisted. · frame 2 of 2.</desc>
   <g id="ui" font-family="-apple-system, system-ui, sans-serif">
     <rect x="0" y="0" width="1280" height="800" fill="#fff"/>
     <rect x="8" y="8" width="1264" height="784" fill="#fff" stroke="#000" stroke-width="1.5"/>

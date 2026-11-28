@@ -109,13 +109,24 @@ artifact classes remain (raw JSON/log artifacts and one screenshot) and that the
 are ephemeral `/tmp` evidence, not durable. Acceptance: no pushed doc implies a
 file that no longer exists — satisfied by disclosure, not by recovery.
 
-### H2 — Browser coverage gaps — **partly closed 2026-11-22**
+### H2 — Browser coverage gaps — **WebKit closed 2026-11-28; load test still open**
 Recorded as not proven in the V01 entry: the run was Chrome-driven through the
 Playwright CLI — no Firefox/Safari matrix, no mobile viewport, no load test.
 2026-11-22 evidence: the 10-test B03 fixture journey passed in both Chromium and
 Firefox, and in Chromium at a 390×844 viewport (all mocked APIs, Vite-only).
-WebKit/Safari and a search load test remain **not proven**; the search benchmark
-is still a latency record, not a load test.
+
+2026-11-28: **WebKit is now part of the gate, not opt-in.** `webkit-1280x800` runs
+the whole gate — the state matrix, the a11y keyboard assertions and the critical
+journey — and `webkit-375x812` runs the state matrix, giving **151 WebKit cells at
+0 unexpected failures** (full matrix 379 passed / 4 skipped / 0 unexpected, 6m17s).
+The keyboard proof had to be added to `A11Y_PROJECTS` explicitly: without it the
+assertions would have silently skipped on WebKit and reported a false green.
+768×1024 stays Chromium-only to bound runtime. WebKit needs the host's `libavif16`;
+where it is missing the engine is recorded as not proven rather than silently
+dropped (`REFINEMENT_GATE_WEBKIT=0` opts out).
+
+**Still not proven:** a search **load test** — the benchmark remains a latency
+record, not a load test.
 
 ### H3 — Static-data default in the frontend — **closed 2026-11-22**
 `frontend/src/services/api.ts` makes `USE_STATIC_DATA = true` whenever

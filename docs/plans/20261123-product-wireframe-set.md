@@ -194,6 +194,13 @@ uv run --no-sync python docs/plans/20261123-product-wireframes/validate.py
 
 Generation is deterministic (no timestamps in output); running it twice produces byte-identical files. The validator holds the authoritative non-computed inventory (24 screen ids, 42 state ids, 10 flow files), re-runs generation in temporary directories, and checks XML, geometry, palette, fonts, strokes, annotation mapping, doc links, manifest bijection, counts, flow coverage and the mobile canvas exception. Source-of-truth context: `frontend/src/app/routes.tsx`, `frontend/src/pages/CaseIntelligenceCenter.tsx`, `frontend/src/pages/tabs/`, `docs/plans/20261114-evidence-workbench-specification.md` §§4–8, `docs/architecture/20261118-comparison-ui.md`, `docs/architecture/20261120-changes-ui.md`, `docs/architecture/20261120-search-api.md`, `docs/reference/http-api.md`.
 
+## Known inconsistencies and backend dependencies
+
+Status: proposal. Two limits of this set are recorded here rather than drawn as shipped behaviour.
+
+- **Navigation.** Earlier revisions drew Network, Sources and Narratives in the global navigation rail. The route table (§3) scopes them to a case (`/cases/:id/network`, `/cases/:id/sources`, `/cases/:id/narratives`), so the rail now lists only the global destinations (Dashboard, Cases, Monitoring, AI info). The three readers are reached from a case and highlight `Cases`, with the case tab row and title carrying their context.
+- **Dashboard backend dependencies.** The Coverage column and the Recent runs panel depend on backend changes that do not exist: the case-list DTO (`CaseListItem` in `src/http/schemas.py`) has no coverage field, and every runs endpoint is case-scoped (`/api/cases/:id/...`), so no cross-case recent-runs read exists. The application omits both today; the dashboard frames mark them as requiring backend support rather than as an app deficiency.
+
 ## 12. Per-file numbered annotations
 
 Region numbers match `data-region` in each SVG and the manifest `regions` array one-to-one. Empty list means the file failed generation; the validator rejects that.
@@ -202,47 +209,47 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/dashboard-desktop.svg) · screen · desktop · Dashboard — case portfolio · route `/dashboard`
 
-1 — Primary navigation — GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
+1 — Primary navigation — global destinations only (Network, Sources and Narratives open inside a case); GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
 2 — Dashboard — case portfolio header — title, synthetic context and available actions.
-3 — Case portfolio — observed status and acquisition coverage per case, not a truth score. · frame 1 of 1
+3 — Case portfolio — observed status and acquisition coverage per case, not a truth score. Requires backend support: a coverage field on the case-list DTO; CaseListItem has none today. · frame 1 of 1
 4 — Observed totals — row counts only; no confidence, health or trend claim. · frame 1 of 1
-5 — Recent grouped runs — recorded status and coverage across cases. · frame 1 of 1
+5 — Recent grouped runs — recorded status and coverage across cases. Requires backend support: a cross-case runs read; every runs endpoint is case-scoped today. · frame 1 of 1
 6 — Navigation entry points — monitoring and AI info are readers, not control planes. · frame 1 of 1
 
 ### dashboard-tablet.svg
 
 [Open SVG](20261123-product-wireframes/dashboard-tablet.svg) · screen · tablet · Dashboard — case portfolio · route `/dashboard`
 
-1 — Primary navigation (top bar) — GET reads only; CLI owns ingest and runs.
+1 — Primary navigation (top bar) — global destinations only (case views open inside a case); GET reads only; CLI owns ingest and runs.
 2 — Dashboard — case portfolio header — title, synthetic context and available actions.
-3 — Case portfolio — observed status and acquisition coverage per case, not a truth score. · frame 1 of 1
+3 — Case portfolio — observed status and acquisition coverage per case, not a truth score. Requires backend support: a coverage field on the case-list DTO; CaseListItem has none today. · frame 1 of 1
 4 — Observed totals — row counts only; no confidence, health or trend claim. · frame 1 of 1
-5 — Recent grouped runs — recorded status and coverage across cases. · frame 1 of 1
+5 — Recent grouped runs — recorded status and coverage across cases. Requires backend support: a cross-case runs read; every runs endpoint is case-scoped today. · frame 1 of 1
 6 — Navigation entry points — monitoring and AI info are readers, not control planes. · frame 1 of 1
 
 ### dashboard-mobile.svg
 
 [Open SVG](20261123-product-wireframes/dashboard-mobile.svg) · screen · mobile · Dashboard — case portfolio · frame 1 of 2 · route `/dashboard`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Dashboard — case portfolio header — title, synthetic context and available actions.
-3 — Case portfolio — observed status and acquisition coverage per case, not a truth score. · frame 1 of 2
+3 — Case portfolio — observed status and acquisition coverage per case, not a truth score. Requires backend support: a coverage field on the case-list DTO; CaseListItem has none today. · frame 1 of 2
 
 ### dashboard-mobile-part-2.svg
 
 [Open SVG](20261123-product-wireframes/dashboard-mobile-part-2.svg) · screen · mobile · Dashboard — case portfolio · frame 2 of 2 · route `/dashboard`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Dashboard — case portfolio — frame 2 of 2; full coverage continues in the named companion frame.
 3 — Observed totals — row counts only; no confidence, health or trend claim. · frame 2 of 2
-4 — Recent grouped runs — recorded status and coverage across cases. · frame 2 of 2
+4 — Recent grouped runs — recorded status and coverage across cases. Requires backend support: a cross-case runs read; every runs endpoint is case-scoped today. · frame 2 of 2
 5 — Navigation entry points — monitoring and AI info are readers, not control planes. · frame 2 of 2
 
 ### case-explorer-desktop.svg
 
 [Open SVG](20261123-product-wireframes/case-explorer-desktop.svg) · screen · desktop · Case explorer · route `/cases`
 
-1 — Primary navigation — GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
+1 — Primary navigation — global destinations only (Network, Sources and Narratives open inside a case); GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
 2 — Case explorer header — title, synthetic context and available actions.
 3 — Case filters — literal query, status and sort; no hidden full-text index is claimed. · frame 1 of 1
 4 — Case table — per-case observed status, coverage and update time. · frame 1 of 1
@@ -252,7 +259,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/case-explorer-tablet.svg) · screen · tablet · Case explorer · route `/cases`
 
-1 — Primary navigation (top bar) — GET reads only; CLI owns ingest and runs.
+1 — Primary navigation (top bar) — global destinations only (case views open inside a case); GET reads only; CLI owns ingest and runs.
 2 — Case explorer header — title, synthetic context and available actions.
 3 — Case filters — literal query, status and sort; no hidden full-text index is claimed. · frame 1 of 1
 4 — Case table — per-case observed status, coverage and update time. · frame 1 of 1
@@ -262,7 +269,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/case-explorer-mobile.svg) · screen · mobile · Case explorer · frame 1 of 3 · route `/cases`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Case explorer header — title, synthetic context and available actions.
 3 — Case filters — literal query, status and sort; no hidden full-text index is claimed. · frame 1 of 3
 
@@ -270,7 +277,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/case-explorer-mobile-part-2.svg) · screen · mobile · Case explorer · frame 2 of 3 · route `/cases`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Case explorer — frame 2 of 3; full coverage continues in the named companion frame.
 3 — Case table — per-case observed status, coverage and update time. · frame 2 of 3
 
@@ -278,7 +285,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/case-explorer-mobile-part-3.svg) · screen · mobile · Case explorer · frame 3 of 3 · route `/cases`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Case explorer — frame 3 of 3; full coverage continues in the named companion frame.
 3 — Pagination — disabled Previous on the first page; no synthetic totals. · frame 3 of 3
 
@@ -286,7 +293,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/operator-launch-desktop.svg) · screen · desktop · Operator launch guide · route `/cases/new`
 
-1 — Primary navigation — GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
+1 — Primary navigation — global destinations only (Network, Sources and Narratives open inside a case); GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
 2 — Operator launch guide header — title, synthetic context and available actions.
 3 — Launch steps — the only ingestion path is a local CLI command, not this page. · frame 1 of 1
 4 — Prerequisites — local database, single writer, operator-run network access. · frame 1 of 1
@@ -296,7 +303,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/operator-launch-tablet.svg) · screen · tablet · Operator launch guide · route `/cases/new`
 
-1 — Primary navigation (top bar) — GET reads only; CLI owns ingest and runs.
+1 — Primary navigation (top bar) — global destinations only (case views open inside a case); GET reads only; CLI owns ingest and runs.
 2 — Operator launch guide header — title, synthetic context and available actions.
 3 — Launch steps — the only ingestion path is a local CLI command, not this page. · frame 1 of 1
 4 — Prerequisites — local database, single writer, operator-run network access. · frame 1 of 1
@@ -306,7 +313,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/operator-launch-mobile.svg) · screen · mobile · Operator launch guide · frame 1 of 2 · route `/cases/new`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Operator launch guide header — title, synthetic context and available actions.
 3 — Launch steps — the only ingestion path is a local CLI command, not this page. · frame 1 of 2
 4 — Prerequisites — local database, single writer, operator-run network access. · frame 1 of 2
@@ -315,7 +322,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/operator-launch-mobile-part-2.svg) · screen · mobile · Operator launch guide · frame 2 of 2 · route `/cases/new`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Operator launch guide — frame 2 of 2; full coverage continues in the named companion frame.
 3 — Scope note — the browser exposes reads and three narrow review POSTs only. · frame 2 of 2
 
@@ -323,7 +330,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/case-overview-desktop.svg) · screen · desktop · Case overview · route `/cases/:id/`
 
-1 — Primary navigation — GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
+1 — Primary navigation — global destinations only (Network, Sources and Narratives open inside a case); GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
 2 — Case overview header — title, synthetic context and available actions.
 3 — Case tabs (12) — active Overview; tabs are navigation, not state changes.
 4 — Observed counts — only observed rows; a failed read is unavailable, never zero. · frame 1 of 1
@@ -334,7 +341,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/case-overview-tablet.svg) · screen · tablet · Case overview · route `/cases/:id/`
 
-1 — Primary navigation (top bar) — GET reads only; CLI owns ingest and runs.
+1 — Primary navigation (top bar) — global destinations only (case views open inside a case); GET reads only; CLI owns ingest and runs.
 2 — Case overview header — title, synthetic context and available actions.
 3 — Case tabs (12) — active Overview; tabs are navigation, not state changes.
 4 — Observed counts — only observed rows; a failed read is unavailable, never zero. · frame 1 of 1
@@ -345,7 +352,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/case-overview-mobile.svg) · screen · mobile · Case overview · frame 1 of 2 · route `/cases/:id/`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Case overview header — title, synthetic context and available actions.
 3 — Case tabs (12) — active Overview; the strip scrolls, no tab is removed.
 4 — Observed counts — only observed rows; a failed read is unavailable, never zero. · frame 1 of 2
@@ -354,7 +361,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/case-overview-mobile-part-2.svg) · screen · mobile · Case overview · frame 2 of 2 · route `/cases/:id/`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Case overview — frame 2 of 2; full coverage continues in the named companion frame.
 3 — Case status — review readiness, stage and automation; claim verification states are separate per claim. · frame 2 of 2
 4 — Review decision — rationale plus Approve, Action Required or Reject; no extra decision dropdown. · frame 2 of 2
@@ -363,7 +370,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/review-annotation-desktop.svg) · screen · desktop · Review and annotation · route `/cases/:id/`
 
-1 — Primary navigation — GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
+1 — Primary navigation — global destinations only (Network, Sources and Narratives open inside a case); GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
 2 — Review and annotation header — title, synthetic context and available actions.
 3 — Case tabs (12) — active Overview; tabs are navigation, not state changes.
 4 — Review decision form — rationale plus the three decision buttons; decision value is the pressed control, not a dropdown. · frame 1 of 1
@@ -375,7 +382,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/review-annotation-tablet.svg) · screen · tablet · Review and annotation · frame 1 of 2 · route `/cases/:id/`
 
-1 — Primary navigation (top bar) — GET reads only; CLI owns ingest and runs.
+1 — Primary navigation (top bar) — global destinations only (case views open inside a case); GET reads only; CLI owns ingest and runs.
 2 — Review and annotation header — title, synthetic context and available actions.
 3 — Case tabs (12) — active Overview; tabs are navigation, not state changes.
 4 — Review decision form — rationale plus the three decision buttons; decision value is the pressed control, not a dropdown. · frame 1 of 2
@@ -386,7 +393,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/review-annotation-tablet-part-2.svg) · screen · tablet · Review and annotation · frame 2 of 2 · route `/cases/:id/`
 
-1 — Primary navigation (top bar) — GET reads only; CLI owns ingest and runs.
+1 — Primary navigation (top bar) — global destinations only (case views open inside a case); GET reads only; CLI owns ingest and runs.
 2 — Review and annotation — frame 2 of 2; full coverage continues in the named companion frame.
 3 — Reader-rule note — the annotation POST is an explicit, labelled exception to the GET-only reader rule. · frame 2 of 2
 
@@ -394,7 +401,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/review-annotation-mobile.svg) · screen · mobile · Review and annotation · frame 1 of 3 · route `/cases/:id/`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Review and annotation header — title, synthetic context and available actions.
 3 — Case tabs (12) — active Overview; the strip scrolls, no tab is removed.
 4 — Review decision form — rationale plus the three decision buttons; decision value is the pressed control, not a dropdown. · frame 1 of 3
@@ -403,7 +410,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/review-annotation-mobile-part-2.svg) · screen · mobile · Review and annotation · frame 2 of 3 · route `/cases/:id/`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Review and annotation — frame 2 of 3; full coverage continues in the named companion frame.
 3 — Annotation form — type comment/flag/context, target case/claim/evidence/exception/narrative, target ID and content; save disabled while empty or pending. · frame 2 of 3
 4 — Recorded annotations — stored rows with type and target; no attribution beyond the stored record. · frame 2 of 3
@@ -412,7 +419,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/review-annotation-mobile-part-3.svg) · screen · mobile · Review and annotation · frame 3 of 3 · route `/cases/:id/`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Review and annotation — frame 3 of 3; full coverage continues in the named companion frame.
 3 — Reader-rule note — the annotation POST is an explicit, labelled exception to the GET-only reader rule. · frame 3 of 3
 
@@ -420,7 +427,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/evidence-gallery-desktop.svg) · screen · desktop · Evidence gallery · frame 1 of 2 · route `/cases/:id/evidence`
 
-1 — Primary navigation — GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
+1 — Primary navigation — global destinations only (Network, Sources and Narratives open inside a case); GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
 2 — Evidence gallery header — title, synthetic context and available actions.
 3 — Case tabs (12) — active Evidence; tabs are navigation, not state changes.
 4 — Evidence filters — All/High/Medium/Low/Unknown are provided extraction tiers, not truth levels. · frame 1 of 2
@@ -430,7 +437,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/evidence-gallery-desktop-part-2.svg) · screen · desktop · Evidence gallery · frame 2 of 2 · route `/cases/:id/evidence`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Evidence gallery — frame 2 of 2; full coverage continues in the named companion frame.
 3 — Selected source pane — title, capture pointer, provided tier and stored verification metadata labelled model/legacy_unknown; never certified truth. · frame 2 of 2
 4 — Selected-source actions — Inspect source, safe HTTP(S) Open source and Verification details. · frame 2 of 2
@@ -440,7 +447,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/evidence-gallery-tablet.svg) · screen · tablet · Evidence gallery · frame 1 of 2 · route `/cases/:id/evidence`
 
-1 — Primary navigation (top bar) — GET reads only; CLI owns ingest and runs.
+1 — Primary navigation (top bar) — global destinations only (case views open inside a case); GET reads only; CLI owns ingest and runs.
 2 — Evidence gallery header — title, synthetic context and available actions.
 3 — Case tabs (12) — active Evidence; tabs are navigation, not state changes.
 4 — Evidence filters — All/High/Medium/Low/Unknown are provided extraction tiers, not truth levels. · frame 1 of 2
@@ -452,7 +459,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/evidence-gallery-tablet-part-2.svg) · screen · tablet · Evidence gallery · frame 2 of 2 · route `/cases/:id/evidence`
 
-1 — Primary navigation (top bar) — GET reads only; CLI owns ingest and runs.
+1 — Primary navigation (top bar) — global destinations only (case views open inside a case); GET reads only; CLI owns ingest and runs.
 2 — Evidence gallery — frame 2 of 2; full coverage continues in the named companion frame.
 3 — Pagination — filter and page state is URL-persisted; no synthetic total. · frame 2 of 2
 
@@ -460,7 +467,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/evidence-gallery-mobile.svg) · screen · mobile · Evidence gallery · frame 1 of 3 · route `/cases/:id/evidence`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Evidence gallery header — title, synthetic context and available actions.
 3 — Case tabs (12) — active Evidence; the strip scrolls, no tab is removed.
 4 — Evidence filters — All/High/Medium/Low/Unknown are provided extraction tiers, not truth levels. · frame 1 of 3
@@ -469,7 +476,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/evidence-gallery-mobile-part-2.svg) · screen · mobile · Evidence gallery · frame 2 of 3 · route `/cases/:id/evidence`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Evidence gallery — frame 2 of 3; full coverage continues in the named companion frame.
 3 — Evidence table — source, publisher and provided tier; missing capture says unavailable. · frame 2 of 3
 
@@ -477,7 +484,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/evidence-gallery-mobile-part-3.svg) · screen · mobile · Evidence gallery · frame 3 of 3 · route `/cases/:id/evidence`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Evidence gallery — frame 3 of 3; full coverage continues in the named companion frame.
 3 — Selected source pane — title, capture pointer, provided tier and stored verification metadata labelled model/legacy_unknown; never certified truth. · frame 3 of 3
 4 — Selected-source actions — Inspect source, safe HTTP(S) Open source and Verification details. · frame 3 of 3
@@ -487,7 +494,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/claims-desktop.svg) · screen · desktop · Claims · route `/cases/:id/claims`
 
-1 — Primary navigation — GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
+1 — Primary navigation — global destinations only (Network, Sources and Narratives open inside a case); GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
 2 — Claims header — title, synthetic context and available actions.
 3 — Case tabs (12) — active Claims; tabs are navigation, not state changes.
 4 — Claims list — cluster text, linked source count and alignment state; generated relations are reported_by or uncertain. · frame 1 of 1
@@ -500,7 +507,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/claims-tablet.svg) · screen · tablet · Claims · frame 1 of 2 · route `/cases/:id/claims`
 
-1 — Primary navigation (top bar) — GET reads only; CLI owns ingest and runs.
+1 — Primary navigation (top bar) — global destinations only (case views open inside a case); GET reads only; CLI owns ingest and runs.
 2 — Claims header — title, synthetic context and available actions.
 3 — Case tabs (12) — active Claims; tabs are navigation, not state changes.
 4 — Claims list — cluster text, linked source count and alignment state; generated relations are reported_by or uncertain. · frame 1 of 2
@@ -512,7 +519,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/claims-tablet-part-2.svg) · screen · tablet · Claims · frame 2 of 2 · route `/cases/:id/claims`
 
-1 — Primary navigation (top bar) — GET reads only; CLI owns ingest and runs.
+1 — Primary navigation (top bar) — global destinations only (case views open inside a case); GET reads only; CLI owns ingest and runs.
 2 — Claims — frame 2 of 2; full coverage continues in the named companion frame.
 3 — Detail provenance — model origin stays visible and the frozen citation links to the inspector. · frame 2 of 2
 
@@ -520,7 +527,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/claims-mobile.svg) · screen · mobile · Claims · frame 1 of 3 · route `/cases/:id/claims`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Claims header — title, synthetic context and available actions.
 3 — Case tabs (12) — active Claims; the strip scrolls, no tab is removed.
 4 — Claims list — cluster text, linked source count and alignment state; generated relations are reported_by or uncertain. · frame 1 of 3
@@ -529,7 +536,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/claims-mobile-part-2.svg) · screen · mobile · Claims · frame 2 of 3 · route `/cases/:id/claims`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Claims — frame 2 of 3; full coverage continues in the named companion frame.
 3 — Selected claim detail — frozen citation reference, effective relation and assessment provenance. · frame 2 of 3
 4 — Claim actions — Inspect evidence opens the inspector; Open frozen citation opens the immutable citation reader. · frame 2 of 3
@@ -539,7 +546,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/claims-mobile-part-3.svg) · screen · mobile · Claims · frame 3 of 3 · route `/cases/:id/claims`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Claims — frame 3 of 3; full coverage continues in the named companion frame.
 3 — Detail provenance — model origin stays visible and the frozen citation links to the inspector. · frame 3 of 3
 
@@ -547,7 +554,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/capture-inspector-desktop.svg) · screen · desktop · Capture inspector · route `/cases/:id/evidence?claim=&evidence=&capture=`
 
-1 — Primary navigation — GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
+1 — Primary navigation — global destinations only (Network, Sources and Narratives open inside a case); GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
 2 — Capture inspector header — title, synthetic context and available actions.
 3 — Case tabs (12) — active Evidence; tabs are navigation, not state changes.
 4 — Claim and immutable citation — frozen claim text, relationship and model assessment provenance. · frame 1 of 1
@@ -561,7 +568,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/capture-inspector-tablet.svg) · screen · tablet · Capture inspector · frame 1 of 2 · route `/cases/:id/evidence?claim=&evidence=&capture=`
 
-1 — Primary navigation (top bar) — GET reads only; CLI owns ingest and runs.
+1 — Primary navigation (top bar) — global destinations only (case views open inside a case); GET reads only; CLI owns ingest and runs.
 2 — Capture inspector header — title, synthetic context and available actions.
 3 — Case tabs (12) — active Evidence; tabs are navigation, not state changes.
 4 — Claim and immutable citation — frozen claim text, relationship and model assessment provenance. · frame 1 of 2
@@ -573,7 +580,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/capture-inspector-tablet-part-2.svg) · screen · tablet · Capture inspector · frame 2 of 2 · route `/cases/:id/evidence?claim=&evidence=&capture=`
 
-1 — Primary navigation (top bar) — GET reads only; CLI owns ingest and runs.
+1 — Primary navigation (top bar) — global destinations only (case views open inside a case); GET reads only; CLI owns ingest and runs.
 2 — Capture inspector — frame 2 of 2; full coverage continues in the named companion frame.
 3 — Provenance — provisional publisher host, unknown independence and both source URLs. · frame 2 of 2
 4 — Reader notes — quotation validation rules and the synthetic-passage limitation. · frame 2 of 2
@@ -582,7 +589,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/capture-inspector-mobile.svg) · screen · mobile · Capture inspector · frame 1 of 3 · route `/cases/:id/evidence?claim=&evidence=&capture=`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Capture inspector header — title, synthetic context and available actions.
 3 — Case tabs (12) — active Evidence; the strip scrolls, no tab is removed.
 4 — Claim and immutable citation — frozen claim text, relationship and model assessment provenance. · frame 1 of 3
@@ -592,7 +599,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/capture-inspector-mobile-part-2.svg) · screen · mobile · Capture inspector · frame 2 of 3 · route `/cases/:id/evidence?claim=&evidence=&capture=`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Capture inspector — frame 2 of 3; full coverage continues in the named companion frame.
 3 — Synthetic passage block — grey box stands for captured text; labelled mock example, so no validated code-point range is claimed. · frame 2 of 3
 4 — Capture version selector and Open source control — an actual field plus a safe HTTP(S) link control; both are visible, not prose only. · frame 2 of 3
@@ -601,7 +608,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/capture-inspector-mobile-part-3.svg) · screen · mobile · Capture inspector · frame 3 of 3 · route `/cases/:id/evidence?claim=&evidence=&capture=`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Capture inspector — frame 3 of 3; full coverage continues in the named companion frame.
 3 — Provenance — provisional publisher host, unknown independence and both source URLs. · frame 3 of 3
 4 — Reader notes — quotation validation rules and the synthetic-passage limitation. · frame 3 of 3
@@ -610,7 +617,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/comparison-desktop.svg) · screen · desktop · Comparison · frame 1 of 2 · route `/cases/:id/compare?left=&right=&leftCapture=&rightCapture=`
 
-1 — Primary navigation — GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
+1 — Primary navigation — global destinations only (Network, Sources and Narratives open inside a case); GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
 2 — Comparison header — title, synthetic context and available actions.
 3 — Case tabs (12) — active Compare; tabs are navigation, not state changes.
 4 — Selection controls — four visible fields (left/right source and capture) plus Compare, Swap and Clear; selections stay in the URL. · frame 1 of 2
@@ -621,7 +628,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/comparison-desktop-part-2.svg) · screen · desktop · Comparison · frame 2 of 2 · route `/cases/:id/compare?left=&right=&leftCapture=&rightCapture=`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Comparison — frame 2 of 2; full coverage continues in the named companion frame.
 3 — Alignment rows — explicit 'Reported in both extractions' and 'Extracted only on left/right' labels, never omission or disagreement. · frame 2 of 2
 4 — Dependency warning — detected copy edge reasons; never presented as corroboration or independence. · frame 2 of 2
@@ -631,7 +638,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/comparison-tablet.svg) · screen · tablet · Comparison · frame 1 of 2 · route `/cases/:id/compare?left=&right=&leftCapture=&rightCapture=`
 
-1 — Primary navigation (top bar) — GET reads only; CLI owns ingest and runs.
+1 — Primary navigation (top bar) — global destinations only (case views open inside a case); GET reads only; CLI owns ingest and runs.
 2 — Comparison header — title, synthetic context and available actions.
 3 — Case tabs (12) — active Compare; tabs are navigation, not state changes.
 4 — Selection controls — four visible fields (left/right source and capture) plus Compare, Swap and Clear; selections stay in the URL. · frame 1 of 2
@@ -642,7 +649,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/comparison-tablet-part-2.svg) · screen · tablet · Comparison · frame 2 of 2 · route `/cases/:id/compare?left=&right=&leftCapture=&rightCapture=`
 
-1 — Primary navigation (top bar) — GET reads only; CLI owns ingest and runs.
+1 — Primary navigation (top bar) — global destinations only (case views open inside a case); GET reads only; CLI owns ingest and runs.
 2 — Comparison — frame 2 of 2; full coverage continues in the named companion frame.
 3 — Alignment rows — explicit 'Reported in both extractions' and 'Extracted only on left/right' labels, never omission or disagreement. · frame 2 of 2
 4 — Dependency warning — detected copy edge reasons; never presented as corroboration or independence. · frame 2 of 2
@@ -652,7 +659,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/comparison-mobile.svg) · screen · mobile · Comparison · frame 1 of 4 · route `/cases/:id/compare?left=&right=&leftCapture=&rightCapture=`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Comparison header — title, synthetic context and available actions.
 3 — Case tabs (12) — active Compare; the strip scrolls, no tab is removed.
 4 — Selection controls — four visible fields (left/right source and capture) plus Compare, Swap and Clear; selections stay in the URL. · frame 1 of 4
@@ -661,7 +668,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/comparison-mobile-part-2.svg) · screen · mobile · Comparison · frame 2 of 4 · route `/cases/:id/compare?left=&right=&leftCapture=&rightCapture=`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Comparison — frame 2 of 4; full coverage continues in the named companion frame.
 3 — Left source panel — its own capture time, hash and Open passage navigation. · frame 2 of 4
 4 — Right source panel — its own capture time, hash and Open passage navigation; desktop side by side, tablet and mobile stack. · frame 2 of 4
@@ -670,7 +677,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/comparison-mobile-part-3.svg) · screen · mobile · Comparison · frame 3 of 4 · route `/cases/:id/compare?left=&right=&leftCapture=&rightCapture=`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Comparison — frame 3 of 4; full coverage continues in the named companion frame.
 3 — Alignment rows — explicit 'Reported in both extractions' and 'Extracted only on left/right' labels, never omission or disagreement. · frame 3 of 4
 4 — Dependency warning — detected copy edge reasons; never presented as corroboration or independence. · frame 3 of 4
@@ -679,7 +686,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/comparison-mobile-part-4.svg) · screen · mobile · Comparison · frame 4 of 4 · route `/cases/:id/compare?left=&right=&leftCapture=&rightCapture=`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Comparison — frame 4 of 4; full coverage continues in the named companion frame.
 3 — Pagination controls — actual previous/next controls; offset stays in the URL. · frame 4 of 4
 
@@ -687,7 +694,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/source-provenance-desktop.svg) · screen · desktop · Source provenance · route `/cases/:id/sources`
 
-1 — Primary navigation — GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
+1 — Primary navigation — global destinations only (Network, Sources and Narratives open inside a case); GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
 2 — Source provenance header — title, synthetic context and available actions.
 3 — Case tabs (12) — active Evidence; tabs are navigation, not state changes.
 4 — Dependency groups — connected components with method and status; a singleton group has no detected edge. · frame 1 of 1
@@ -698,7 +705,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/source-provenance-tablet.svg) · screen · tablet · Source provenance · route `/cases/:id/sources`
 
-1 — Primary navigation (top bar) — GET reads only; CLI owns ingest and runs.
+1 — Primary navigation (top bar) — global destinations only (case views open inside a case); GET reads only; CLI owns ingest and runs.
 2 — Source provenance header — title, synthetic context and available actions.
 3 — Case tabs (12) — active Evidence; tabs are navigation, not state changes.
 4 — Dependency groups — connected components with method and status; a singleton group has no detected edge. · frame 1 of 1
@@ -709,7 +716,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/source-provenance-mobile.svg) · screen · mobile · Source provenance · frame 1 of 2 · route `/cases/:id/sources`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Source provenance header — title, synthetic context and available actions.
 3 — Case tabs (12) — active Evidence; the strip scrolls, no tab is removed.
 4 — Dependency groups — connected components with method and status; a singleton group has no detected edge. · frame 1 of 2
@@ -718,7 +725,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/source-provenance-mobile-part-2.svg) · screen · mobile · Source provenance · frame 2 of 2 · route `/cases/:id/sources`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Source provenance — frame 2 of 2; full coverage continues in the named companion frame.
 3 — Group detail — the copy edge is labelled dependency_detected and explicitly not independent; groups without an edge stay unknown. · frame 2 of 2
 4 — Coverage limits — v1 detection scope, disclosed rather than implied. · frame 2 of 2
@@ -727,7 +734,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/runs-changes-desktop.svg) · screen · desktop · Runs and changes · frame 1 of 2 · route `/cases/:id/changes?run=&offset=`
 
-1 — Primary navigation — GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
+1 — Primary navigation — global destinations only (Network, Sources and Narratives open inside a case); GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
 2 — Runs and changes header — title, synthetic context and available actions.
 3 — Case tabs (12) — active Changes; tabs are navigation, not state changes.
 4 — Grouped run selector — an actual selector field listing run-0007 (run-0006 selectable), plus Refresh and Permalink; the selection is pinned in the URL. · frame 1 of 2
@@ -739,7 +746,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/runs-changes-desktop-part-2.svg) · screen · desktop · Runs and changes · frame 2 of 2 · route `/cases/:id/changes?run=&offset=`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Runs and changes — frame 2 of 2; full coverage continues in the named companion frame.
 3 — Per-item run facts — origin run and observer run as separate recorded values; neither implies who caused a change. · frame 2 of 2
 4 — Delta pagination — offset lives in the URL; the selected run stays pinned. · frame 2 of 2
@@ -748,7 +755,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/runs-changes-tablet.svg) · screen · tablet · Runs and changes · frame 1 of 2 · route `/cases/:id/changes?run=&offset=`
 
-1 — Primary navigation (top bar) — GET reads only; CLI owns ingest and runs.
+1 — Primary navigation (top bar) — global destinations only (case views open inside a case); GET reads only; CLI owns ingest and runs.
 2 — Runs and changes header — title, synthetic context and available actions.
 3 — Case tabs (12) — active Changes; tabs are navigation, not state changes.
 4 — Grouped run selector — an actual selector field listing run-0007 (run-0006 selectable), plus Refresh and Permalink; the selection is pinned in the URL. · frame 1 of 2
@@ -759,7 +766,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/runs-changes-tablet-part-2.svg) · screen · tablet · Runs and changes · frame 2 of 2 · route `/cases/:id/changes?run=&offset=`
 
-1 — Primary navigation (top bar) — GET reads only; CLI owns ingest and runs.
+1 — Primary navigation (top bar) — global destinations only (case views open inside a case); GET reads only; CLI owns ingest and runs.
 2 — Runs and changes — frame 2 of 2; full coverage continues in the named companion frame.
 3 — Typed before/after rows — review_state_changed carries the case review state, not a claim verification state. · frame 2 of 2
 4 — Per-item run facts — origin run and observer run as separate recorded values; neither implies who caused a change. · frame 2 of 2
@@ -769,7 +776,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/runs-changes-mobile.svg) · screen · mobile · Runs and changes · frame 1 of 4 · route `/cases/:id/changes?run=&offset=`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Runs and changes header — title, synthetic context and available actions.
 3 — Case tabs (12) — active Changes; the strip scrolls, no tab is removed.
 4 — Grouped run selector — an actual selector field listing run-0007 (run-0006 selectable), plus Refresh and Permalink; the selection is pinned in the URL. · frame 1 of 4
@@ -779,7 +786,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/runs-changes-mobile-part-2.svg) · screen · mobile · Runs and changes · frame 2 of 4 · route `/cases/:id/changes?run=&offset=`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Runs and changes — frame 2 of 4; full coverage continues in the named companion frame.
 3 — Run semantics — pending, failed and attribution rules stated next to the selector. · frame 2 of 4
 
@@ -787,7 +794,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/runs-changes-mobile-part-3.svg) · screen · mobile · Runs and changes · frame 3 of 4 · route `/cases/:id/changes?run=&offset=`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Runs and changes — frame 3 of 4; full coverage continues in the named companion frame.
 3 — Typed before/after rows — review_state_changed carries the case review state, not a claim verification state. · frame 3 of 4
 
@@ -795,7 +802,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/runs-changes-mobile-part-4.svg) · screen · mobile · Runs and changes · frame 4 of 4 · route `/cases/:id/changes?run=&offset=`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Runs and changes — frame 4 of 4; full coverage continues in the named companion frame.
 3 — Per-item run facts — origin run and observer run as separate recorded values; neither implies who caused a change. · frame 4 of 4
 4 — Delta pagination — offset lives in the URL; the selected run stays pinned. · frame 4 of 4
@@ -804,7 +811,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/historical-snapshot-desktop.svg) · screen · desktop · Historical snapshot · route `/cases/:id/changes?run=&claim=&snapshot=`
 
-1 — Primary navigation — GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
+1 — Primary navigation — global destinations only (Network, Sources and Narratives open inside a case); GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
 2 — Historical snapshot header — title, synthetic context and available actions.
 3 — Snapshot metadata — frozen identifiers, versions and creation time. · frame 1 of 1
 4 — Frozen claim — claim text from the baseline snapshot, retrieved by immutable reference. · frame 1 of 1
@@ -815,7 +822,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/historical-snapshot-tablet.svg) · screen · tablet · Historical snapshot · route `/cases/:id/changes?run=&claim=&snapshot=`
 
-1 — Primary navigation (top bar) — GET reads only; CLI owns ingest and runs.
+1 — Primary navigation (top bar) — global destinations only (case views open inside a case); GET reads only; CLI owns ingest and runs.
 2 — Historical snapshot header — title, synthetic context and available actions.
 3 — Snapshot metadata — frozen identifiers, versions and creation time. · frame 1 of 1
 4 — Frozen claim — claim text from the baseline snapshot, retrieved by immutable reference. · frame 1 of 1
@@ -826,7 +833,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/historical-snapshot-mobile.svg) · screen · mobile · Historical snapshot · frame 1 of 2 · route `/cases/:id/changes?run=&claim=&snapshot=`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Historical snapshot header — title, synthetic context and available actions.
 3 — Snapshot metadata — frozen identifiers, versions and creation time. · frame 1 of 2
 4 — Frozen claim — claim text from the baseline snapshot, retrieved by immutable reference. · frame 1 of 2
@@ -836,7 +843,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/historical-snapshot-mobile-part-2.svg) · screen · mobile · Historical snapshot · frame 2 of 2 · route `/cases/:id/changes?run=&claim=&snapshot=`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Historical snapshot — frame 2 of 2; full coverage continues in the named companion frame.
 3 — Live-state note — distinguishes gone/rewritten from unchanged without attribution. · frame 2 of 2
 
@@ -844,7 +851,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/search-desktop.svg) · screen · desktop · Case search · frame 1 of 2 · route `/cases/:id/search?q=&type=&offset=`
 
-1 — Primary navigation — GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
+1 — Primary navigation — global destinations only (Network, Sources and Narratives open inside a case); GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
 2 — Case search header — title, synthetic context and available actions.
 3 — Case tabs (12) — active Search; tabs are navigation, not state changes.
 4 — Search filters — six visible fields: literal all-term query, type All/claim/evidence, publisher, claim status, and UTC published-from/before (before is end-exclusive). · frame 1 of 2
@@ -853,7 +860,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/search-desktop-part-2.svg) · screen · desktop · Case search · frame 2 of 2 · route `/cases/:id/search?q=&type=&offset=`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Case search — frame 2 of 2; full coverage continues in the named companion frame.
 3 — Results — plain-text mock snippets with the matched field; each row has Open result navigation. Snippets never imply a validated quotation. · frame 2 of 2
 4 — Pagination and permalink controls — result count and offset are shown with the results; offset is URL-persisted. · frame 2 of 2
@@ -862,7 +869,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/search-tablet.svg) · screen · tablet · Case search · frame 1 of 2 · route `/cases/:id/search?q=&type=&offset=`
 
-1 — Primary navigation (top bar) — GET reads only; CLI owns ingest and runs.
+1 — Primary navigation (top bar) — global destinations only (case views open inside a case); GET reads only; CLI owns ingest and runs.
 2 — Case search header — title, synthetic context and available actions.
 3 — Case tabs (12) — active Search; tabs are navigation, not state changes.
 4 — Search filters — six visible fields: literal all-term query, type All/claim/evidence, publisher, claim status, and UTC published-from/before (before is end-exclusive). · frame 1 of 2
@@ -872,7 +879,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/search-tablet-part-2.svg) · screen · tablet · Case search · frame 2 of 2 · route `/cases/:id/search?q=&type=&offset=`
 
-1 — Primary navigation (top bar) — GET reads only; CLI owns ingest and runs.
+1 — Primary navigation (top bar) — global destinations only (case views open inside a case); GET reads only; CLI owns ingest and runs.
 2 — Case search — frame 2 of 2; full coverage continues in the named companion frame.
 3 — Pagination and permalink controls — result count and offset are shown with the results; offset is URL-persisted. · frame 2 of 2
 
@@ -880,7 +887,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/search-mobile.svg) · screen · mobile · Case search · frame 1 of 2 · route `/cases/:id/search?q=&type=&offset=`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Case search header — title, synthetic context and available actions.
 3 — Case tabs (12) — active Search; the strip scrolls, no tab is removed.
 4 — Search filters — six visible fields: literal all-term query, type All/claim/evidence, publisher, claim status, and UTC published-from/before (before is end-exclusive). · frame 1 of 2
@@ -889,7 +896,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/search-mobile-part-2.svg) · screen · mobile · Case search · frame 2 of 2 · route `/cases/:id/search?q=&type=&offset=`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Case search — frame 2 of 2; full coverage continues in the named companion frame.
 3 — Results — plain-text mock snippets with the matched field; each row has Open result navigation. Snippets never imply a validated quotation. · frame 2 of 2
 4 — Pagination and permalink controls — result count and offset are shown with the results; offset is URL-persisted. · frame 2 of 2
@@ -898,7 +905,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/stage-history-desktop.svg) · screen · desktop · Run history (stage-oriented) · route `/cases/:id/run-history`
 
-1 — Primary navigation — GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
+1 — Primary navigation — global destinations only (Network, Sources and Narratives open inside a case); GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
 2 — Run history (stage-oriented) header — title, synthetic context and available actions.
 3 — Case tabs (12) — active Run history; tabs are navigation, not state changes.
 4 — Stage attempts — per-stage model, duration, fallback flag, status and recorded time; not grouped investigation runs. · frame 1 of 1
@@ -908,7 +915,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/stage-history-tablet.svg) · screen · tablet · Run history (stage-oriented) · route `/cases/:id/run-history`
 
-1 — Primary navigation (top bar) — GET reads only; CLI owns ingest and runs.
+1 — Primary navigation (top bar) — global destinations only (case views open inside a case); GET reads only; CLI owns ingest and runs.
 2 — Run history (stage-oriented) header — title, synthetic context and available actions.
 3 — Case tabs (12) — active Run history; tabs are navigation, not state changes.
 4 — Stage attempts — per-stage model, duration, fallback flag, status and recorded time; not grouped investigation runs. · frame 1 of 1
@@ -918,7 +925,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/stage-history-mobile.svg) · screen · mobile · Run history (stage-oriented) · frame 1 of 3 · route `/cases/:id/run-history`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Run history (stage-oriented) header — title, synthetic context and available actions.
 3 — Case tabs (12) — active Run history; the strip scrolls, no tab is removed.
 4 — Stage attempts — per-stage model, duration, fallback flag, status and recorded time; not grouped investigation runs. · frame 1 of 3
@@ -927,7 +934,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/stage-history-mobile-part-2.svg) · screen · mobile · Run history (stage-oriented) · frame 2 of 3 · route `/cases/:id/run-history`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Run history (stage-oriented) — frame 2 of 3; full coverage continues in the named companion frame.
 3 — Stage attempts — per-stage model, duration, fallback flag, status and recorded time; not grouped investigation runs. · frame 2 of 3
 
@@ -935,7 +942,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/stage-history-mobile-part-3.svg) · screen · mobile · Run history (stage-oriented) · frame 3 of 3 · route `/cases/:id/run-history`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Run history (stage-oriented) — frame 3 of 3; full coverage continues in the named companion frame.
 3 — Stage attempts — per-stage model, duration, fallback flag, status and recorded time; not grouped investigation runs. · frame 3 of 3
 4 — Interpretation — this tab remains stage-oriented; grouped runs and deltas are a separate reader. · frame 3 of 3
@@ -944,7 +951,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/pipeline-desktop.svg) · screen · desktop · Pipeline monitor · route `/cases/:id/pipeline`
 
-1 — Primary navigation — GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
+1 — Primary navigation — global destinations only (Network, Sources and Narratives open inside a case); GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
 2 — Pipeline monitor header — title, synthetic context and available actions.
 3 — Configured stages — configuration order and enabled flag; configuration is not an attempt. · frame 1 of 1
 4 — Recorded attempts — only actually recorded attempts; an unrecorded stage is not a success. · frame 1 of 1
@@ -953,7 +960,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/pipeline-tablet.svg) · screen · tablet · Pipeline monitor · route `/cases/:id/pipeline`
 
-1 — Primary navigation (top bar) — GET reads only; CLI owns ingest and runs.
+1 — Primary navigation (top bar) — global destinations only (case views open inside a case); GET reads only; CLI owns ingest and runs.
 2 — Pipeline monitor header — title, synthetic context and available actions.
 3 — Configured stages — configuration order and enabled flag; configuration is not an attempt. · frame 1 of 1
 4 — Recorded attempts — only actually recorded attempts; an unrecorded stage is not a success. · frame 1 of 1
@@ -962,7 +969,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/pipeline-mobile.svg) · screen · mobile · Pipeline monitor · frame 1 of 2 · route `/cases/:id/pipeline`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Pipeline monitor header — title, synthetic context and available actions.
 3 — Configured stages — configuration order and enabled flag; configuration is not an attempt. · frame 1 of 2
 
@@ -970,7 +977,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/pipeline-mobile-part-2.svg) · screen · mobile · Pipeline monitor · frame 2 of 2 · route `/cases/:id/pipeline`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Pipeline monitor — frame 2 of 2; full coverage continues in the named companion frame.
 3 — Recorded attempts — only actually recorded attempts; an unrecorded stage is not a success. · frame 2 of 2
 
@@ -978,7 +985,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/exception-queue-desktop.svg) · screen · desktop · Exception queue · route `/cases/:id/exceptions`
 
-1 — Primary navigation — GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
+1 — Primary navigation — global destinations only (Network, Sources and Narratives open inside a case); GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
 2 — Exception queue header — title, synthetic context and available actions.
 3 — Case tabs (12) — active Exceptions; tabs are navigation, not state changes.
 4 — Exception table — pending disables all row actions; an open row enables Resolve/Defer, a closed row enables Reopen. · frame 1 of 1
@@ -988,7 +995,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/exception-queue-tablet.svg) · screen · tablet · Exception queue · route `/cases/:id/exceptions`
 
-1 — Primary navigation (top bar) — GET reads only; CLI owns ingest and runs.
+1 — Primary navigation (top bar) — global destinations only (case views open inside a case); GET reads only; CLI owns ingest and runs.
 2 — Exception queue header — title, synthetic context and available actions.
 3 — Case tabs (12) — active Exceptions; tabs are navigation, not state changes.
 4 — Exception table — pending disables all row actions; an open row enables Resolve/Defer, a closed row enables Reopen. · frame 1 of 1
@@ -998,7 +1005,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/exception-queue-mobile.svg) · screen · mobile · Exception queue · frame 1 of 2 · route `/cases/:id/exceptions`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Exception queue header — title, synthetic context and available actions.
 3 — Case tabs (12) — active Exceptions; the strip scrolls, no tab is removed.
 4 — Exception table — pending disables all row actions; an open row enables Resolve/Defer, a closed row enables Reopen. · frame 1 of 2
@@ -1007,7 +1014,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/exception-queue-mobile-part-2.svg) · screen · mobile · Exception queue · frame 2 of 2 · route `/cases/:id/exceptions`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Exception queue — frame 2 of 2; full coverage continues in the named companion frame.
 3 — Exception actions — the pending row disables Resolve, Defer and Reopen; open and closed rows enable their listed actions. · frame 2 of 2
 
@@ -1015,7 +1022,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/parties-desktop.svg) · screen · desktop · Parties · route `/cases/:id/parties`
 
-1 — Primary navigation — GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
+1 — Primary navigation — global destinations only (Network, Sources and Narratives open inside a case); GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
 2 — Parties header — title, synthetic context and available actions.
 3 — Case tabs (12) — active Parties; tabs are navigation, not state changes.
 4 — Party table — recorded, inferred or confirmed basis; counts are recorded rows, never guessed stance. · frame 1 of 1
@@ -1026,7 +1033,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/parties-tablet.svg) · screen · tablet · Parties · route `/cases/:id/parties`
 
-1 — Primary navigation (top bar) — GET reads only; CLI owns ingest and runs.
+1 — Primary navigation (top bar) — global destinations only (case views open inside a case); GET reads only; CLI owns ingest and runs.
 2 — Parties header — title, synthetic context and available actions.
 3 — Case tabs (12) — active Parties; tabs are navigation, not state changes.
 4 — Party table — recorded, inferred or confirmed basis; counts are recorded rows, never guessed stance. · frame 1 of 1
@@ -1037,7 +1044,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/parties-mobile.svg) · screen · mobile · Parties · frame 1 of 2 · route `/cases/:id/parties`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Parties header — title, synthetic context and available actions.
 3 — Case tabs (12) — active Parties; the strip scrolls, no tab is removed.
 4 — Party table — recorded, inferred or confirmed basis; counts are recorded rows, never guessed stance. · frame 1 of 2
@@ -1046,7 +1053,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/parties-mobile-part-2.svg) · screen · mobile · Parties · frame 2 of 2 · route `/cases/:id/parties`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Parties — frame 2 of 2; full coverage continues in the named companion frame.
 3 — Expanded party accordion — recorded/model position, concerns, priorities, supported/contested/unique claim counts and explicit unavailable fields. · frame 2 of 2
 4 — Honesty rules — recorded/model party position only; missing data is shown, never invented. · frame 2 of 2
@@ -1055,7 +1062,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/geographic-map-desktop.svg) · screen · desktop · Geographic map · route `/cases/:id/map`
 
-1 — Primary navigation — GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
+1 — Primary navigation — global destinations only (Network, Sources and Narratives open inside a case); GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
 2 — Geographic map header — title, synthetic context and available actions.
 3 — Case tabs (12) — active Map; tabs are navigation, not state changes.
 4 — Map area — placeholder X and geotagged markers; no map tiles are loaded or implied. · frame 1 of 1
@@ -1066,7 +1073,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/geographic-map-tablet.svg) · screen · tablet · Geographic map · route `/cases/:id/map`
 
-1 — Primary navigation (top bar) — GET reads only; CLI owns ingest and runs.
+1 — Primary navigation (top bar) — global destinations only (case views open inside a case); GET reads only; CLI owns ingest and runs.
 2 — Geographic map header — title, synthetic context and available actions.
 3 — Case tabs (12) — active Map; tabs are navigation, not state changes.
 4 — Map area — placeholder X and geotagged markers; no map tiles are loaded or implied. · frame 1 of 1
@@ -1077,7 +1084,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/geographic-map-mobile.svg) · screen · mobile · Geographic map · frame 1 of 2 · route `/cases/:id/map`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Geographic map header — title, synthetic context and available actions.
 3 — Case tabs (12) — active Map; the strip scrolls, no tab is removed.
 4 — Map area — placeholder X and geotagged markers; no map tiles are loaded or implied. · frame 1 of 2
@@ -1087,7 +1094,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/geographic-map-mobile-part-2.svg) · screen · mobile · Geographic map · frame 2 of 2 · route `/cases/:id/map`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Geographic map — frame 2 of 2; full coverage continues in the named companion frame.
 3 — Place data — untagged stays unknown; the map is a placeholder, not a live basemap. · frame 2 of 2
 
@@ -1095,7 +1102,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/timeline-desktop.svg) · screen · desktop · Timeline · route `/cases/:id/timeline`
 
-1 — Primary navigation — GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
+1 — Primary navigation — global destinations only (Network, Sources and Narratives open inside a case); GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
 2 — Timeline header — title, synthetic context and available actions.
 3 — Case tabs (12) — active Timeline; tabs are navigation, not state changes.
 4 — Timeline entries — each row shows a verification state; a missing timestamp is shown as unknown and never inferred. · frame 1 of 1
@@ -1105,7 +1112,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/timeline-tablet.svg) · screen · tablet · Timeline · route `/cases/:id/timeline`
 
-1 — Primary navigation (top bar) — GET reads only; CLI owns ingest and runs.
+1 — Primary navigation (top bar) — global destinations only (case views open inside a case); GET reads only; CLI owns ingest and runs.
 2 — Timeline header — title, synthetic context and available actions.
 3 — Case tabs (12) — active Timeline; tabs are navigation, not state changes.
 4 — Timeline entries — each row shows a verification state; a missing timestamp is shown as unknown and never inferred. · frame 1 of 1
@@ -1115,7 +1122,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/timeline-mobile.svg) · screen · mobile · Timeline · frame 1 of 2 · route `/cases/:id/timeline`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Timeline header — title, synthetic context and available actions.
 3 — Case tabs (12) — active Timeline; the strip scrolls, no tab is removed.
 4 — Timeline entries — each row shows a verification state; a missing timestamp is shown as unknown and never inferred. · frame 1 of 2
@@ -1124,7 +1131,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/timeline-mobile-part-2.svg) · screen · mobile · Timeline · frame 2 of 2 · route `/cases/:id/timeline`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Timeline — frame 2 of 2; full coverage continues in the named companion frame.
 3 — Verification vocabulary — the six stored states; an unexpected raw value renders as 'Unrecognized status', and an unknown date stays distinct from the state. · frame 2 of 2
 
@@ -1132,7 +1139,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/report-desktop.svg) · screen · desktop · Report · route `/cases/:id/report`
 
-1 — Primary navigation — GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
+1 — Primary navigation — global destinations only (Network, Sources and Narratives open inside a case); GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
 2 — Report header — title, synthetic context and available actions.
 3 — Case tabs (12) — active Report; tabs are navigation, not state changes.
 4 — Report pane — document preview plus Markdown/JSON downloads; a missing artifact keeps its control disabled. · frame 1 of 1
@@ -1143,7 +1150,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/report-tablet.svg) · screen · tablet · Report · route `/cases/:id/report`
 
-1 — Primary navigation (top bar) — GET reads only; CLI owns ingest and runs.
+1 — Primary navigation (top bar) — global destinations only (case views open inside a case); GET reads only; CLI owns ingest and runs.
 2 — Report header — title, synthetic context and available actions.
 3 — Case tabs (12) — active Report; tabs are navigation, not state changes.
 4 — Report pane — document preview plus Markdown/JSON downloads; a missing artifact keeps its control disabled. · frame 1 of 1
@@ -1154,7 +1161,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/report-mobile.svg) · screen · mobile · Report · frame 1 of 2 · route `/cases/:id/report`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Report header — title, synthetic context and available actions.
 3 — Case tabs (12) — active Report; the strip scrolls, no tab is removed.
 4 — Report pane — document preview plus Markdown/JSON downloads; a missing artifact keeps its control disabled. · frame 1 of 2
@@ -1164,7 +1171,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/report-mobile-part-2.svg) · screen · mobile · Report · frame 2 of 2 · route `/cases/:id/report`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Report — frame 2 of 2; full coverage continues in the named companion frame.
 3 — Historical reports — report documents bind to their run and snapshot. · frame 2 of 2
 
@@ -1172,7 +1179,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/corroboration-network-desktop.svg) · screen · desktop · Corroboration network · route `/cases/:id/network`
 
-1 — Primary navigation — GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
+1 — Primary navigation — global destinations only (Network, Sources and Narratives open inside a case); GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
 2 — Corroboration network header — title, synthetic context and available actions.
 3 — Claim and source graph — rect nodes and line edges; a shared edge is not independent proof. · frame 1 of 1
 4 — Adversarial investigation flow — Collector, classifier, investigators, Arbiter; only recorded outcomes are shown, never completed merely because configured. · frame 1 of 1
@@ -1183,7 +1190,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/corroboration-network-tablet.svg) · screen · tablet · Corroboration network · frame 1 of 2 · route `/cases/:id/network`
 
-1 — Primary navigation (top bar) — GET reads only; CLI owns ingest and runs.
+1 — Primary navigation (top bar) — global destinations only (case views open inside a case); GET reads only; CLI owns ingest and runs.
 2 — Corroboration network header — title, synthetic context and available actions.
 3 — Claim and source graph — rect nodes and line edges; a shared edge is not independent proof. · frame 1 of 2
 4 — Adversarial investigation flow — Collector, classifier, investigators, Arbiter; only recorded outcomes are shown, never completed merely because configured. · frame 1 of 2
@@ -1193,7 +1200,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/corroboration-network-tablet-part-2.svg) · screen · tablet · Corroboration network · frame 2 of 2 · route `/cases/:id/network`
 
-1 — Primary navigation (top bar) — GET reads only; CLI owns ingest and runs.
+1 — Primary navigation (top bar) — global destinations only (case views open inside a case); GET reads only; CLI owns ingest and runs.
 2 — Corroboration network — frame 2 of 2; full coverage continues in the named companion frame.
 3 — Reading rule — no independence or completion claim from graph shape alone. · frame 2 of 2
 
@@ -1201,7 +1208,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/corroboration-network-mobile.svg) · screen · mobile · Corroboration network · frame 1 of 2 · route `/cases/:id/network`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Corroboration network header — title, synthetic context and available actions.
 3 — Claim and source graph — rect nodes and line edges; a shared edge is not independent proof. · frame 1 of 2
 4 — Adversarial investigation flow — Collector, classifier, investigators, Arbiter; only recorded outcomes are shown, never completed merely because configured. · frame 1 of 2
@@ -1210,7 +1217,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/corroboration-network-mobile-part-2.svg) · screen · mobile · Corroboration network · frame 2 of 2 · route `/cases/:id/network`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Corroboration network — frame 2 of 2; full coverage continues in the named companion frame.
 3 — Edge and outcome list — relationship per edge plus the prior run's recorded Arbiter counts; facts and allegations are model classifications, not certification. · frame 2 of 2
 4 — Reading rule — no independence or completion claim from graph shape alone. · frame 2 of 2
@@ -1219,7 +1226,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/narratives-desktop.svg) · screen · desktop · Narratives · route `/cases/:id/narratives`
 
-1 — Primary navigation — GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
+1 — Primary navigation — global destinations only (Network, Sources and Narratives open inside a case); GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
 2 — Narratives header — title, synthetic context and available actions.
 3 — Persisted clusters — stored cluster rows with their claim counts; no stance is generated on read. · frame 1 of 1
 4 — Cluster detail — member claims and shared terms; the reader never invents a narrative position. · frame 1 of 1
@@ -1229,7 +1236,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/narratives-tablet.svg) · screen · tablet · Narratives · route `/cases/:id/narratives`
 
-1 — Primary navigation (top bar) — GET reads only; CLI owns ingest and runs.
+1 — Primary navigation (top bar) — global destinations only (case views open inside a case); GET reads only; CLI owns ingest and runs.
 2 — Narratives header — title, synthetic context and available actions.
 3 — Persisted clusters — stored cluster rows with their claim counts; no stance is generated on read. · frame 1 of 1
 4 — Cluster detail — member claims and shared terms; the reader never invents a narrative position. · frame 1 of 1
@@ -1239,7 +1246,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/narratives-mobile.svg) · screen · mobile · Narratives · route `/cases/:id/narratives`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Narratives header — title, synthetic context and available actions.
 3 — Persisted clusters — stored cluster rows with their claim counts; no stance is generated on read. · frame 1 of 1
 4 — Cluster detail — member claims and shared terms; the reader never invents a narrative position. · frame 1 of 1
@@ -1249,7 +1256,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/monitoring-desktop.svg) · screen · desktop · Monitoring · route `/monitoring`
 
-1 — Primary navigation — GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
+1 — Primary navigation — global destinations only (Network, Sources and Narratives open inside a case); GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
 2 — Monitoring header — title, synthetic context and available actions.
 3 — Recorded checks — stored observation time and status only; no health, scheduler or alert state. · frame 1 of 1
 4 — Scope note — monitoring is a recorded-status reader, not an operations dashboard. · frame 1 of 1
@@ -1258,7 +1265,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/monitoring-tablet.svg) · screen · tablet · Monitoring · route `/monitoring`
 
-1 — Primary navigation (top bar) — GET reads only; CLI owns ingest and runs.
+1 — Primary navigation (top bar) — global destinations only (case views open inside a case); GET reads only; CLI owns ingest and runs.
 2 — Monitoring header — title, synthetic context and available actions.
 3 — Recorded checks — stored observation time and status only; no health, scheduler or alert state. · frame 1 of 1
 4 — Scope note — monitoring is a recorded-status reader, not an operations dashboard. · frame 1 of 1
@@ -1267,7 +1274,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/monitoring-mobile.svg) · screen · mobile · Monitoring · frame 1 of 2 · route `/monitoring`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Monitoring header — title, synthetic context and available actions.
 3 — Recorded checks — stored observation time and status only; no health, scheduler or alert state. · frame 1 of 2
 
@@ -1275,7 +1282,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/monitoring-mobile-part-2.svg) · screen · mobile · Monitoring · frame 2 of 2 · route `/monitoring`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Monitoring — frame 2 of 2; full coverage continues in the named companion frame.
 3 — Scope note — monitoring is a recorded-status reader, not an operations dashboard. · frame 2 of 2
 
@@ -1283,7 +1290,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/ai-info-desktop.svg) · screen · desktop · AI integration info · route `/ai-info`
 
-1 — Primary navigation — GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
+1 — Primary navigation — global destinations only (Network, Sources and Narratives open inside a case); GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
 2 — AI integration info header — title, synthetic context and available actions.
 3 — Capabilities — available and unavailable features stated explicitly; no general chatbot. · frame 1 of 1
 4 — Provenance note — model assessment origin stays visible and unknown origin stays unknown. · frame 1 of 1
@@ -1293,7 +1300,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/ai-info-tablet.svg) · screen · tablet · AI integration info · route `/ai-info`
 
-1 — Primary navigation (top bar) — GET reads only; CLI owns ingest and runs.
+1 — Primary navigation (top bar) — global destinations only (case views open inside a case); GET reads only; CLI owns ingest and runs.
 2 — AI integration info header — title, synthetic context and available actions.
 3 — Capabilities — available and unavailable features stated explicitly; no general chatbot. · frame 1 of 1
 4 — Provenance note — model assessment origin stays visible and unknown origin stays unknown. · frame 1 of 1
@@ -1303,7 +1310,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/ai-info-mobile.svg) · screen · mobile · AI integration info · frame 1 of 2 · route `/ai-info`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — AI integration info header — title, synthetic context and available actions.
 3 — Capabilities — available and unavailable features stated explicitly; no general chatbot. · frame 1 of 2
 
@@ -1311,7 +1318,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/ai-info-mobile-part-2.svg) · screen · mobile · AI integration info · frame 2 of 2 · route `/ai-info`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — AI integration info — frame 2 of 2; full coverage continues in the named companion frame.
 3 — Provenance note — model assessment origin stays visible and unknown origin stays unknown. · frame 2 of 2
 4 — Unavailable features — listed rather than hidden. · frame 2 of 2
@@ -1320,7 +1327,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/shared-loading-desktop.svg) · state · desktop · Loading — cases · parent `case-explorer`
 
-1 — Primary navigation — GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
+1 — Primary navigation — global destinations only (Network, Sources and Narratives open inside a case); GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
 2 — Loading — cases header — title, synthetic context and available actions.
 3 — Loading skeleton — pending request; no partial rows or totals are asserted. · frame 1 of 1
 4 — State scope note — what the state does and does not assert. · frame 1 of 1
@@ -1330,7 +1337,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/shared-loading-tablet.svg) · state · tablet · Loading — cases · parent `case-explorer`
 
-1 — Primary navigation (top bar) — GET reads only; CLI owns ingest and runs.
+1 — Primary navigation (top bar) — global destinations only (case views open inside a case); GET reads only; CLI owns ingest and runs.
 2 — Loading — cases header — title, synthetic context and available actions.
 3 — Loading skeleton — pending request; no partial rows or totals are asserted. · frame 1 of 1
 4 — State scope note — what the state does and does not assert. · frame 1 of 1
@@ -1340,7 +1347,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/shared-loading-mobile.svg) · state · mobile · Loading — cases · parent `case-explorer`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Loading — cases header — title, synthetic context and available actions.
 3 — Loading skeleton — pending request; no partial rows or totals are asserted. · frame 1 of 1
 4 — State scope note — what the state does and does not assert. · frame 1 of 1
@@ -1350,7 +1357,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/shared-empty-desktop.svg) · state · desktop · Empty — no cases · parent `case-explorer`
 
-1 — Primary navigation — GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
+1 — Primary navigation — global destinations only (Network, Sources and Narratives open inside a case); GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
 2 — Empty — no cases header — title, synthetic context and available actions.
 3 — Empty state — a valid empty result is not an error and not a failed read. · frame 1 of 1
 4 — State scope note — what the state does and does not assert. · frame 1 of 1
@@ -1360,7 +1367,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/shared-empty-tablet.svg) · state · tablet · Empty — no cases · parent `case-explorer`
 
-1 — Primary navigation (top bar) — GET reads only; CLI owns ingest and runs.
+1 — Primary navigation (top bar) — global destinations only (case views open inside a case); GET reads only; CLI owns ingest and runs.
 2 — Empty — no cases header — title, synthetic context and available actions.
 3 — Empty state — a valid empty result is not an error and not a failed read. · frame 1 of 1
 4 — State scope note — what the state does and does not assert. · frame 1 of 1
@@ -1370,7 +1377,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/shared-empty-mobile.svg) · state · mobile · Empty — no cases · parent `case-explorer`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Empty — no cases header — title, synthetic context and available actions.
 3 — Empty state — a valid empty result is not an error and not a failed read. · frame 1 of 1
 4 — State scope note — what the state does and does not assert. · frame 1 of 1
@@ -1380,7 +1387,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/shared-not-found-desktop.svg) · state · desktop · Not found — unknown case or tab · parent `case-overview`
 
-1 — Primary navigation — GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
+1 — Primary navigation — global destinations only (Network, Sources and Narratives open inside a case); GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
 2 — Not found — unknown case or tab header — title, synthetic context and available actions.
 3 — 404 state — unknown case id or unknown tab route; no substitution. · frame 1 of 1
 4 — State scope note — what the state does and does not assert. · frame 1 of 1
@@ -1390,7 +1397,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/shared-not-found-tablet.svg) · state · tablet · Not found — unknown case or tab · parent `case-overview`
 
-1 — Primary navigation (top bar) — GET reads only; CLI owns ingest and runs.
+1 — Primary navigation (top bar) — global destinations only (case views open inside a case); GET reads only; CLI owns ingest and runs.
 2 — Not found — unknown case or tab header — title, synthetic context and available actions.
 3 — 404 state — unknown case id or unknown tab route; no substitution. · frame 1 of 1
 4 — State scope note — what the state does and does not assert. · frame 1 of 1
@@ -1400,7 +1407,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/shared-not-found-mobile.svg) · state · mobile · Not found — unknown case or tab · parent `case-overview`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Not found — unknown case or tab header — title, synthetic context and available actions.
 3 — 404 state — unknown case id or unknown tab route; no substitution. · frame 1 of 1
 4 — State scope note — what the state does and does not assert. · frame 1 of 1
@@ -1410,7 +1417,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/shared-network-error-desktop.svg) · state · desktop · Network error — dashboard · parent `dashboard`
 
-1 — Primary navigation — GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
+1 — Primary navigation — global destinations only (Network, Sources and Narratives open inside a case); GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
 2 — Network error — dashboard header — title, synthetic context and available actions.
 3 — Network error — retryable failed read, visually distinct from empty. · frame 1 of 1
 4 — State scope note — what the state does and does not assert. · frame 1 of 1
@@ -1420,7 +1427,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/shared-network-error-tablet.svg) · state · tablet · Network error — dashboard · parent `dashboard`
 
-1 — Primary navigation (top bar) — GET reads only; CLI owns ingest and runs.
+1 — Primary navigation (top bar) — global destinations only (case views open inside a case); GET reads only; CLI owns ingest and runs.
 2 — Network error — dashboard header — title, synthetic context and available actions.
 3 — Network error — retryable failed read, visually distinct from empty. · frame 1 of 1
 4 — State scope note — what the state does and does not assert. · frame 1 of 1
@@ -1430,7 +1437,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/shared-network-error-mobile.svg) · state · mobile · Network error — dashboard · parent `dashboard`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Network error — dashboard header — title, synthetic context and available actions.
 3 — Network error — retryable failed read, visually distinct from empty. · frame 1 of 1
 4 — State scope note — what the state does and does not assert. · frame 1 of 1
@@ -1440,7 +1447,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/inspector-missing-quotation-desktop.svg) · state · desktop · Inspector — missing quotation · parent `capture-inspector`
 
-1 — Primary navigation — GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
+1 — Primary navigation — global destinations only (Network, Sources and Narratives open inside a case); GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
 2 — Inspector — missing quotation header — title, synthetic context and available actions.
 3 — Source list — one link has no quotation proposal; the reason is stated per row. · frame 1 of 1
 4 — No-quotation block — nothing is highlighted and no offsets are claimed. · frame 1 of 1
@@ -1450,7 +1457,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/inspector-missing-quotation-tablet.svg) · state · tablet · Inspector — missing quotation · parent `capture-inspector`
 
-1 — Primary navigation (top bar) — GET reads only; CLI owns ingest and runs.
+1 — Primary navigation (top bar) — global destinations only (case views open inside a case); GET reads only; CLI owns ingest and runs.
 2 — Inspector — missing quotation header — title, synthetic context and available actions.
 3 — Source list — one link has no quotation proposal; the reason is stated per row. · frame 1 of 1
 4 — No-quotation block — nothing is highlighted and no offsets are claimed. · frame 1 of 1
@@ -1460,7 +1467,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/inspector-missing-quotation-mobile.svg) · state · mobile · Inspector — missing quotation · parent `capture-inspector`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Inspector — missing quotation header — title, synthetic context and available actions.
 3 — Source list — one link has no quotation proposal; the reason is stated per row. · frame 1 of 1
 4 — No-quotation block — nothing is highlighted and no offsets are claimed. · frame 1 of 1
@@ -1470,7 +1477,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/inspector-source-unavailable-desktop.svg) · state · desktop · Inspector — source unavailable · parent `capture-inspector`
 
-1 — Primary navigation — GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
+1 — Primary navigation — global destinations only (Network, Sources and Narratives open inside a case); GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
 2 — Inspector — source unavailable header — title, synthetic context and available actions.
 3 — Unavailable capture — the quotation cannot be highlighted; reason stated. · frame 1 of 1
 4 — Metadata pane — capture identity remains visible even when the body is unavailable. · frame 1 of 1
@@ -1480,7 +1487,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/inspector-source-unavailable-tablet.svg) · state · tablet · Inspector — source unavailable · parent `capture-inspector`
 
-1 — Primary navigation (top bar) — GET reads only; CLI owns ingest and runs.
+1 — Primary navigation (top bar) — global destinations only (case views open inside a case); GET reads only; CLI owns ingest and runs.
 2 — Inspector — source unavailable header — title, synthetic context and available actions.
 3 — Unavailable capture — the quotation cannot be highlighted; reason stated. · frame 1 of 1
 4 — Metadata pane — capture identity remains visible even when the body is unavailable. · frame 1 of 1
@@ -1490,7 +1497,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/inspector-source-unavailable-mobile.svg) · state · mobile · Inspector — source unavailable · parent `capture-inspector`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Inspector — source unavailable header — title, synthetic context and available actions.
 3 — Unavailable capture — the quotation cannot be highlighted; reason stated. · frame 1 of 1
 4 — Metadata pane — capture identity remains visible even when the body is unavailable. · frame 1 of 1
@@ -1500,7 +1507,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/inspector-ambiguous-desktop.svg) · state · desktop · Inspector — ambiguous quotation · parent `capture-inspector`
 
-1 — Primary navigation — GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
+1 — Primary navigation — global destinations only (Network, Sources and Narratives open inside a case); GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
 2 — Inspector — ambiguous quotation header — title, synthetic context and available actions.
 3 — Ambiguity list — repeated exact matches without disambiguating offsets; nothing is highlighted. · frame 1 of 1
 4 — State scope note — what the state does and does not assert. · frame 1 of 1
@@ -1510,7 +1517,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/inspector-ambiguous-tablet.svg) · state · tablet · Inspector — ambiguous quotation · parent `capture-inspector`
 
-1 — Primary navigation (top bar) — GET reads only; CLI owns ingest and runs.
+1 — Primary navigation (top bar) — global destinations only (case views open inside a case); GET reads only; CLI owns ingest and runs.
 2 — Inspector — ambiguous quotation header — title, synthetic context and available actions.
 3 — Ambiguity list — repeated exact matches without disambiguating offsets; nothing is highlighted. · frame 1 of 1
 4 — State scope note — what the state does and does not assert. · frame 1 of 1
@@ -1520,7 +1527,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/inspector-ambiguous-mobile.svg) · state · mobile · Inspector — ambiguous quotation · parent `capture-inspector`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Inspector — ambiguous quotation header — title, synthetic context and available actions.
 3 — Ambiguity list — repeated exact matches without disambiguating offsets; nothing is highlighted. · frame 1 of 1
 4 — State scope note — what the state does and does not assert. · frame 1 of 1
@@ -1530,7 +1537,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/inspector-no-match-desktop.svg) · state · desktop · Inspector — quotation not in scope · parent `capture-inspector`
 
-1 — Primary navigation — GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
+1 — Primary navigation — global destinations only (Network, Sources and Narratives open inside a case); GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
 2 — Inspector — quotation not in scope header — title, synthetic context and available actions.
 3 — No-match state — no highlight and no scope widening on read. · frame 1 of 1
 4 — Recorded scope — the reader does not search outside the recorded scope. · frame 1 of 1
@@ -1540,7 +1547,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/inspector-no-match-tablet.svg) · state · tablet · Inspector — quotation not in scope · parent `capture-inspector`
 
-1 — Primary navigation (top bar) — GET reads only; CLI owns ingest and runs.
+1 — Primary navigation (top bar) — global destinations only (case views open inside a case); GET reads only; CLI owns ingest and runs.
 2 — Inspector — quotation not in scope header — title, synthetic context and available actions.
 3 — No-match state — no highlight and no scope widening on read. · frame 1 of 1
 4 — Recorded scope — the reader does not search outside the recorded scope. · frame 1 of 1
@@ -1550,7 +1557,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/inspector-no-match-mobile.svg) · state · mobile · Inspector — quotation not in scope · parent `capture-inspector`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Inspector — quotation not in scope header — title, synthetic context and available actions.
 3 — No-match state — no highlight and no scope widening on read. · frame 1 of 1
 4 — Recorded scope — the reader does not search outside the recorded scope. · frame 1 of 1
@@ -1560,7 +1567,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/inspector-legacy-desktop.svg) · state · desktop · Inspector — legacy snapshot · parent `capture-inspector`
 
-1 — Primary navigation — GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
+1 — Primary navigation — global destinations only (Network, Sources and Narratives open inside a case); GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
 2 — Inspector — legacy snapshot header — title, synthetic context and available actions.
 3 — Legacy capture — imported text is labelled legacy_snapshot with unknown observation time. · frame 1 of 1
 4 — State scope note — what the state does and does not assert. · frame 1 of 1
@@ -1570,7 +1577,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/inspector-legacy-tablet.svg) · state · tablet · Inspector — legacy snapshot · parent `capture-inspector`
 
-1 — Primary navigation (top bar) — GET reads only; CLI owns ingest and runs.
+1 — Primary navigation (top bar) — global destinations only (case views open inside a case); GET reads only; CLI owns ingest and runs.
 2 — Inspector — legacy snapshot header — title, synthetic context and available actions.
 3 — Legacy capture — imported text is labelled legacy_snapshot with unknown observation time. · frame 1 of 1
 4 — State scope note — what the state does and does not assert. · frame 1 of 1
@@ -1580,7 +1587,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/inspector-legacy-mobile.svg) · state · mobile · Inspector — legacy snapshot · parent `capture-inspector`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Inspector — legacy snapshot header — title, synthetic context and available actions.
 3 — Legacy capture — imported text is labelled legacy_snapshot with unknown observation time. · frame 1 of 1
 4 — State scope note — what the state does and does not assert. · frame 1 of 1
@@ -1590,7 +1597,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/comparison-selection-desktop.svg) · state · desktop · Comparison — selection required · parent `comparison`
 
-1 — Primary navigation — GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
+1 — Primary navigation — global destinations only (Network, Sources and Narratives open inside a case); GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
 2 — Comparison — selection required header — title, synthetic context and available actions.
 3 — Selection prompt — Compare stays disabled until two different evidence captures are chosen. · frame 1 of 1
 4 — State scope note — what the state does and does not assert. · frame 1 of 1
@@ -1600,7 +1607,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/comparison-selection-tablet.svg) · state · tablet · Comparison — selection required · parent `comparison`
 
-1 — Primary navigation (top bar) — GET reads only; CLI owns ingest and runs.
+1 — Primary navigation (top bar) — global destinations only (case views open inside a case); GET reads only; CLI owns ingest and runs.
 2 — Comparison — selection required header — title, synthetic context and available actions.
 3 — Selection prompt — Compare stays disabled until two different evidence captures are chosen. · frame 1 of 1
 4 — State scope note — what the state does and does not assert. · frame 1 of 1
@@ -1610,7 +1617,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/comparison-selection-mobile.svg) · state · mobile · Comparison — selection required · frame 1 of 2 · parent `comparison`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Comparison — selection required header — title, synthetic context and available actions.
 3 — Selection prompt — Compare stays disabled until two different evidence captures are chosen. · frame 1 of 2
 4 — State scope note — what the state does and does not assert. · frame 1 of 2
@@ -1619,7 +1626,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/comparison-selection-mobile-part-2.svg) · state · mobile · Comparison — selection required · frame 2 of 2 · parent `comparison`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Comparison — selection required — frame 2 of 2; full coverage continues in the named companion frame.
 3 — Pinned URL — an empty selection is honest and reproducible. · frame 2 of 2
 
@@ -1627,7 +1634,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/comparison-same-source-desktop.svg) · state · desktop · Comparison — same source rejected · parent `comparison`
 
-1 — Primary navigation — GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
+1 — Primary navigation — global destinations only (Network, Sources and Narratives open inside a case); GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
 2 — Comparison — same source rejected header — title, synthetic context and available actions.
 3 — Same-source validation — the opposite source and capture are disabled; Compare stays disabled. · frame 1 of 1
 4 — Validation state — the same evidence cannot be compared with itself. · frame 1 of 1
@@ -1637,7 +1644,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/comparison-same-source-tablet.svg) · state · tablet · Comparison — same source rejected · parent `comparison`
 
-1 — Primary navigation (top bar) — GET reads only; CLI owns ingest and runs.
+1 — Primary navigation (top bar) — global destinations only (case views open inside a case); GET reads only; CLI owns ingest and runs.
 2 — Comparison — same source rejected header — title, synthetic context and available actions.
 3 — Same-source validation — the opposite source and capture are disabled; Compare stays disabled. · frame 1 of 1
 4 — Validation state — the same evidence cannot be compared with itself. · frame 1 of 1
@@ -1647,7 +1654,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/comparison-same-source-mobile.svg) · state · mobile · Comparison — same source rejected · frame 1 of 2 · parent `comparison`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Comparison — same source rejected header — title, synthetic context and available actions.
 3 — Same-source validation — the opposite source and capture are disabled; Compare stays disabled. · frame 1 of 2
 
@@ -1655,7 +1662,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/comparison-same-source-mobile-part-2.svg) · state · mobile · Comparison — same source rejected · frame 2 of 2 · parent `comparison`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Comparison — same source rejected — frame 2 of 2; full coverage continues in the named companion frame.
 3 — Validation state — the same evidence cannot be compared with itself. · frame 2 of 2
 4 — State scope note — what the state does and does not assert. · frame 2 of 2
@@ -1664,7 +1671,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/comparison-no-second-source-desktop.svg) · state · desktop · Comparison — no second source · parent `comparison`
 
-1 — Primary navigation — GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
+1 — Primary navigation — global destinations only (Network, Sources and Narratives open inside a case); GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
 2 — Comparison — no second source header — title, synthetic context and available actions.
 3 — No-second-source state — distinct from a selection error or an empty comparison. · frame 1 of 1
 4 — Next step — a second source arrives through the operator CLI, never a browser form. · frame 1 of 1
@@ -1674,7 +1681,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/comparison-no-second-source-tablet.svg) · state · tablet · Comparison — no second source · parent `comparison`
 
-1 — Primary navigation (top bar) — GET reads only; CLI owns ingest and runs.
+1 — Primary navigation (top bar) — global destinations only (case views open inside a case); GET reads only; CLI owns ingest and runs.
 2 — Comparison — no second source header — title, synthetic context and available actions.
 3 — No-second-source state — distinct from a selection error or an empty comparison. · frame 1 of 1
 4 — Next step — a second source arrives through the operator CLI, never a browser form. · frame 1 of 1
@@ -1684,7 +1691,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/comparison-no-second-source-mobile.svg) · state · mobile · Comparison — no second source · parent `comparison`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Comparison — no second source header — title, synthetic context and available actions.
 3 — No-second-source state — distinct from a selection error or an empty comparison. · frame 1 of 1
 4 — Next step — a second source arrives through the operator CLI, never a browser form. · frame 1 of 1
@@ -1694,7 +1701,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/comparison-empty-desktop.svg) · state · desktop · Comparison — no aligned rows · parent `comparison`
 
-1 — Primary navigation — GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
+1 — Primary navigation — global destinations only (Network, Sources and Narratives open inside a case); GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
 2 — Comparison — no aligned rows header — title, synthetic context and available actions.
 3 — Selection summary — both captures are pinned and readable. · frame 1 of 1
 4 — Empty comparison — a valid empty alignment is not an unavailable historical capture. · frame 1 of 1
@@ -1704,7 +1711,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/comparison-empty-tablet.svg) · state · tablet · Comparison — no aligned rows · parent `comparison`
 
-1 — Primary navigation (top bar) — GET reads only; CLI owns ingest and runs.
+1 — Primary navigation (top bar) — global destinations only (case views open inside a case); GET reads only; CLI owns ingest and runs.
 2 — Comparison — no aligned rows header — title, synthetic context and available actions.
 3 — Selection summary — both captures are pinned and readable. · frame 1 of 1
 4 — Empty comparison — a valid empty alignment is not an unavailable historical capture. · frame 1 of 1
@@ -1714,7 +1721,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/comparison-empty-mobile.svg) · state · mobile · Comparison — no aligned rows · frame 1 of 2 · parent `comparison`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Comparison — no aligned rows header — title, synthetic context and available actions.
 3 — Selection summary — both captures are pinned and readable. · frame 1 of 2
 4 — Empty comparison — a valid empty alignment is not an unavailable historical capture. · frame 1 of 2
@@ -1723,7 +1730,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/comparison-empty-mobile-part-2.svg) · state · mobile · Comparison — no aligned rows · frame 2 of 2 · parent `comparison`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Comparison — no aligned rows — frame 2 of 2; full coverage continues in the named companion frame.
 3 — State scope note — what the state does and does not assert. · frame 2 of 2
 
@@ -1731,7 +1738,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/comparison-historical-unavailable-desktop.svg) · state · desktop · Comparison — historical unavailable · parent `comparison`
 
-1 — Primary navigation — GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
+1 — Primary navigation — global destinations only (Network, Sources and Narratives open inside a case); GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
 2 — Comparison — historical unavailable header — title, synthetic context and available actions.
 3 — Historical banner — an old capture without retained alignment stays unavailable. · frame 1 of 1
 4 — Capture context — each side reads its stored capture; no latest links. · frame 1 of 1
@@ -1741,7 +1748,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/comparison-historical-unavailable-tablet.svg) · state · tablet · Comparison — historical unavailable · parent `comparison`
 
-1 — Primary navigation (top bar) — GET reads only; CLI owns ingest and runs.
+1 — Primary navigation (top bar) — global destinations only (case views open inside a case); GET reads only; CLI owns ingest and runs.
 2 — Comparison — historical unavailable header — title, synthetic context and available actions.
 3 — Historical banner — an old capture without retained alignment stays unavailable. · frame 1 of 1
 4 — Capture context — each side reads its stored capture; no latest links. · frame 1 of 1
@@ -1751,7 +1758,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/comparison-historical-unavailable-mobile.svg) · state · mobile · Comparison — historical unavailable · parent `comparison`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Comparison — historical unavailable header — title, synthetic context and available actions.
 3 — Historical banner — an old capture without retained alignment stays unavailable. · frame 1 of 1
 4 — Capture context — each side reads its stored capture; no latest links. · frame 1 of 1
@@ -1761,7 +1768,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/comparison-dependency-warning-desktop.svg) · state · desktop · Comparison — dependency warning · parent `comparison`
 
-1 — Primary navigation — GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
+1 — Primary navigation — global destinations only (Network, Sources and Narratives open inside a case); GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
 2 — Comparison — dependency warning header — title, synthetic context and available actions.
 3 — Dependency warning — reasons and limitation shown before the rows. · frame 1 of 1
 4 — Rows under warning — alignment states remain extraction coverage, not endorsement. · frame 1 of 1
@@ -1771,7 +1778,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/comparison-dependency-warning-tablet.svg) · state · tablet · Comparison — dependency warning · parent `comparison`
 
-1 — Primary navigation (top bar) — GET reads only; CLI owns ingest and runs.
+1 — Primary navigation (top bar) — global destinations only (case views open inside a case); GET reads only; CLI owns ingest and runs.
 2 — Comparison — dependency warning header — title, synthetic context and available actions.
 3 — Dependency warning — reasons and limitation shown before the rows. · frame 1 of 1
 4 — Rows under warning — alignment states remain extraction coverage, not endorsement. · frame 1 of 1
@@ -1781,7 +1788,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/comparison-dependency-warning-mobile.svg) · state · mobile · Comparison — dependency warning · parent `comparison`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Comparison — dependency warning header — title, synthetic context and available actions.
 3 — Dependency warning — reasons and limitation shown before the rows. · frame 1 of 1
 4 — Rows under warning — alignment states remain extraction coverage, not endorsement. · frame 1 of 1
@@ -1791,7 +1798,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/changes-initial-desktop.svg) · state · desktop · Changes — first observation · parent `runs-changes`
 
-1 — Primary navigation — GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
+1 — Primary navigation — global destinations only (Network, Sources and Narratives open inside a case); GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
 2 — Changes — first observation header — title, synthetic context and available actions.
 3 — Initial banner — the first snapshot has no baseline and is not a change surge. · frame 1 of 1
 4 — Snapshot facts — first snapshot identifiers and coverage. · frame 1 of 1
@@ -1801,7 +1808,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/changes-initial-tablet.svg) · state · tablet · Changes — first observation · parent `runs-changes`
 
-1 — Primary navigation (top bar) — GET reads only; CLI owns ingest and runs.
+1 — Primary navigation (top bar) — global destinations only (case views open inside a case); GET reads only; CLI owns ingest and runs.
 2 — Changes — first observation header — title, synthetic context and available actions.
 3 — Initial banner — the first snapshot has no baseline and is not a change surge. · frame 1 of 1
 4 — Snapshot facts — first snapshot identifiers and coverage. · frame 1 of 1
@@ -1811,7 +1818,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/changes-initial-mobile.svg) · state · mobile · Changes — first observation · parent `runs-changes`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Changes — first observation header — title, synthetic context and available actions.
 3 — Initial banner — the first snapshot has no baseline and is not a change surge. · frame 1 of 1
 4 — Snapshot facts — first snapshot identifiers and coverage. · frame 1 of 1
@@ -1821,7 +1828,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/changes-pending-desktop.svg) · state · desktop · Changes — run in progress · parent `runs-changes`
 
-1 — Primary navigation — GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
+1 — Primary navigation — global destinations only (Network, Sources and Narratives open inside a case); GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
 2 — Changes — run in progress header — title, synthetic context and available actions.
 3 — Pending banner — pending is not an empty delta. · frame 1 of 1
 4 — Pending skeleton — no partial before/after rows are shown. · frame 1 of 1
@@ -1831,7 +1838,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/changes-pending-tablet.svg) · state · tablet · Changes — run in progress · parent `runs-changes`
 
-1 — Primary navigation (top bar) — GET reads only; CLI owns ingest and runs.
+1 — Primary navigation (top bar) — global destinations only (case views open inside a case); GET reads only; CLI owns ingest and runs.
 2 — Changes — run in progress header — title, synthetic context and available actions.
 3 — Pending banner — pending is not an empty delta. · frame 1 of 1
 4 — Pending skeleton — no partial before/after rows are shown. · frame 1 of 1
@@ -1841,7 +1848,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/changes-pending-mobile.svg) · state · mobile · Changes — run in progress · parent `runs-changes`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Changes — run in progress header — title, synthetic context and available actions.
 3 — Pending banner — pending is not an empty delta. · frame 1 of 1
 4 — Pending skeleton — no partial before/after rows are shown. · frame 1 of 1
@@ -1851,7 +1858,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/changes-unavailable-desktop.svg) · state · desktop · Changes — no snapshot published · parent `runs-changes`
 
-1 — Primary navigation — GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
+1 — Primary navigation — global destinations only (Network, Sources and Narratives open inside a case); GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
 2 — Changes — no snapshot published header — title, synthetic context and available actions.
 3 — Unavailable banner — failed or interrupted runs never advance the baseline. · frame 1 of 1
 4 — Recorded error — the stored failure is shown; recovery stays CLI-only. · frame 1 of 1
@@ -1861,7 +1868,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/changes-unavailable-tablet.svg) · state · tablet · Changes — no snapshot published · parent `runs-changes`
 
-1 — Primary navigation (top bar) — GET reads only; CLI owns ingest and runs.
+1 — Primary navigation (top bar) — global destinations only (case views open inside a case); GET reads only; CLI owns ingest and runs.
 2 — Changes — no snapshot published header — title, synthetic context and available actions.
 3 — Unavailable banner — failed or interrupted runs never advance the baseline. · frame 1 of 1
 4 — Recorded error — the stored failure is shown; recovery stays CLI-only. · frame 1 of 1
@@ -1871,7 +1878,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/changes-unavailable-mobile.svg) · state · mobile · Changes — no snapshot published · parent `runs-changes`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Changes — no snapshot published header — title, synthetic context and available actions.
 3 — Unavailable banner — failed or interrupted runs never advance the baseline. · frame 1 of 1
 4 — Recorded error — the stored failure is shown; recovery stays CLI-only. · frame 1 of 1
@@ -1881,7 +1888,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/changes-unchanged-partial-desktop.svg) · state · desktop · Changes — unchanged with partial coverage · parent `runs-changes`
 
-1 — Primary navigation — GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
+1 — Primary navigation — global destinations only (Network, Sources and Narratives open inside a case); GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
 2 — Changes — unchanged with partial coverage header — title, synthetic context and available actions.
 3 — Unchanged state — a valid delta with zero typed rows. · frame 1 of 1
 4 — Coverage warning — persistent alongside an empty delta. · frame 1 of 1
@@ -1891,7 +1898,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/changes-unchanged-partial-tablet.svg) · state · tablet · Changes — unchanged with partial coverage · parent `runs-changes`
 
-1 — Primary navigation (top bar) — GET reads only; CLI owns ingest and runs.
+1 — Primary navigation (top bar) — global destinations only (case views open inside a case); GET reads only; CLI owns ingest and runs.
 2 — Changes — unchanged with partial coverage header — title, synthetic context and available actions.
 3 — Unchanged state — a valid delta with zero typed rows. · frame 1 of 1
 4 — Coverage warning — persistent alongside an empty delta. · frame 1 of 1
@@ -1901,7 +1908,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/changes-unchanged-partial-mobile.svg) · state · mobile · Changes — unchanged with partial coverage · parent `runs-changes`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Changes — unchanged with partial coverage header — title, synthetic context and available actions.
 3 — Unchanged state — a valid delta with zero typed rows. · frame 1 of 1
 4 — Coverage warning — persistent alongside an empty delta. · frame 1 of 1
@@ -1911,7 +1918,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/search-no-results-desktop.svg) · state · desktop · Search — no results · parent `search`
 
-1 — Primary navigation — GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
+1 — Primary navigation — global destinations only (Network, Sources and Narratives open inside a case); GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
 2 — Search — no results header — title, synthetic context and available actions.
 3 — Filters remain visible — the applied query and filters are printed with the empty result. · frame 1 of 1
 4 — No-results state — a valid empty result, not an unavailable index. · frame 1 of 1
@@ -1921,7 +1928,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/search-no-results-tablet.svg) · state · tablet · Search — no results · parent `search`
 
-1 — Primary navigation (top bar) — GET reads only; CLI owns ingest and runs.
+1 — Primary navigation (top bar) — global destinations only (case views open inside a case); GET reads only; CLI owns ingest and runs.
 2 — Search — no results header — title, synthetic context and available actions.
 3 — Filters remain visible — the applied query and filters are printed with the empty result. · frame 1 of 1
 4 — No-results state — a valid empty result, not an unavailable index. · frame 1 of 1
@@ -1931,7 +1938,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/search-no-results-mobile.svg) · state · mobile · Search — no results · parent `search`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Search — no results header — title, synthetic context and available actions.
 3 — Filters remain visible — the applied query and filters are printed with the empty result. · frame 1 of 1
 4 — No-results state — a valid empty result, not an unavailable index. · frame 1 of 1
@@ -1941,7 +1948,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/search-index-unavailable-desktop.svg) · state · desktop · Search — index unavailable · parent `search`
 
-1 — Primary navigation — GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
+1 — Primary navigation — global destinations only (Network, Sources and Narratives open inside a case); GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
 2 — Search — index unavailable header — title, synthetic context and available actions.
 3 — 503 state — index capability absent; explicit unavailable, not empty. · frame 1 of 1
 4 — Operator remedy — printed remediation, not a browser rebuild button. · frame 1 of 1
@@ -1951,7 +1958,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/search-index-unavailable-tablet.svg) · state · tablet · Search — index unavailable · parent `search`
 
-1 — Primary navigation (top bar) — GET reads only; CLI owns ingest and runs.
+1 — Primary navigation (top bar) — global destinations only (case views open inside a case); GET reads only; CLI owns ingest and runs.
 2 — Search — index unavailable header — title, synthetic context and available actions.
 3 — 503 state — index capability absent; explicit unavailable, not empty. · frame 1 of 1
 4 — Operator remedy — printed remediation, not a browser rebuild button. · frame 1 of 1
@@ -1961,7 +1968,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/search-index-unavailable-mobile.svg) · state · mobile · Search — index unavailable · parent `search`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Search — index unavailable header — title, synthetic context and available actions.
 3 — 503 state — index capability absent; explicit unavailable, not empty. · frame 1 of 1
 4 — Operator remedy — printed remediation, not a browser rebuild button. · frame 1 of 1
@@ -1971,7 +1978,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/search-invalid-filters-desktop.svg) · state · desktop · Search — invalid filters · parent `search`
 
-1 — Primary navigation — GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
+1 — Primary navigation — global destinations only (Network, Sources and Narratives open inside a case); GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
 2 — Search — invalid filters header — title, synthetic context and available actions.
 3 — Invalid filter combination — status applies to claims only and conflicts with evidence-only type. · frame 1 of 1
 4 — 422 state — invalid combination is explained inline. · frame 1 of 1
@@ -1981,7 +1988,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/search-invalid-filters-tablet.svg) · state · tablet · Search — invalid filters · parent `search`
 
-1 — Primary navigation (top bar) — GET reads only; CLI owns ingest and runs.
+1 — Primary navigation (top bar) — global destinations only (case views open inside a case); GET reads only; CLI owns ingest and runs.
 2 — Search — invalid filters header — title, synthetic context and available actions.
 3 — Invalid filter combination — status applies to claims only and conflicts with evidence-only type. · frame 1 of 1
 4 — 422 state — invalid combination is explained inline. · frame 1 of 1
@@ -1991,7 +1998,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/search-invalid-filters-mobile.svg) · state · mobile · Search — invalid filters · frame 1 of 2 · parent `search`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Search — invalid filters header — title, synthetic context and available actions.
 3 — Invalid filter combination — status applies to claims only and conflicts with evidence-only type. · frame 1 of 2
 4 — 422 state — invalid combination is explained inline. · frame 1 of 2
@@ -2000,7 +2007,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/search-invalid-filters-mobile-part-2.svg) · state · mobile · Search — invalid filters · frame 2 of 2 · parent `search`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Search — invalid filters — frame 2 of 2; full coverage continues in the named companion frame.
 3 — State scope note — what the state does and does not assert. · frame 2 of 2
 
@@ -2008,7 +2015,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/search-out-of-range-desktop.svg) · state · desktop · This page is beyond the last result · parent `search`
 
-1 — Primary navigation — GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
+1 — Primary navigation — global destinations only (Network, Sources and Narratives open inside a case); GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
 2 — This page is beyond the last result header — title, synthetic context and available actions.
 3 — Paging controls — a valid offset past the last row with the query preserved; Return first page clears offset and keeps the query. · frame 1 of 1
 4 — Beyond-last-page state — a valid empty page, not a 422 and not an unavailable index. · frame 1 of 1
@@ -2018,7 +2025,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/search-out-of-range-tablet.svg) · state · tablet · This page is beyond the last result · parent `search`
 
-1 — Primary navigation (top bar) — GET reads only; CLI owns ingest and runs.
+1 — Primary navigation (top bar) — global destinations only (case views open inside a case); GET reads only; CLI owns ingest and runs.
 2 — This page is beyond the last result header — title, synthetic context and available actions.
 3 — Paging controls — a valid offset past the last row with the query preserved; Return first page clears offset and keeps the query. · frame 1 of 1
 4 — Beyond-last-page state — a valid empty page, not a 422 and not an unavailable index. · frame 1 of 1
@@ -2028,7 +2035,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/search-out-of-range-mobile.svg) · state · mobile · This page is beyond the last result · frame 1 of 2 · parent `search`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — This page is beyond the last result header — title, synthetic context and available actions.
 3 — Paging controls — a valid offset past the last row with the query preserved; Return first page clears offset and keeps the query. · frame 1 of 2
 4 — Beyond-last-page state — a valid empty page, not a 422 and not an unavailable index. · frame 1 of 2
@@ -2037,7 +2044,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/search-out-of-range-mobile-part-2.svg) · state · mobile · This page is beyond the last result · frame 2 of 2 · parent `search`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — This page is beyond the last result — frame 2 of 2; full coverage continues in the named companion frame.
 3 — State scope note — what the state does and does not assert. · frame 2 of 2
 
@@ -2045,7 +2052,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/review-saving-desktop.svg) · state · desktop · Review — saving · parent `review-annotation`
 
-1 — Primary navigation — GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
+1 — Primary navigation — global destinations only (Network, Sources and Narratives open inside a case); GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
 2 — Review — saving header — title, synthetic context and available actions.
 3 — Saving state — rationale only plus the three decision buttons; all controls disabled while the review POST is in flight and no success is claimed yet. · frame 1 of 1
 4 — State scope note — what the state does and does not assert. · frame 1 of 1
@@ -2055,7 +2062,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/review-saving-tablet.svg) · state · tablet · Review — saving · parent `review-annotation`
 
-1 — Primary navigation (top bar) — GET reads only; CLI owns ingest and runs.
+1 — Primary navigation (top bar) — global destinations only (case views open inside a case); GET reads only; CLI owns ingest and runs.
 2 — Review — saving header — title, synthetic context and available actions.
 3 — Saving state — rationale only plus the three decision buttons; all controls disabled while the review POST is in flight and no success is claimed yet. · frame 1 of 1
 4 — State scope note — what the state does and does not assert. · frame 1 of 1
@@ -2065,7 +2072,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/review-saving-mobile.svg) · state · mobile · Review — saving · parent `review-annotation`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Review — saving header — title, synthetic context and available actions.
 3 — Saving state — rationale only plus the three decision buttons; all controls disabled while the review POST is in flight and no success is claimed yet. · frame 1 of 1
 4 — State scope note — what the state does and does not assert. · frame 1 of 1
@@ -2075,7 +2082,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/review-failed-desktop.svg) · state · desktop · Review — writer conflict · parent `review-annotation`
 
-1 — Primary navigation — GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
+1 — Primary navigation — global destinations only (Network, Sources and Narratives open inside a case); GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
 2 — Review — writer conflict header — title, synthetic context and available actions.
 3 — 409 conflict — active case writer conflict; the decision is explicitly not saved. · frame 1 of 1
 4 — State scope note — what the state does and does not assert. · frame 1 of 1
@@ -2085,7 +2092,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/review-failed-tablet.svg) · state · tablet · Review — writer conflict · parent `review-annotation`
 
-1 — Primary navigation (top bar) — GET reads only; CLI owns ingest and runs.
+1 — Primary navigation (top bar) — global destinations only (case views open inside a case); GET reads only; CLI owns ingest and runs.
 2 — Review — writer conflict header — title, synthetic context and available actions.
 3 — 409 conflict — active case writer conflict; the decision is explicitly not saved. · frame 1 of 1
 4 — State scope note — what the state does and does not assert. · frame 1 of 1
@@ -2095,7 +2102,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/review-failed-mobile.svg) · state · mobile · Review — writer conflict · parent `review-annotation`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Review — writer conflict header — title, synthetic context and available actions.
 3 — 409 conflict — active case writer conflict; the decision is explicitly not saved. · frame 1 of 1
 4 — State scope note — what the state does and does not assert. · frame 1 of 1
@@ -2105,7 +2112,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/review-stale-desktop.svg) · state · desktop · Review — case data changed · parent `review-annotation`
 
-1 — Primary navigation — GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
+1 — Primary navigation — global destinations only (Network, Sources and Narratives open inside a case); GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
 2 — Review — case data changed header — title, synthetic context and available actions.
 3 — Stale banner — the form is frozen rather than silently overwriting newer data. · frame 1 of 1
 4 — Frozen form — the three decision buttons are disabled until the newer case state is reloaded; Reload case is the only enabled control. · frame 1 of 1
@@ -2115,7 +2122,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/review-stale-tablet.svg) · state · tablet · Review — case data changed · parent `review-annotation`
 
-1 — Primary navigation (top bar) — GET reads only; CLI owns ingest and runs.
+1 — Primary navigation (top bar) — global destinations only (case views open inside a case); GET reads only; CLI owns ingest and runs.
 2 — Review — case data changed header — title, synthetic context and available actions.
 3 — Stale banner — the form is frozen rather than silently overwriting newer data. · frame 1 of 1
 4 — Frozen form — the three decision buttons are disabled until the newer case state is reloaded; Reload case is the only enabled control. · frame 1 of 1
@@ -2125,7 +2132,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/review-stale-mobile.svg) · state · mobile · Review — case data changed · parent `review-annotation`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Review — case data changed header — title, synthetic context and available actions.
 3 — Stale banner — the form is frozen rather than silently overwriting newer data. · frame 1 of 1
 4 — Frozen form — the three decision buttons are disabled until the newer case state is reloaded; Reload case is the only enabled control. · frame 1 of 1
@@ -2135,7 +2142,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/review-saved-desktop.svg) · state · desktop · Review — decision recorded · parent `review-annotation`
 
-1 — Primary navigation — GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
+1 — Primary navigation — global destinations only (Network, Sources and Narratives open inside a case); GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
 2 — Review — decision recorded header — title, synthetic context and available actions.
 3 — Saved confirmation — recorded decision is reported as observed, without actor attribution. · frame 1 of 1
 4 — Recorded review — fields as stored; no human audit trail is implied. · frame 1 of 1
@@ -2145,7 +2152,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/review-saved-tablet.svg) · state · tablet · Review — decision recorded · parent `review-annotation`
 
-1 — Primary navigation (top bar) — GET reads only; CLI owns ingest and runs.
+1 — Primary navigation (top bar) — global destinations only (case views open inside a case); GET reads only; CLI owns ingest and runs.
 2 — Review — decision recorded header — title, synthetic context and available actions.
 3 — Saved confirmation — recorded decision is reported as observed, without actor attribution. · frame 1 of 1
 4 — Recorded review — fields as stored; no human audit trail is implied. · frame 1 of 1
@@ -2155,7 +2162,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/review-saved-mobile.svg) · state · mobile · Review — decision recorded · parent `review-annotation`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Review — decision recorded header — title, synthetic context and available actions.
 3 — Saved confirmation — recorded decision is reported as observed, without actor attribution. · frame 1 of 1
 4 — Recorded review — fields as stored; no human audit trail is implied. · frame 1 of 1
@@ -2165,7 +2172,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/review-blocked-desktop.svg) · state · desktop · Review — blocked by exceptions · parent `review-annotation`
 
-1 — Primary navigation — GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
+1 — Primary navigation — global destinations only (Network, Sources and Narratives open inside a case); GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
 2 — Review — blocked by exceptions header — title, synthetic context and available actions.
 3 — Blocked state — 422 approval blocked by unresolved exceptions; links the queue. · frame 1 of 1
 4 — Unresolved exception list — the blocking rows with their recorded states. · frame 1 of 1
@@ -2175,7 +2182,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/review-blocked-tablet.svg) · state · tablet · Review — blocked by exceptions · parent `review-annotation`
 
-1 — Primary navigation (top bar) — GET reads only; CLI owns ingest and runs.
+1 — Primary navigation (top bar) — global destinations only (case views open inside a case); GET reads only; CLI owns ingest and runs.
 2 — Review — blocked by exceptions header — title, synthetic context and available actions.
 3 — Blocked state — 422 approval blocked by unresolved exceptions; links the queue. · frame 1 of 1
 4 — Unresolved exception list — the blocking rows with their recorded states. · frame 1 of 1
@@ -2185,7 +2192,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/review-blocked-mobile.svg) · state · mobile · Review — blocked by exceptions · parent `review-annotation`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Review — blocked by exceptions header — title, synthetic context and available actions.
 3 — Blocked state — 422 approval blocked by unresolved exceptions; links the queue. · frame 1 of 1
 4 — Unresolved exception list — the blocking rows with their recorded states. · frame 1 of 1
@@ -2195,7 +2202,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/annotation-invalid-desktop.svg) · state · desktop · Annotation — invalid input · parent `review-annotation`
 
-1 — Primary navigation — GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
+1 — Primary navigation — global destinations only (Network, Sources and Narratives open inside a case); GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
 2 — Annotation — invalid input header — title, synthetic context and available actions.
 3 — Invalid annotation — bad target and blank content are rejected block-side with 422. · frame 1 of 1
 4 — 422 validation — inline field errors; Save stays disabled. · frame 1 of 1
@@ -2205,7 +2212,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/annotation-invalid-tablet.svg) · state · tablet · Annotation — invalid input · parent `review-annotation`
 
-1 — Primary navigation (top bar) — GET reads only; CLI owns ingest and runs.
+1 — Primary navigation (top bar) — global destinations only (case views open inside a case); GET reads only; CLI owns ingest and runs.
 2 — Annotation — invalid input header — title, synthetic context and available actions.
 3 — Invalid annotation — bad target and blank content are rejected block-side with 422. · frame 1 of 1
 4 — 422 validation — inline field errors; Save stays disabled. · frame 1 of 1
@@ -2215,7 +2222,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/annotation-invalid-mobile.svg) · state · mobile · Annotation — invalid input · frame 1 of 2 · parent `review-annotation`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Annotation — invalid input header — title, synthetic context and available actions.
 3 — Invalid annotation — bad target and blank content are rejected block-side with 422. · frame 1 of 2
 4 — 422 validation — inline field errors; Save stays disabled. · frame 1 of 2
@@ -2224,7 +2231,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/annotation-invalid-mobile-part-2.svg) · state · mobile · Annotation — invalid input · frame 2 of 2 · parent `review-annotation`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Annotation — invalid input — frame 2 of 2; full coverage continues in the named companion frame.
 3 — State scope note — what the state does and does not assert. · frame 2 of 2
 
@@ -2232,7 +2239,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/evaluation-unavailable-desktop.svg) · state · desktop · Evaluation — no saved evaluation · parent `claims`
 
-1 — Primary navigation — GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
+1 — Primary navigation — global destinations only (Network, Sources and Narratives open inside a case); GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
 2 — Evaluation — no saved evaluation header — title, synthetic context and available actions.
 3 — Unavailable evaluation — absence of a saved result, not a score of zero. · frame 1 of 1
 4 — State scope note — what the state does and does not assert. · frame 1 of 1
@@ -2242,7 +2249,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/evaluation-unavailable-tablet.svg) · state · tablet · Evaluation — no saved evaluation · parent `claims`
 
-1 — Primary navigation (top bar) — GET reads only; CLI owns ingest and runs.
+1 — Primary navigation (top bar) — global destinations only (case views open inside a case); GET reads only; CLI owns ingest and runs.
 2 — Evaluation — no saved evaluation header — title, synthetic context and available actions.
 3 — Unavailable evaluation — absence of a saved result, not a score of zero. · frame 1 of 1
 4 — State scope note — what the state does and does not assert. · frame 1 of 1
@@ -2252,7 +2259,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/evaluation-unavailable-mobile.svg) · state · mobile · Evaluation — no saved evaluation · parent `claims`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Evaluation — no saved evaluation header — title, synthetic context and available actions.
 3 — Unavailable evaluation — absence of a saved result, not a score of zero. · frame 1 of 1
 4 — State scope note — what the state does and does not assert. · frame 1 of 1
@@ -2262,7 +2269,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/evaluation-failed-desktop.svg) · state · desktop · Evaluation — read failed · parent `claims`
 
-1 — Primary navigation — GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
+1 — Primary navigation — global destinations only (Network, Sources and Narratives open inside a case); GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
 2 — Evaluation — read failed header — title, synthetic context and available actions.
 3 — Failed evaluation — retryable read error, distinct from unavailable and empty. · frame 1 of 1
 4 — State scope note — what the state does and does not assert. · frame 1 of 1
@@ -2272,7 +2279,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/evaluation-failed-tablet.svg) · state · tablet · Evaluation — read failed · parent `claims`
 
-1 — Primary navigation (top bar) — GET reads only; CLI owns ingest and runs.
+1 — Primary navigation (top bar) — global destinations only (case views open inside a case); GET reads only; CLI owns ingest and runs.
 2 — Evaluation — read failed header — title, synthetic context and available actions.
 3 — Failed evaluation — retryable read error, distinct from unavailable and empty. · frame 1 of 1
 4 — State scope note — what the state does and does not assert. · frame 1 of 1
@@ -2282,7 +2289,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/evaluation-failed-mobile.svg) · state · mobile · Evaluation — read failed · parent `claims`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Evaluation — read failed header — title, synthetic context and available actions.
 3 — Failed evaluation — retryable read error, distinct from unavailable and empty. · frame 1 of 1
 4 — State scope note — what the state does and does not assert. · frame 1 of 1
@@ -2292,7 +2299,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/exception-pending-desktop.svg) · state · desktop · Exception — pending row · parent `exception-queue`
 
-1 — Primary navigation — GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
+1 — Primary navigation — global destinations only (Network, Sources and Narratives open inside a case); GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
 2 — Exception — pending row header — title, synthetic context and available actions.
 3 — Pending exception — a pending row disables every row action, including Reopen, until its prerequisite clears. · frame 1 of 1
 4 — Pending action controls — Resolve, Defer and Reopen are all disabled for the pending row. · frame 1 of 1
@@ -2302,7 +2309,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/exception-pending-tablet.svg) · state · tablet · Exception — pending row · parent `exception-queue`
 
-1 — Primary navigation (top bar) — GET reads only; CLI owns ingest and runs.
+1 — Primary navigation (top bar) — global destinations only (case views open inside a case); GET reads only; CLI owns ingest and runs.
 2 — Exception — pending row header — title, synthetic context and available actions.
 3 — Pending exception — a pending row disables every row action, including Reopen, until its prerequisite clears. · frame 1 of 1
 4 — Pending action controls — Resolve, Defer and Reopen are all disabled for the pending row. · frame 1 of 1
@@ -2312,7 +2319,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/exception-pending-mobile.svg) · state · mobile · Exception — pending row · frame 1 of 2 · parent `exception-queue`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Exception — pending row header — title, synthetic context and available actions.
 3 — Pending exception — a pending row disables every row action, including Reopen, until its prerequisite clears. · frame 1 of 2
 4 — Pending action controls — Resolve, Defer and Reopen are all disabled for the pending row. · frame 1 of 2
@@ -2321,7 +2328,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/exception-pending-mobile-part-2.svg) · state · mobile · Exception — pending row · frame 2 of 2 · parent `exception-queue`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Exception — pending row — frame 2 of 2; full coverage continues in the named companion frame.
 3 — Blocked-by note — the reason is stated; recovery stays CLI-only. · frame 2 of 2
 
@@ -2329,7 +2336,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/exception-failed-desktop.svg) · state · desktop · Exception — action failed · parent `exception-queue`
 
-1 — Primary navigation — GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
+1 — Primary navigation — global destinations only (Network, Sources and Narratives open inside a case); GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
 2 — Exception — action failed header — title, synthetic context and available actions.
 3 — Failed action — inline error, row state unchanged. · frame 1 of 1
 4 — Row state — still deferred; the failed action is not reflected as applied. · frame 1 of 1
@@ -2339,7 +2346,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/exception-failed-tablet.svg) · state · tablet · Exception — action failed · parent `exception-queue`
 
-1 — Primary navigation (top bar) — GET reads only; CLI owns ingest and runs.
+1 — Primary navigation (top bar) — global destinations only (case views open inside a case); GET reads only; CLI owns ingest and runs.
 2 — Exception — action failed header — title, synthetic context and available actions.
 3 — Failed action — inline error, row state unchanged. · frame 1 of 1
 4 — Row state — still deferred; the failed action is not reflected as applied. · frame 1 of 1
@@ -2349,7 +2356,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/exception-failed-mobile.svg) · state · mobile · Exception — action failed · parent `exception-queue`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Exception — action failed header — title, synthetic context and available actions.
 3 — Failed action — inline error, row state unchanged. · frame 1 of 1
 4 — Row state — still deferred; the failed action is not reflected as applied. · frame 1 of 1
@@ -2359,7 +2366,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/exception-empty-desktop.svg) · state · desktop · Exception — none recorded · parent `exception-queue`
 
-1 — Primary navigation — GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
+1 — Primary navigation — global destinations only (Network, Sources and Narratives open inside a case); GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
 2 — Exception — none recorded header — title, synthetic context and available actions.
 3 — Empty queue — not a failed read and not an unavailable capability. · frame 1 of 1
 4 — Interpretation note — an empty queue is a valid read, not a failure. · frame 1 of 1
@@ -2368,7 +2375,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/exception-empty-tablet.svg) · state · tablet · Exception — none recorded · parent `exception-queue`
 
-1 — Primary navigation (top bar) — GET reads only; CLI owns ingest and runs.
+1 — Primary navigation (top bar) — global destinations only (case views open inside a case); GET reads only; CLI owns ingest and runs.
 2 — Exception — none recorded header — title, synthetic context and available actions.
 3 — Empty queue — not a failed read and not an unavailable capability. · frame 1 of 1
 4 — Interpretation note — an empty queue is a valid read, not a failure. · frame 1 of 1
@@ -2377,7 +2384,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/exception-empty-mobile.svg) · state · mobile · Exception — none recorded · parent `exception-queue`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Exception — none recorded header — title, synthetic context and available actions.
 3 — Empty queue — not a failed read and not an unavailable capability. · frame 1 of 1
 4 — Interpretation note — an empty queue is a valid read, not a failure. · frame 1 of 1
@@ -2386,7 +2393,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/report-pending-desktop.svg) · state · desktop · Report — pending · parent `report`
 
-1 — Primary navigation — GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
+1 — Primary navigation — global destinations only (Network, Sources and Narratives open inside a case); GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
 2 — Report — pending header — title, synthetic context and available actions.
 3 — Pending report — downloads stay disabled until the run finalizes. · frame 1 of 1
 4 — Disabled downloads — pending report has no stored Markdown or JSON. · frame 1 of 1
@@ -2396,7 +2403,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/report-pending-tablet.svg) · state · tablet · Report — pending · parent `report`
 
-1 — Primary navigation (top bar) — GET reads only; CLI owns ingest and runs.
+1 — Primary navigation (top bar) — global destinations only (case views open inside a case); GET reads only; CLI owns ingest and runs.
 2 — Report — pending header — title, synthetic context and available actions.
 3 — Pending report — downloads stay disabled until the run finalizes. · frame 1 of 1
 4 — Disabled downloads — pending report has no stored Markdown or JSON. · frame 1 of 1
@@ -2406,7 +2413,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/report-pending-mobile.svg) · state · mobile · Report — pending · frame 1 of 2 · parent `report`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Report — pending header — title, synthetic context and available actions.
 3 — Pending report — downloads stay disabled until the run finalizes. · frame 1 of 2
 4 — Disabled downloads — pending report has no stored Markdown or JSON. · frame 1 of 2
@@ -2415,7 +2422,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/report-pending-mobile-part-2.svg) · state · mobile · Report — pending · frame 2 of 2 · parent `report`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Report — pending — frame 2 of 2; full coverage continues in the named companion frame.
 3 — State scope note — what the state does and does not assert. · frame 2 of 2
 
@@ -2423,7 +2430,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/report-download-error-desktop.svg) · state · desktop · Report — download error · parent `report`
 
-1 — Primary navigation — GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
+1 — Primary navigation — global destinations only (Network, Sources and Narratives open inside a case); GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
 2 — Report — download error header — title, synthetic context and available actions.
 3 — Download error — explicit failure, no empty document rendered. · frame 1 of 1
 4 — Artifact note — the run-specific directory and stored formats. · frame 1 of 1
@@ -2433,7 +2440,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/report-download-error-tablet.svg) · state · tablet · Report — download error · parent `report`
 
-1 — Primary navigation (top bar) — GET reads only; CLI owns ingest and runs.
+1 — Primary navigation (top bar) — global destinations only (case views open inside a case); GET reads only; CLI owns ingest and runs.
 2 — Report — download error header — title, synthetic context and available actions.
 3 — Download error — explicit failure, no empty document rendered. · frame 1 of 1
 4 — Artifact note — the run-specific directory and stored formats. · frame 1 of 1
@@ -2443,7 +2450,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/report-download-error-mobile.svg) · state · mobile · Report — download error · parent `report`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Report — download error header — title, synthetic context and available actions.
 3 — Download error — explicit failure, no empty document rendered. · frame 1 of 1
 4 — Artifact note — the run-specific directory and stored formats. · frame 1 of 1
@@ -2453,7 +2460,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/map-empty-desktop.svg) · state · desktop · Map — no geotagged events · parent `geographic-map`
 
-1 — Primary navigation — GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
+1 — Primary navigation — global destinations only (Network, Sources and Narratives open inside a case); GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
 2 — Map — no geotagged events header — title, synthetic context and available actions.
 3 — Empty map — placeholder area with no geotagged markers. · frame 1 of 1
 4 — Empty map — untagged events stay unknown; no invented coordinates. · frame 1 of 1
@@ -2463,7 +2470,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/map-empty-tablet.svg) · state · tablet · Map — no geotagged events · parent `geographic-map`
 
-1 — Primary navigation (top bar) — GET reads only; CLI owns ingest and runs.
+1 — Primary navigation (top bar) — global destinations only (case views open inside a case); GET reads only; CLI owns ingest and runs.
 2 — Map — no geotagged events header — title, synthetic context and available actions.
 3 — Empty map — placeholder area with no geotagged markers. · frame 1 of 1
 4 — Empty map — untagged events stay unknown; no invented coordinates. · frame 1 of 1
@@ -2473,7 +2480,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/map-empty-mobile.svg) · state · mobile · Map — no geotagged events · frame 1 of 2 · parent `geographic-map`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Map — no geotagged events header — title, synthetic context and available actions.
 3 — Empty map — placeholder area with no geotagged markers. · frame 1 of 2
 4 — Empty map — untagged events stay unknown; no invented coordinates. · frame 1 of 2
@@ -2482,7 +2489,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/map-empty-mobile-part-2.svg) · state · mobile · Map — no geotagged events · frame 2 of 2 · parent `geographic-map`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Map — no geotagged events — frame 2 of 2; full coverage continues in the named companion frame.
 3 — State scope note — what the state does and does not assert. · frame 2 of 2
 
@@ -2490,7 +2497,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/timeline-unknown-desktop.svg) · state · desktop · Timeline — unknown date and raw status · parent `timeline`
 
-1 — Primary navigation — GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
+1 — Primary navigation — global destinations only (Network, Sources and Narratives open inside a case); GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
 2 — Timeline — unknown date and raw status header — title, synthetic context and available actions.
 3 — Timeline with an unknown date and an unexpected raw status — both labelled explicitly. · frame 1 of 1
 4 — State scope note — what the state does and does not assert. · frame 1 of 1
@@ -2500,7 +2507,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/timeline-unknown-tablet.svg) · state · tablet · Timeline — unknown date and raw status · parent `timeline`
 
-1 — Primary navigation (top bar) — GET reads only; CLI owns ingest and runs.
+1 — Primary navigation (top bar) — global destinations only (case views open inside a case); GET reads only; CLI owns ingest and runs.
 2 — Timeline — unknown date and raw status header — title, synthetic context and available actions.
 3 — Timeline with an unknown date and an unexpected raw status — both labelled explicitly. · frame 1 of 1
 4 — State scope note — what the state does and does not assert. · frame 1 of 1
@@ -2510,7 +2517,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/timeline-unknown-mobile.svg) · state · mobile · Timeline — unknown date and raw status · frame 1 of 2 · parent `timeline`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Timeline — unknown date and raw status header — title, synthetic context and available actions.
 3 — Timeline with an unknown date and an unexpected raw status — both labelled explicitly. · frame 1 of 2
 4 — State scope note — what the state does and does not assert. · frame 1 of 2
@@ -2519,7 +2526,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/timeline-unknown-mobile-part-2.svg) · state · mobile · Timeline — unknown date and raw status · frame 2 of 2 · parent `timeline`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Timeline — unknown date and raw status — frame 2 of 2; full coverage continues in the named companion frame.
 3 — Status keys — the six states plus the unrecognized-raw-value label. · frame 2 of 2
 
@@ -2527,7 +2534,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/pipeline-unrecorded-desktop.svg) · state · desktop · Pipeline — stage unrecorded · parent `pipeline`
 
-1 — Primary navigation — GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
+1 — Primary navigation — global destinations only (Network, Sources and Narratives open inside a case); GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
 2 — Pipeline — stage unrecorded header — title, synthetic context and available actions.
 3 — Unrecorded stages — no attempt row exists; unrecorded is not success and not failure. · frame 1 of 1
 4 — State scope note — what the state does and does not assert. · frame 1 of 1
@@ -2537,7 +2544,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/pipeline-unrecorded-tablet.svg) · state · tablet · Pipeline — stage unrecorded · parent `pipeline`
 
-1 — Primary navigation (top bar) — GET reads only; CLI owns ingest and runs.
+1 — Primary navigation (top bar) — global destinations only (case views open inside a case); GET reads only; CLI owns ingest and runs.
 2 — Pipeline — stage unrecorded header — title, synthetic context and available actions.
 3 — Unrecorded stages — no attempt row exists; unrecorded is not success and not failure. · frame 1 of 1
 4 — State scope note — what the state does and does not assert. · frame 1 of 1
@@ -2547,7 +2554,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/pipeline-unrecorded-mobile.svg) · state · mobile · Pipeline — stage unrecorded · parent `pipeline`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Pipeline — stage unrecorded header — title, synthetic context and available actions.
 3 — Unrecorded stages — no attempt row exists; unrecorded is not success and not failure. · frame 1 of 1
 4 — State scope note — what the state does and does not assert. · frame 1 of 1
@@ -2557,7 +2564,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/monitoring-unavailable-desktop.svg) · state · desktop · Monitoring — unavailable · parent `monitoring`
 
-1 — Primary navigation — GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
+1 — Primary navigation — global destinations only (Network, Sources and Narratives open inside a case); GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
 2 — Monitoring — unavailable header — title, synthetic context and available actions.
 3 — Unavailable monitoring — absence of recorded status, not a healthy or unhealthy verdict. · frame 1 of 1
 4 — State scope note — what the state does and does not assert. · frame 1 of 1
@@ -2567,7 +2574,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/monitoring-unavailable-tablet.svg) · state · tablet · Monitoring — unavailable · parent `monitoring`
 
-1 — Primary navigation (top bar) — GET reads only; CLI owns ingest and runs.
+1 — Primary navigation (top bar) — global destinations only (case views open inside a case); GET reads only; CLI owns ingest and runs.
 2 — Monitoring — unavailable header — title, synthetic context and available actions.
 3 — Unavailable monitoring — absence of recorded status, not a healthy or unhealthy verdict. · frame 1 of 1
 4 — State scope note — what the state does and does not assert. · frame 1 of 1
@@ -2577,7 +2584,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/monitoring-unavailable-mobile.svg) · state · mobile · Monitoring — unavailable · parent `monitoring`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Monitoring — unavailable header — title, synthetic context and available actions.
 3 — Unavailable monitoring — absence of recorded status, not a healthy or unhealthy verdict. · frame 1 of 1
 4 — State scope note — what the state does and does not assert. · frame 1 of 1
@@ -2587,7 +2594,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/evidence-filter-empty-desktop.svg) · state · desktop · Evidence — filter empty · parent `evidence-gallery`
 
-1 — Primary navigation — GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
+1 — Primary navigation — global destinations only (Network, Sources and Narratives open inside a case); GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
 2 — Evidence — filter empty header — title, synthetic context and available actions.
 3 — Active filters — the applied tier and capture filters that produced the empty result. · frame 1 of 1
 4 — Filter-empty state — no rows match, which is not a case without sources. · frame 1 of 1
@@ -2597,7 +2604,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/evidence-filter-empty-tablet.svg) · state · tablet · Evidence — filter empty · parent `evidence-gallery`
 
-1 — Primary navigation (top bar) — GET reads only; CLI owns ingest and runs.
+1 — Primary navigation (top bar) — global destinations only (case views open inside a case); GET reads only; CLI owns ingest and runs.
 2 — Evidence — filter empty header — title, synthetic context and available actions.
 3 — Active filters — the applied tier and capture filters that produced the empty result. · frame 1 of 1
 4 — Filter-empty state — no rows match, which is not a case without sources. · frame 1 of 1
@@ -2607,7 +2614,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/evidence-filter-empty-mobile.svg) · state · mobile · Evidence — filter empty · parent `evidence-gallery`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Evidence — filter empty header — title, synthetic context and available actions.
 3 — Active filters — the applied tier and capture filters that produced the empty result. · frame 1 of 1
 4 — Filter-empty state — no rows match, which is not a case without sources. · frame 1 of 1
@@ -2617,7 +2624,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/narratives-empty-desktop.svg) · state · desktop · Narratives — none persisted · parent `narratives`
 
-1 — Primary navigation — GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
+1 — Primary navigation — global destinations only (Network, Sources and Narratives open inside a case); GET reads only; ingest, rerun, rebuild and recovery stay CLI-only.
 2 — Narratives — none persisted header — title, synthetic context and available actions.
 3 — Empty narratives — no stored clusters; the reader does not generate stance. · frame 1 of 1
 4 — State scope note — what the state does and does not assert. · frame 1 of 1
@@ -2626,7 +2633,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/narratives-empty-tablet.svg) · state · tablet · Narratives — none persisted · parent `narratives`
 
-1 — Primary navigation (top bar) — GET reads only; CLI owns ingest and runs.
+1 — Primary navigation (top bar) — global destinations only (case views open inside a case); GET reads only; CLI owns ingest and runs.
 2 — Narratives — none persisted header — title, synthetic context and available actions.
 3 — Empty narratives — no stored clusters; the reader does not generate stance. · frame 1 of 1
 4 — State scope note — what the state does and does not assert. · frame 1 of 1
@@ -2635,7 +2642,7 @@ Region numbers match `data-region` in each SVG and the manifest `regions` array 
 
 [Open SVG](20261123-product-wireframes/narratives-empty-mobile.svg) · state · mobile · Narratives — none persisted · parent `narratives`
 
-1 — Primary navigation (menu) — all seven destinations remain reachable; CLI owns ingest.
+1 — Primary navigation (menu) — the four global destinations; case views open inside a case; CLI owns ingest.
 2 — Narratives — none persisted header — title, synthetic context and available actions.
 3 — Empty narratives — no stored clusters; the reader does not generate stance. · frame 1 of 1
 4 — State scope note — what the state does and does not assert. · frame 1 of 1

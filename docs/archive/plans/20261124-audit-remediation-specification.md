@@ -20,7 +20,7 @@ requirement, not the acceptance record.
 
 Prior audit evidence, **not** acceptance of this work: `npm run check` and Ruff passed, 516 frontend tests and 196 focused backend tests passed, mocked browser matrix passed 222 with 2 expected skips, and a separate WebKit journey passed. The full backend suite did not finish within the audit timeout. Four scratch regressions failed as expected against the audit baseline (duplicate POST, lost snapshot, false delta, cold-read DB creation); their durable equivalents must live in the repository tests. Do not depend on scratch artifacts or historical pass counts.
 
-Read [project instructions](../../CLAUDE.md), [refinement contracts](20261123-web-app-refinement-contracts.md) (§3, §6, §9, §10, §12–13), [refinement evidence](20261123-web-app-refinement-evidence.md), and the linked card before editing. The six cards are a narrow addendum; where a prior refinement acceptance claim or planning card conflicts, record the new finding and revised behavior rather than rewriting historical test results.
+Read [project instructions](../../../CLAUDE.md), [refinement contracts](../../plans/20261123-web-app-refinement-contracts.md) (§3, §6, §9, §10, §12–13), [refinement evidence](../../plans/20261123-web-app-refinement-evidence.md), and the linked card before editing. The six cards are a narrow addendum; where a prior refinement acceptance claim or planning card conflicts, record the new finding and revised behavior rather than rewriting historical test results.
 
 ## 2. Required behavior across the bundle
 

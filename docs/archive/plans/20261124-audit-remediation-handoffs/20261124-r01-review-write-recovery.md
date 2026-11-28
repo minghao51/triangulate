@@ -1,7 +1,7 @@
 # R01 — Guard review writes and recovery (P1)
 
 **Status:** Implemented and verified in `34ca121` ([evidence](../20261124-audit-remediation-evidence.md)) · **Dependency:** none. Complete before R02 touches the same view/tests.  
-[Specification](../20261124-audit-remediation-specification.md) · [Original write contract §6](../20261123-web-app-refinement-contracts.md#6-review-mutation-contract)
+[Specification](../20261124-audit-remediation-specification.md) · [Original write contract §6](../../../plans/20261123-web-app-refinement-contracts.md#6-review-mutation-contract)
 
 ## Problem and read-before-edit
 

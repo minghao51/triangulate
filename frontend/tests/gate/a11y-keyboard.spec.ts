@@ -19,7 +19,15 @@ import {
  * document-level horizontal overflow.
  */
 
-const A11Y_PROJECTS = ['chromium-375x812', 'chromium-768x1024', 'chromium-1280x800'];
+const A11Y_PROJECTS = [
+  'chromium-375x812',
+  'chromium-768x1024',
+  'chromium-1280x800',
+  // Safari-class engine: WebKit's focus handling differs from Chromium's, so the
+  // keyboard assertions are proven there too rather than assumed.
+  'webkit-1280x800',
+  'webkit-375x812',
+];
 
 async function openCase(page: Page) {
   await page.goto(`/cases/${CASE_ID}`);

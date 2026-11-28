@@ -298,7 +298,7 @@ None of these figures is claimed as a result here; every number in §4 was produ
 ## 8. Concept-parity audit and follow-up fixes (post-release)
 
 The gates above prove the remediation contracts and the 42 named states. They do **not** prove
-that each screen renders what the [concept wireframe set](20261123-product-wireframe-set.md)
+that each screen renders what the [concept wireframe set](../../plans/20261123-product-wireframe-set.md)
 specifies, so a separate parity audit was run after the release.
 
 **Method.** All 29 screens (the 24 concept screens plus five populated variants) were captured at

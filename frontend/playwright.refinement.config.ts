@@ -21,14 +21,38 @@ const BASE_URL = `http://127.0.0.1:${PORT}`;
 const ARTIFACT_ROOT = '/tmp/refinement-gate';
 
 /**
- * WebKit is opt-in because it needs the host's `libavif16` system library. With
- * that library installed the journey passes; without it the browser cannot
- * launch, so the engine must be recorded as **not proven** and nothing may be
- * downloaded or upgraded. Run it explicitly:
+ * WebKit (Safari engine) is part of the gate: `webkit-1280x800` runs the whole
+ * gate — the state matrix (`core-screens`, `core-states`, `optional-history`,
+ * `a11y-keyboard`) *and* the critical journey — so Safari-class rendering and
+ * behaviour is exercised on the same 24 screens and 44 states as Chromium.
  *
- *   REFINEMENT_GATE_WEBKIT=1 npx playwright test --config playwright.refinement.config.ts --project=webkit-journeys
+ * It needs the host's `libavif16` system library. Where that library is missing
+ * the browser cannot launch, so the engine must be recorded as **not proven**
+ * rather than silently dropped — opt out explicitly (nothing is downloaded or
+ * upgraded here):
+ *
+ *   REFINEMENT_GATE_WEBKIT=0 npx playwright test --config playwright.refinement.config.ts
  */
-const includeWebkitJourneys = process.env.REFINEMENT_GATE_WEBKIT === '1';
+const includeWebkit = process.env.REFINEMENT_GATE_WEBKIT !== '0';
+
+/**
+ * WebKit projects.
+ *
+ * `webkit-1280x800` runs the whole gate — the state matrix *and* the critical
+ * journey — because WebKit only runs at this one width, so splitting the
+ * journey into its own project would duplicate config for no coverage gain.
+ *
+ * `webkit-375x812` runs the state matrix only (the journey is already proven at
+ * 1280×800): Safari-class engines diverge most under a constrained width, where
+ * font metrics, flex/grid shrinking and scrollbars decide whether content
+ * overflows. 768×1024 is deliberately Chromium-only to bound gate runtime — the
+ * tablet width adds no WebKit-specific risk that 375 and 1280 do not already
+ * cover.
+ */
+const webkitUse = (width: number, height: number) => ({
+  ...devices['Desktop Safari'],
+  viewport: { width, height },
+});
 
 const viewportUse = (width: number, height: number) => ({
   ...devices['Desktop Chrome'],
@@ -85,12 +109,14 @@ export default defineConfig({
       use: { ...devices['Desktop Firefox'], viewport: { width: 1280, height: 800 } },
       testMatch: /journeys\.spec\.ts/,
     },
-    ...(includeWebkitJourneys
+    // Safari-class engine across the whole gate, journey included.
+    ...(includeWebkit
       ? [
+          { name: 'webkit-1280x800', use: webkitUse(1280, 800) },
           {
-            name: 'webkit-journeys',
-            use: { ...devices['Desktop Safari'], viewport: { width: 1280, height: 800 } },
-            testMatch: /journeys\.spec\.ts/,
+            name: 'webkit-375x812',
+            use: webkitUse(375, 812),
+            testIgnore: /journeys\.spec\.ts/,
           },
         ]
       : []),

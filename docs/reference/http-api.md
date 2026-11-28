@@ -279,7 +279,7 @@ their `422`s (request-schema validation and semantic validation are unchanged).
 `GET /health` does not imply storage availability. Prepare the same configured
 database explicitly with `uv run triangulate init-db` run from the server's
 working directory (see
-[CLI operations](20261115-cli-operations.md#6-database-selection-and-initialization-http-503-on-historical-gets)).
+[CLI operations](cli-operations.md#6-database-selection-and-initialization-http-503-on-historical-gets)).
 A read-only open intentionally does not change journal mode; a WAL-mode file
 whose `-shm` sidecar cannot be created by the server account is unusable and
 reports the same `503` rather than being forced open. No response body contains

@@ -2,7 +2,7 @@
 
 **Status:** Implemented and verified in `34ca121` ([evidence](../20261124-audit-remediation-evidence.md)) · **Release authority:** the main orchestrator alone executes staging, commit and push; this card produces the audit and gate evidence and a ready-to-run release checklist.  
 **Baseline:** `d589359` plus the existing staged, unstaged and untracked refinement worktree. The candidate is the whole reviewed tree, never a clean rebuild from `HEAD`.  
-[Specification](../20261124-audit-remediation-specification.md) · [Refinement contracts](../20261123-web-app-refinement-contracts.md) · [F16 gate](../20261123-web-app-refinement-handoffs/20261123-f16-core-integration-and-release-gate.md) · [F21 gate](../20261123-web-app-refinement-handoffs/20261123-f21-extended-history-release-gate.md)
+[Specification](../20261124-audit-remediation-specification.md) · [Refinement contracts](../../../plans/20261123-web-app-refinement-contracts.md) · [F16 gate](../../../plans/20261123-web-app-refinement-handoffs/20261123-f16-core-integration-and-release-gate.md) · [F21 gate](../../../plans/20261123-web-app-refinement-handoffs/20261123-f21-extended-history-release-gate.md)
 
 ## Scope of the integrated bundle (P1 ×3, P2 ×3)
 
@@ -22,9 +22,9 @@ One integrated bundle: apply R01–R06, audit the complete candidate, run the ga
 
 ## Read before edit (existing)
 
-- [Project instructions](../../../CLAUDE.md) (`uv run` only; frontend `npm run check` / `npm test` after changes).
+- [Project instructions](../../../../CLAUDE.md) (`uv run` only; frontend `npm run check` / `npm test` after changes).
 - [Specification](../20261124-audit-remediation-specification.md) §2 (bundle boundaries), §3 (execution, ownership, per-card response format).
-- [Contracts](../20261123-web-app-refinement-contracts.md) §1 (disposable-copy verification, protected paths, browser rules), §12–§14 (historical read contracts).
+- [Contracts](../../../plans/20261123-web-app-refinement-contracts.md) §1 (disposable-copy verification, protected paths, browser rules), §12–§14 (historical read contracts).
 - F16/F21 gate cards (evidence discipline: engines missing ⇒ **not proven**, counts recorded verbatim, no deploy/commit from a gate).
 - `scripts/v01_e2e_fixture.py` — scratch DB/config, real writer publication into `--out`, and manifest fields `snapshotId`, `runId`, `changeRunId`, `changeSnapshotId`, `baselineSnapshotId`, and frozen claim IDs. `expectedDeltaRows` describes **recorded-run** delta semantics, not ad-hoc comparison.
 - `frontend/playwright.refinement.config.ts` (mock matrix, WebKit opt-in `REFINEMENT_GATE_WEBKIT=1`, artifacts under `/tmp/refinement-gate`), `frontend/tests/gate/`, `frontend/package.json:15-19`, `frontend/.nvmrc`, `frontend/vite.config.ts:7-10` (proxy `/api`,`/health` → `127.0.0.1:8000`).

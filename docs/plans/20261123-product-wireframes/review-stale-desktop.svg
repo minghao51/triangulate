@@ -1,7 +1,7 @@
 <!-- viewport: 1280×800 desktop -->
 <svg xmlns="http://www.w3.org/2000/svg" width="1280" height="800" viewBox="0 0 1280 800" role="img" aria-labelledby="wf-title wf-desc">
   <title id="wf-title">Review — case data changed — desktop</title>
-  <desc id="wf-desc">Review — case data changed — desktop (desktop, 1280x800). Proposal wireframe with synthetic data, not implementation evidence. Numbered regions: 1 Primary navigation — GET reads only; ingest, rerun, rebuild and recovery stay CLI-only; 2 Review — case data changed header — title, synthetic context and available actions; 3 Stale banner — the form is frozen rather than silently overwriting newer data. · frame 1 of 1; 4 Frozen form — the three decision buttons are disabled until the newer case state is reloaded; Reload case is the only enabled control. · frame 1 of 1; 5 State scope note — what the state does and does not assert. · frame 1 of 1.</desc>
+  <desc id="wf-desc">Review — case data changed — desktop (desktop, 1280x800). Proposal wireframe with synthetic data, not implementation evidence. Numbered regions: 1 Primary navigation — global destinations only (Network, Sources and Narratives open inside a case); GET reads only; ingest, rerun, rebuild and recovery stay CLI-only; 2 Review — case data changed header — title, synthetic context and available actions; 3 Stale banner — the form is frozen rather than silently overwriting newer data. · frame 1 of 1; 4 Frozen form — the three decision buttons are disabled until the newer case state is reloaded; Reload case is the only enabled control. · frame 1 of 1; 5 State scope note — what the state does and does not assert. · frame 1 of 1.</desc>
   <g id="ui" font-family="-apple-system, system-ui, sans-serif">
     <rect x="0" y="0" width="1280" height="800" fill="#fff"/>
     <rect x="8" y="8" width="1264" height="784" fill="#fff" stroke="#000" stroke-width="1.5"/>
@@ -12,21 +12,18 @@
     <text x="48" y="128" font-size="12" fill="#000" font-weight="600">NAVIGATE</text>
     <text x="48" y="160" font-size="14" fill="#000">Dashboard</text>
     <text x="48" y="192" font-size="14" fill="#000" font-weight="600">Cases</text>
-    <text x="48" y="224" font-size="14" fill="#000">Network</text>
-    <text x="48" y="256" font-size="14" fill="#000">Sources</text>
-    <text x="48" y="288" font-size="14" fill="#000">Narratives</text>
-    <text x="48" y="320" font-size="14" fill="#000">Monitoring</text>
-    <text x="48" y="352" font-size="14" fill="#000">AI info</text>
-    <line x1="48" y1="368" x2="256" y2="368" stroke="#000" stroke-width="1.5"/>
-    <text x="48" y="408" font-size="12" fill="#000" font-weight="600">RECENT CASES</text>
-    <text x="48" y="432" font-size="12" fill="#000">case-2201-0417</text>
-    <text x="48" y="456" font-size="12" fill="#000">case-2199-1180</text>
-    <text x="48" y="480" font-size="12" fill="#000">case-2198-0922</text>
-    <line x1="48" y1="496" x2="256" y2="496" stroke="#000" stroke-width="1.5"/>
-    <text x="48" y="536" font-size="12" fill="#000" font-weight="600">READ-ONLY BY DEFAULT</text>
-    <text x="48" y="560" font-size="12" fill="#000">GET reads only</text>
-    <text x="48" y="584" font-size="12" fill="#666">local / trusted</text>
-    <text x="48" y="608" font-size="12" fill="#666">ingest + runs via CLI</text>
+    <text x="48" y="224" font-size="14" fill="#000">Monitoring</text>
+    <text x="48" y="256" font-size="14" fill="#000">AI info</text>
+    <line x1="48" y1="272" x2="256" y2="272" stroke="#000" stroke-width="1.5"/>
+    <text x="48" y="312" font-size="12" fill="#000" font-weight="600">RECENT CASES</text>
+    <text x="48" y="336" font-size="12" fill="#000">case-2201-0417</text>
+    <text x="48" y="360" font-size="12" fill="#000">case-2199-1180</text>
+    <text x="48" y="384" font-size="12" fill="#000">case-2198-0922</text>
+    <line x1="48" y1="400" x2="256" y2="400" stroke="#000" stroke-width="1.5"/>
+    <text x="48" y="440" font-size="12" fill="#000" font-weight="600">READ-ONLY BY DEFAULT</text>
+    <text x="48" y="464" font-size="12" fill="#000">GET reads only</text>
+    <text x="48" y="488" font-size="12" fill="#666">local / trusted</text>
+    <text x="48" y="512" font-size="12" fill="#666">ingest + runs via CLI</text>
     <text x="48" y="760" font-size="12" fill="#666">Wireframe · synthetic data</text>
     <rect x="296" y="32" width="960" height="88" fill="#fff" stroke="#000" stroke-width="1.5"/>
     <text x="312" y="80" font-size="20" fill="#000" font-weight="600">Review — case data changed</text>

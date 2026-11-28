@@ -1,7 +1,7 @@
 # R03 — Validate frozen snapshot integrity (P1)
 
 **Status:** Implemented and verified in `34ca121` ([evidence](../20261124-audit-remediation-evidence.md)) · **Dependency:** none; R05 later changes the request/session boundary.  
-[Specification](../20261124-audit-remediation-specification.md) · [Snapshot comparison contract §12](../20261123-web-app-refinement-contracts.md#12-x01--proposed-snapshot-comparison-read-api-does-not-exist-today)
+[Specification](../20261124-audit-remediation-specification.md) · [Snapshot comparison contract §12](../../../plans/20261123-web-app-refinement-contracts.md#12-x01--proposed-snapshot-comparison-read-api-does-not-exist-today)
 
 ## Problem and read-before-edit
 
